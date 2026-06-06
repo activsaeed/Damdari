@@ -6,8 +6,8 @@ from app.models import (
     JournalEntry, JournalEntryLine, Account, BreedCategory, FeedingSchedule, Worker,
     FeedRation, Unit, InventoryCategory, Pen
 )
-from datetime import datetime, timedelta
-from sqlalchemy import or_, func, cast, case
+from datetime import datetime, timedelta, UTC
+from sqlalchemy import or_, and_, func, cast, case
 from app.blueprints.dashboard import get_setting
 from app.blueprints.finance import permission_required
 import jdatetime
@@ -18,7 +18,7 @@ reports_bp = Blueprint('reports', __name__)
 @permission_required('can_view_reports')
 def index():
     from app.models import Pen
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     now_j = jdatetime.datetime.now()
     month_ago = today - timedelta(days=30)
     six_months_ago = today - timedelta(days=180)
@@ -94,12 +94,12 @@ def index():
 
     # بهینه‌سازی: تجمیع تمام آمارهای دوره‌ای در دو کوئری واحد (حذف ۹ کوئری مجزا)
     sheep_agg = db.session.query(
-        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= month_ago)), 1)).label('d1m'),
-        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= six_months_ago)), 1)).label('d6m'),
-        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= year_ago)), 1)).label('d1y'),
-        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= month_ago)), 1)).label('s1m'),
-        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= six_months_ago)), 1)).label('s6m'),
-        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= year_ago)), 1)).label('s1y')
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= month_ago)), 1)).label('d1m'),
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= six_months_ago)), 1)).label('d6m'),
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= year_ago)), 1)).label('d1y'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= month_ago)), 1)).label('s1m'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= six_months_ago)), 1)).label('s6m'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= year_ago)), 1)).label('s1y')
     ).first()
 
     birth_agg = db.session.query(
@@ -505,14 +505,9 @@ def index():
     # ==========================================
 
     # استخراج تعداد بره‌های متولد شده برای هر ماه شمسی - SQL بدون حلقه
+    # اصلاح برای سازگاری با SQLite: استفاده از strftime به جای concat_ws و extract پیچیده
     birth_by_month_stats = db.session.query(
-        func.extract('month', func.cast(
-            func.concat_ws('-',
-                func.cast(func.extract('year', BirthRecord.birth_date), db.String),
-                func.cast(func.extract('month', BirthRecord.birth_date), db.String),
-                '1'
-            ), db.Date
-        )).label('j_month'),
+        func.strftime('%m', BirthRecord.birth_date).label('j_month'),
         func.sum(BirthRecord.lambs_count).label('total_lambs')
     ).group_by('j_month').all()
 

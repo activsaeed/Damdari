@@ -1,273 +1,161 @@
 {% extends 'base.html' %}
 
 {% block content %}
-{% if financial_alert %}
-<div class="alert alert-danger border-0 shadow-sm mb-4 border-end border-danger border-5 shadow-sm">
-    <div class="d-flex align-items-center">
-        <i class="fa-solid fa-hand-holding-dollar fa-2x me-3 text-danger"></i>
-        <div>
-            <h5 class="fw-bold mb-1 text-danger">هشدار بحران سودآوری!</h5>
-            <p class="mb-0 small text-dark">مجموع هزینه‌های جاری و استهلاک از درآمدهای عملیاتی فراتر رفته است. بهره‌وری جیره و مخارج غیرضروری را بررسی کنید.</p>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h2 class="fw-bold mb-0">داشبورد آماری گله</h2>
-    
-    {% if current_user.role == 'مدیر' %}
-    <!-- کلیدهای میانبر سریع بالای صفحه (فقط برای مدیر) -->
-    <div class="d-flex gap-2 flex-wrap">
-        <form action="{{ url_for('dashboard.run_daily_feed') }}" method="POST" onsubmit="return confirm('آیا از کسر خودکار آذوقه روزانه از انبار و ثبت هزینه در دفتر کل اطمینان دارید؟')">
-            <button type="submit" class="btn btn-outline-success shadow-sm fw-bold"><i class="fa-solid fa-utensils"></i> ثبت مصرف روزانه</button>
-        </form>
-        <button class="btn btn-dark shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#calcModal"><i class="fa-solid fa-calculator text-warning"></i> </button>
-        <a href="{{ url_for('finance.add_cheque') }}" class="btn btn-warning shadow-sm fw-bold"><i class="fa-solid fa-money-check"></i> ثبت چک </a>
-        <a href="{{ url_for('finance.add_transaction') }}" class="btn btn-success shadow-sm fw-bold"><i class="fa-solid fa-file-invoice"></i> ثبت فاکتور </a>
+    <h2><i class="fa-solid fa-truck-tractor text-primary"></i> مدیریت دارایی‌های ثابت و استهلاک</h2>
+    <div>
+        <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addAssetModal">
+            <i class="fa-solid fa-plus"></i> ثبت دارایی جدید
+        </button>
     </div>
-    {% endif %}
 </div>
 
-<!-- ردیف اول: آمار کلان -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
 <div class="row g-3 mb-4">
-    {% if current_user.role == 'مدیر' %}
-    <div class="col-md-3 col-6">
-        <div class="card text-white bg-success h-100 shadow-sm border-0 position-relative">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div><h6 class="mb-1">وزن کل زنده</h6><h4 class="mb-0 fw-bold">{{ "{:,.1f}".format(total_live_weight) }} <small class="fs-6 fw-normal">kg</small></h4></div>
-                <i class="fa-solid fa-scale-balanced fs-1 opacity-50"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-white bg-danger h-100 shadow-sm border-0">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div><h6 class="mb-1">مجموع هزینه‌ها</h6><h4 class="mb-0 fw-bold">{{ "{:,.0f}".format(total_expense) }} <small class="fs-6 fw-normal">تومان</small></h4></div>
-                <i class="fa-solid fa-wallet fs-1 opacity-50"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-white bg-dark h-100 shadow-sm border-0 border-bottom border-warning border-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm bg-primary text-white">
             <div class="card-body">
-                <h6 class="mb-1 opacity-75">سود خالص این ماه</h6>
-                <h4 class="mb-1 fw-bold">{{ "{:,.0f}".format(curr_month_profit) }} <small class="fs-6">ت</small></h4>
-                <div class="small {% if profit_growth >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
-                    <i class="fa-solid {% if profit_growth >= 0 %}fa-arrow-trend-up{% else %}fa-arrow-trend-down{% endif %}"></i>
-                    {{ profit_growth }}% <span class="text-white-50 fw-normal">نسبت به ماه قبل</span>
-                </div>
+                <h6 class="opacity-75">تعداد کل تجهیزات</h6>
+                <h3 class="fw-bold mb-0">{{ equipments|length }} مورد</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-white bg-danger h-100 shadow-sm border-0">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="mb-1 opacity-75 small">بدهی جاری بیمه</h6>
-                    <h4 class="mb-0 fw-bold">{{ "{:,.0f}".format(insurance_debt) }} <small class="fs-6">ت</small></h4>
-                </div>
-                <i class="fa-solid fa-shield-heart fs-2 opacity-50"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-white {% if feed_days_left <= 7 %}bg-danger animate__animated animate__pulse animate__infinite{% else %}bg-warning text-dark{% endif %} h-100 shadow-sm border-0">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="mb-1 opacity-75 small">ذخیره آذوقه انبار</h6>
-                    <h4 class="mb-0 fw-bold">{% if feed_days_left > 100 %}کافی{% else %}{{ feed_days_left }} روز{% endif %}</h4>
-                    <small class="small">تا اتمام موجودی</small>
-                </div>
-                <i class="fa-solid fa-hourglass-half fs-2 opacity-50"></i>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="col-md-3 col-6">
-        <div class="card text-white bg-info h-100 shadow-sm border-0">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div><h6 class="mb-1">تعداد کل دام</h6><h4 class="mb-0 fw-bold">{{ total_sheep }} <small class="fs-6 fw-normal">رأس</small></h4></div>
-                <i class="fa-solid fa-sheep fs-1 opacity-50"></i>
-            </div>
-        </div>
-    </div>
-    
-    {% if current_user.role == 'مدیر' or current_user.role == 'دامپزشک' %}
-    <a href="{{ url_for('dashboard.warnings') }}" class="col-md-3 col-6 text-decoration-none">
-        <div class="card text-dark bg-warning h-100 shadow-sm border-0">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div><h6 class="mb-1 text-dark">هشدارها</h6><h4 class="mb-0 fw-bold text-dark">{{ global_warnings_count }} <small class="fs-6 fw-normal">مورد</small></h4></div>
-                <i class="fa-solid fa-bell fs-1 text-dark opacity-50"></i>
-            </div>
-        </div>
-    </a>
-    {% endif %}
-</div>
-
-<!-- Modal ماشین حساب ارزش گله -->
-<div class="modal fade" id="calcModal" tabindex="-1">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content border-warning">
-            <div class="modal-header bg-warning"><h6 class="modal-title fw-bold text-dark"><i class="fa-solid fa-calculator"></i> تخمین ارزش گله</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body text-center">
-                <label class="small text-muted mb-2 fw-bold">قیمت هر کیلوگرم گوشت زنده (تومان):</label>
-                <input type="text" id="pricePerKgDisplay" class="form-control form-control-lg text-center fw-bold text-primary mb-3" dir="ltr" placeholder="مثال: 250,000" onkeyup="formatCalcCurrency(this); calculateTotalValue()">
-                <input type="hidden" id="pricePerKgRaw">
-                <div class="p-3 bg-light rounded border">
-                    <small class="d-block text-muted mb-1">ارزش کل تقریبی گله:</small>
-                    <h4 class="text-success fw-bold mb-0" id="totalValueResult">0 تومان</h4>
-                </div>
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm bg-light">
+            <div class="card-body">
+                <h6 class="text-muted small"><i class="fa-solid fa-circle-info"></i> راهنمای محاسبات</h6>
+                <p class="mb-0 small">استهلاک بر اساس روش <b>خط مستقیم</b> (Straight-line) محاسبه می‌شود. با زدن دکمه استهلاک، هزینه سالانه کسر و سند مالی آن به صورت خودکار در دفتر کل ثبت می‌گردد.</p>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row g-4 mb-4">
-    <div class="col-lg-8">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-venus-mars text-primary"></i> آمار تفکیکی وضعیت دام‌ها</div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-bordered text-center align-middle mb-0">
-                        <thead class="table-light"><tr><th>نوع دام</th><th>کل موجودی</th><th>سالم</th><th>آبستن</th><th>بیمار</th><th>قرنطینه</th></tr></thead>
-                        <tbody>
-                            <tr><td class="fw-bold text-primary">میش‌ها</td><td class="fw-bold fs-5">{{ gender_stats['میش']['total'] }}</td><td class="text-success">{{ gender_stats['میش']['سالم'] }}</td><td class="text-info fw-bold">{{ gender_stats['میش']['آبستن'] }}</td><td class="text-danger">{{ gender_stats['میش']['بیمار'] }}</td><td class="text-warning text-dark">{{ gender_stats['میش']['قرنطینه'] }}</td></tr>
-                            <tr><td class="fw-bold text-success">قوچ‌ها</td><td class="fw-bold fs-5">{{ gender_stats['قوچ']['total'] }}</td><td class="text-success">{{ gender_stats['قوچ']['سالم'] }}</td><td class="text-muted">-</td><td class="text-danger">{{ gender_stats['قوچ']['بیمار'] }}</td><td class="text-warning text-dark">{{ gender_stats['قوچ']['قرنطینه'] }}</td></tr>
-                            <tr><td class="fw-bold text-warning text-dark">بره‌ها</td><td class="fw-bold fs-5">{{ gender_stats['بره']['total'] }}</td><td class="text-success">{{ gender_stats['بره']['سالم'] }}</td><td class="text-muted">-</td><td class="text-danger">{{ gender_stats['بره']['بیمار'] }}</td><td class="text-warning text-dark">{{ gender_stats['بره']['قرنطینه'] }}</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="card-footer bg-light d-flex flex-wrap gap-2">
-                <small class="fw-bold mt-1">آمار نژادها: </small>
-                {% for breed, count in breed_stats.items() %}<span class="badge bg-secondary fs-6">{{ count }} سر {{ breed }}</span>{% endfor %}
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-lg-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-warehouse text-warning"></i> وضعیت انبار</div>
-            <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
-                <ul class="list-group list-group-flush">
-                    {% for item in inventory_items %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center small">{{ item.name }}<span class="badge {% if item.quantity <= item.min_threshold %}bg-danger{% else %}bg-dark{% endif %} rounded-pill">{{ item.quantity }} {{ item.unit }}</span></li>
-                    {% else %}<li class="list-group-item text-muted text-center py-4">انبار خالی است.</li>{% endfor %}
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-weight-scale text-info"></i> توزیع و پراکندگی وزنی گله (کیلوگرم)</div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-lg-7">
-                <h6 class="text-muted small border-bottom pb-2">بازه وزنی دقیق (تعداد دام)</h6>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for range, count in weight_ranges.items() %}{% if count > 0 %}<div class="border rounded p-2 text-center" style="min-width: 70px;"><small class="d-block text-muted" dir="ltr">{{ range }}</small><strong class="fs-5">{{ count }}</strong></div>{% endif %}{% endfor %}
-                </div>
-            </div>
-            <div class="col-lg-5">
-                <h6 class="text-muted small border-bottom pb-2">شاخص وزن‌های بالا</h6>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for above, count in weight_above.items() %}{% if count > 0 %}<div class="border border-success rounded p-2 text-center bg-success bg-opacity-10" style="min-width: 75px;"><small class="d-block text-success">{{ above }}</small><strong class="fs-5">{{ count }}</strong></div>{% endif %}{% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% if current_user.role == 'مدیر' %}
-<div class="row g-4 mb-4">
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm rounded-4 h-100">
-            <div class="card-header bg-white py-3">
-                <h6 class="fw-bold mb-0 text-primary"><i class="fa-solid fa-chart-pie"></i> تحلیل ساختار سود (عملیاتی vs ارزیابی)</h6>
-            </div>
-            <div class="card-body d-flex flex-column align-items-center justify-content-center">
-                <div style="width: 100%; max-width: 300px;">
-                    <canvas id="profitComparisonChart"></canvas>
-                </div>
-            </div>
-            <div class="card-footer bg-light border-0 py-3">
-                <div class="small text-muted mb-0"><i class="fa-solid fa-circle-info me-1"></i> سود ارزیابی (استاندارد ۲۶) ناشی از رشد گله و سود عملیاتی حاصل از معاملات نقدی است.</div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-{% if current_user.role == 'مدیر' %}
-<!-- جدول آخرین تراکنش‌های مالی (فقط برای مدیر ارشد) -->
-<div class="card border-0 shadow-sm mb-4 border-top border-success border-3">
-    <div class="card-header bg-white fw-bold py-3 text-success">
-        <i class="fa-solid fa-money-bill-transfer"></i> آخرین تراکنش‌های مالی سیستم
-    </div>
+<div class="card shadow-sm border-0">
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle text-center mb-0">
-                <thead class="table-light"><tr><th>تاریخ (شمسی)</th><th>نوع تراکنش</th><th>دسته‌بندی</th><th>مبلغ (تومان)</th></tr></thead>
-                <tbody>
-                    {% for t in transactions %}
+                <thead class="table-light">
                     <tr>
-                        <td class="text-muted">{{ t.t_date|jalali }}</td>
-                        <td><span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }}</span></td>
-                        <td class="fw-bold">{{ t.category }}</td>
-                        <td class="fw-bold fs-6 {% if t.t_type == 'درآمد' %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(t.amount) }}</td>
+                        <th>نام دارایی</th>
+                        <th>تاریخ خرید</th>
+                        <th>بهای خرید</th>
+                        <th>عمر مفید</th>
+                        <th>استهلاک سالانه</th>
+                        <th>ارزش دفتری فعلی</th>
+                        <th>عملیات</th>
                     </tr>
-                    {% else %}
-                    <tr><td colspan="4" class="text-muted py-4">تراکنشی ثبت نشده است.</td></tr>
+                </thead>
+                <tbody>
+                    {% for asset in equipments %}
+                    <tr>
+                        <td class="fw-bold">{{ asset.name }}</td>
+                        <td>{{ asset.purchase_date|jalali }}</td>
+                        <td class="text-success fw-bold">{{ asset.purchase_price|currency }}</td>
+                        <td>{{ asset.lifespan_years }} سال</td>
+                        <td class="text-danger fw-bold">{{ ((asset.purchase_price - asset.scrap_value) / asset.lifespan_years)|currency }}</td>
+                        <td class="fw-bold {% if asset.book_value <= asset.scrap_value %}text-danger{% else %}text-primary{% endif %}">
+                            {{ asset.book_value|currency }}
+                            {% if asset.book_value <= asset.scrap_value %}
+                                <div class="badge bg-danger p-1 small d-block mt-1" style="font-size: 0.7rem;">مستهلک شده</div>
+                            {% elif asset.book_value < (asset.purchase_price * 0.15) %}
+                                <div class="badge bg-warning text-dark p-1 small d-block mt-1" style="font-size: 0.7rem;">نزدیک اسقاط</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex justify-content-center gap-1">
+                                <form action="{{ url_for('assets.depreciate_asset', id=asset.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-danger fw-bold" 
+                                            {% if asset.book_value <= asset.scrap_value %}disabled title="به ارزش اسقاط رسیده است"{% endif %}
+                                            onclick="return confirm('آیا از ثبت هزینه استهلاک سالانه برای {{ asset.name }} اطمینان دارید؟')">
+                                        <i class="fa-solid fa-calculator"></i> ثبت استهلاک
+                                    </button>
+                                </form>
+                                <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editAssetModal{{ asset.id }}">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <form action="{{ url_for('assets.delete_asset', id=asset.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" onclick="return confirm('آیا از حذف کامل این دارایی اطمینان دارید؟')">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Modal ویرایش دارایی -->
+                    <div class="modal fade" id="editAssetModal{{ asset.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header"><h5 class="modal-title fw-bold">ویرایش دارایی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                <form action="{{ url_for('assets.edit_asset', id=asset.id) }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body text-start">
+                                        <div class="mb-3"><label class="form-label fw-bold">نام دارایی</label><input type="text" name="name" class="form-control" value="{{ asset.name }}" required></div>
+                                        <div class="mb-3"><label class="form-label fw-bold">بهای خرید (تومان)</label><input type="text" class="form-control currency-input" dir="ltr" value="{{ asset.purchase_price|int }}" onkeyup="formatCurrency(this, 'raw_price_edit{{ asset.id }}')" required><input type="hidden" name="purchase_price" id="raw_price_edit{{ asset.id }}" value="{{ asset.purchase_price|int }}"></div>
+                                        <div class="mb-3"><label class="form-label fw-bold">ارزش اسقاط (تومان)</label><input type="text" class="form-control currency-input" dir="ltr" value="{{ asset.scrap_value|int }}" onkeyup="formatCurrency(this, 'raw_scrap_edit{{ asset.id }}')" required><input type="hidden" name="scrap_value" id="raw_scrap_edit{{ asset.id }}" value="{{ asset.scrap_value|int }}"></div>
+                                        <div class="mb-3"><label class="form-label fw-bold">تاریخ خرید</label><input type="date" name="purchase_date" class="form-control" value="{{ asset.purchase_date.strftime('%Y-%m-%d') }}" required></div>
+                                        <div class="mb-3"><label class="form-label fw-bold">عمر مفید (سال)</label><input type="number" name="lifespan_years" class="form-control" value="{{ asset.lifespan_years }}" min="1" required></div>
+                                    </div>
+                                    <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">بروزرسانی</button></div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
-{% endif %}
+
+<!-- Modal ثبت دارایی جدید -->
+<div class="modal fade" id="addAssetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">ثبت دارایی ثابت جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('assets.add_asset') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label fw-bold">نام دارایی</label><input type="text" name="name" class="form-control" placeholder="مثلاً: تراکتور، دستگاه شیردوش" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">بهای خرید (تومان)</label><input type="text" class="form-control currency-input" dir="ltr" onkeyup="formatCurrency(this, 'raw_price')" required><input type="hidden" name="purchase_price" id="raw_price"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">ارزش اسقاط (تومان)</label><input type="text" class="form-control currency-input" dir="ltr" onkeyup="formatCurrency(this, 'raw_scrap')" required><input type="hidden" name="scrap_value" id="raw_scrap"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">تاریخ خرید (میلادی)</label><input type="date" name="purchase_date" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">عمر مفید (سال)</label><input type="number" name="lifespan_years" class="form-control" value="10" min="1" required></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ذخیره دارایی</button></div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script>
-    const totalWeight = {{ total_live_weight }};
-    
-    function formatCalcCurrency(input) {
-        let value = input.value.replace(/\D/g, ""); 
-        document.getElementById('pricePerKgRaw').value = value; 
-        if (value) input.value = Number(value).toLocaleString('en-US'); 
-        else input.value = ""; 
-    }
-
-    function calculateTotalValue() {
-        let price = parseFloat(document.getElementById('pricePerKgRaw').value);
-        let resultDiv = document.getElementById('totalValueResult');
-        if (price > 0) {
-            let total = price * totalWeight;
-            resultDiv.innerText = total.toLocaleString('en-US') + " تومان";
-        } else {
-            resultDiv.innerText = "0 تومان";
-        }
-    }
-
-    // مقداردهی نمودار دایره‌ای سودآوری
     document.addEventListener("DOMContentLoaded", function() {
-        const profitCtx = document.getElementById('profitComparisonChart');
-        if (profitCtx) {
-            new Chart(profitCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['سود عملیاتی (فروش)', 'سود ارزیابی (ارزش گله)'],
-                    datasets: [{
-                        data: [{{ operational_profit|default(0) }}, {{ net_valuation_profit|default(0) }}],
-                        backgroundColor: ['#0d6efd', '#ffc107'],
-                        borderWidth: 0,
-                        hoverOffset: 15
-                    }]
-                },
-                options: { plugins: { legend: { position: 'bottom', labels: { font: { family: 'Vazirmatn', size: 12 } } } } }
-            });
-        }
+        document.querySelectorAll('.currency-input').forEach(input => {
+            let val = input.value.replace(/,/g, '');
+            if(val && !isNaN(val)) {
+                input.value = Number(val).toLocaleString('en-US');
+            }
+        });
     });
+
+    function formatCurrency(input, hiddenId) {
+        let value = input.value.replace(/,/g, '');
+        if (!isNaN(value) && value !== "") {
+            document.getElementById(hiddenId).value = value;
+            input.value = Number(value).toLocaleString('en-US');
+        } else {
+            document.getElementById(hiddenId).value = "";
+            input.value = "";
+        }
+    }
 </script>
 {% endblock %}

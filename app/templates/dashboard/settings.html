@@ -17,6 +17,7 @@
             <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#units"><i class="fa-solid fa-weight-hanging text-info"></i> واحدها</button></li>
             <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#backup"><i class="fa-solid fa-database text-primary"></i> بک‌آپ</button></li>
             <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#iot_api"><i class="fa-solid fa-microchip text-danger"></i> سخت‌افزار و API</button></li>
+            <li class="nav-item"><a class="nav-link fw-bold text-dark" href="{{ url_for('assets.index') }}"><i class="fa-solid fa-tools text-secondary"></i> تجهیزات و استهلاک</a></li>
             <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#system_vars"><i class="fa-solid fa-calculator text-dark"></i> متغیرهای محاسباتی</button></li>
         </ul>
     </div>
@@ -391,7 +392,12 @@ http.end();</pre>
             این بخش شامل ابزارهای کنترلی جهت بستن سال مالی، انبارگردانی و صدور اسناد تعدیلی طبق استانداردهای حسابداری است.
         </div>
         
-        <h6 class="fw-bold small text-muted border-bottom pb-2 mb-3">۱. ارزیابی بیولوژیک گله (Fair Value)</h6>
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+            <h6 class="fw-bold small text-muted mb-0">۱. ارزیابی بیولوژیک گله (Fair Value)</h6>
+            <a href="{{ url_for('assets.index') }}" class="btn btn-sm btn-dark shadow-sm">
+                <i class="fa-solid fa-toolbox me-1"></i> مدیریت لیست تجهیزات و استهلاک
+            </a>
+        </div>
         <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
             <div class="row align-items-end g-3">
                 <div class="col-md-7">

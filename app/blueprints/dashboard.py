@@ -51,16 +51,23 @@ def index():
         func.sum(func.cast((Sheep.status == 'آبستن') & (Sheep.gender.like('%میش%')), db.Integer)).label('آبستن')
     ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).group_by(Sheep.gender).all()
 
-    gender_stats = {}
+    # مقداردهی اولیه برای جلوگیری از خطای UndefinedError در Jinja2 (زمانی که دیتابیس خالی است)
+    gender_stats = {
+        'میش': {'total': 0, 'سالم': 0, 'بیمار': 0, 'قرنطینه': 0, 'آبستن': 0},
+        'قوچ': {'total': 0, 'سالم': 0, 'بیمار': 0, 'قرنطینه': 0, 'آبستن': 0},
+        'بره': {'total': 0, 'سالم': 0, 'بیمار': 0, 'قرنطینه': 0, 'آبستن': 0}
+    }
+
     for gender, total, healthy, sick, quarantine, pregnant in gender_stats_raw:
         g_name = 'بره' if gender and 'بره' in gender else gender
-        gender_stats[g_name] = {
-            'total': total or 0,
-            'سالم': healthy or 0,
-            'بیمار': sick or 0,
-            'قرنطینه': quarantine or 0,
-            'آبستن': pregnant or 0
-        }
+        if g_name not in gender_stats:
+            gender_stats[g_name] = {'total': 0, 'سالم': 0, 'بیمار': 0, 'قرنطینه': 0, 'آبستن': 0}
+        
+        gender_stats[g_name]['total'] += total or 0
+        gender_stats[g_name]['سالم'] += healthy or 0
+        gender_stats[g_name]['بیمار'] += sick or 0
+        gender_stats[g_name]['قرنطینه'] += quarantine or 0
+        gender_stats[g_name]['آبستن'] += pregnant or 0
 
     breed_stats_raw = db.session.query(
         func.coalesce(Sheep.breed, 'نامشخص').label('breed'),
@@ -225,44 +232,6 @@ def index():
                 setting.value = datetime.now(UTC).strftime('%Y-%m-%d')
             db.session.commit()
 
-    # --- سیستم خودکار گزارش هفتگی مغایرت‌های جیره به تلگرام ---
-    if current_user.role == 'مدیر':
-        last_rep = get_setting('last_weekly_telegram_rep', '2000-01-01')
-        last_date = datetime.strptime(last_rep, '%Y-%m-%d').date()
-        
-        if (datetime.now(UTC).date() - last_date).days >= 7:
-            # اسکن مغایرت‌ها
-            inv_names = [i.name for i in InventoryItem.query.all()]
-            wrong_names = db.session.query(FeedingSchedule.feed_type).distinct().all()
-            mismatches = [name[0] for name in wrong_names if name[0] not in inv_names]
-            
-            if mismatches:
-                token = get_setting('sms_api_key', "8951875656:AAEicWcnwup00o46y8vCL3nXw_aa1xQXS_w")
-                chat_id = "6690587060"
-                msg = f"📉 #گزارش_هفتگی_مغایرت\n\nمدیریت محترم، در اسکن هفتگی جیره‌ها، تعداد {len(mismatches)} نام غیرمنطبق با انبار یافت شد:\n"
-                for m in mismatches[:10]: # نمایش حداکثر ۱۰ مورد برای شلوغ نشدن تلگرام
-                    msg += f"❌ {m}\n"
-                msg += "\n⚠️ این مغایرت‌ها باعث اختلال در کسر خودکار انبار می‌شوند. لطفاً از پنل گزارشات، دکمه 'اصلاح همگانی' را فشار دهید."
-                
-                try:
-                    requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={'chat_id': chat_id, 'text': msg}, timeout=5)
-                    # آپدیت تاریخ آخرین ارسال در تنظیمات
-                    setting = SystemSetting.query.filter_by(key='last_weekly_telegram_rep').first()
-                    if not setting: 
-                        db.session.add(SystemSetting(key='last_weekly_telegram_rep', value=datetime.now(UTC).strftime('%Y-%m-%d')))
-                    else:
-                        setting.value = datetime.now(UTC).strftime('%Y-%m-%d')
-                    db.session.commit()
-                except: pass
-            else:
-                # اگر مغایرتی نبود هم تاریخ را آپدیت کن که تا هفته بعد چک نکند
-                setting = SystemSetting.query.filter_by(key='last_weekly_telegram_rep').first()
-                if not setting: 
-                    db.session.add(SystemSetting(key='last_weekly_telegram_rep', value=datetime.now(UTC).strftime('%Y-%m-%d')))
-                else:
-                    setting.value = datetime.now(UTC).strftime('%Y-%m-%d')
-                db.session.commit()
-
     return render_template('dashboard/index.html', 
                            total_sheep=total_sheep, total_live_weight=total_live_weight,
                            gender_stats=gender_stats, breed_stats=breed_stats,
@@ -372,7 +341,12 @@ def settings():
             flash('پروتکل درمانی جدید اضافه شد.', 'success')
         elif action == 'add_schedule':
             amount_val = request.form.get('amount_kg')
-            db.session.add(FeedingSchedule(feed_ration_id=request.form.get('feed_ration_id'), time_of_day=request.form.get('time_of_day'), feed_type=request.form.get('feed_type'), amount_kg=float(amount_val) if amount_val else 0.0))
+            db.session.add(FeedingSchedule(
+                feed_ration_id=request.form.get('feed_ration_id'), 
+                time_of_day=request.form.get('time_of_day'), 
+                inventory_item_id=request.form.get('inventory_item_id'), 
+                amount_kg=float(amount_val) if amount_val else 0.0
+            ))
             flash('برنامه تغذیه ثبت شد.', 'success')
             db.session.commit()
             return redirect(url_for('dashboard.feeding_schedule'))
@@ -645,33 +619,7 @@ def fix_ration_names():
 @dashboard_bp.route('/maintenance/fix_all_ration_names', methods=['POST'])
 @login_required
 def fix_all_ration_names():
-    """اصلاح همگانی تمامی نام‌های نهاده در جیره‌ها بر اساس نزدیک‌ترین نام در انبار"""
-    if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
-    
-    import difflib
-    inventory_names = [i.name for i in InventoryItem.query.all()]
-    schedules = FeedingSchedule.query.all()
-    
-    # پیدا کردن نام‌های منحصر به فردی که در انبار نیستند
-    unique_wrong_names = set(s.feed_type for s in schedules if s.feed_type not in inventory_names)
-    fixed_count = 0
-    
-    for wrong_name in unique_wrong_names:
-        # پیدا کردن نزدیک‌ترین پیشنهاد با دقت حداقل 40%
-        suggestion = difflib.get_close_matches(wrong_name, inventory_names, n=1, cutoff=0.4)
-        if suggestion:
-            suggested_name = suggestion[0]
-            affected = FeedingSchedule.query.filter_by(feed_type=wrong_name).all()
-            for s in affected:
-                s.feed_type = suggested_name
-            fixed_count += len(affected)
-            
-    if fixed_count > 0:
-        db.session.commit()
-        flash(f'اصلاح همگانی با موفقیت انجام شد. تعداد {fixed_count} ردیف در برنامه‌های تغذیه بر اساس موجودی انبار اصلاح گردید.', 'success')
-    else:
-        flash('هیچ مغایرت قابل اصلاحی که مشابه نام‌های انبار باشد یافت نشد.', 'info')
-        
+    flash('با توجه به سیستم جدید انتخاب کالا از انبار، دیگر نیازی به اصلاح نام‌ها نیست.', 'info')
     return redirect(url_for('reports.index'))
 
 @dashboard_bp.route('/maintenance/cleanup_transactions', methods=['POST'])

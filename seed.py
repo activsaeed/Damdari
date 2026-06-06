@@ -92,14 +92,32 @@ def seed_data():
         ]
         for u in units:
             get_or_create(Unit, 'name', **u)
+        db.session.commit()
 
         print("💊 مرحله 3.8: دسته‌بندی‌ها...")
         for n in ["واکسن", "دارو/درمان", "مکمل/ویتامین"]:
             get_or_create(MedicineCategory, 'name', name=n)
-        for n in ["علوفه", "خوراک", "دارو"]:
-            get_or_create(InventoryCategory, 'name', name=n)
+        
+        inv_cats = []
+        for n in ["علوفه", "خوراک", "دارو", "تجهیزات"]:
+            inv_cats.append(get_or_create(InventoryCategory, 'name', name=n))
+            
         for n in ["قصاب/کشتارگاه", "دامدار", "واسطه"]:
             get_or_create(BuyerCategory, 'name', name=n)
+        db.session.commit()
+
+        print("📦 مرحله 3.11: بذرپاشی انبار اولیه...")
+        unit_kg = Unit.query.filter_by(name="کیلوگرم").first()
+        cat_feed = InventoryCategory.query.filter_by(name="خوراک").first()
+        if unit_kg and cat_feed:
+            inventory_seeds = [
+                {'name': 'جو محلی', 'category_id': cat_feed.id, 'unit_id': unit_kg.id, 'quantity': 1500, 'unit_price': 12500, 'min_threshold': 500},
+                {'name': 'ذرت دامی', 'category_id': cat_feed.id, 'unit_id': unit_kg.id, 'quantity': 800, 'unit_price': 11000, 'min_threshold': 300},
+                {'name': 'یونجه خشک', 'category_id': cat_feed.id, 'unit_id': unit_kg.id, 'quantity': 2000, 'unit_price': 9500, 'min_threshold': 1000},
+            ]
+            for item in inventory_seeds:
+                get_or_create(InventoryItem, 'name', **item)
+        db.session.commit()
 
         print("🧪 مرحله 3.9: تعریف داروهای پایه...")
         mc_vax = MedicineCategory.query.filter_by(name="واکسن").first()
@@ -140,13 +158,34 @@ def seed_data():
             get_or_create(Account, 'code', **acc)
         db.session.commit()
 
-        # اگر دام وجود نداشت، تعدادی اضافه کن
         if Sheep.query.count() == 0:
             print("🐑 مرحله 7: تولید دام نمونه...")
-            # ... منطق تولید رندوم دام ...
-            pass
+            breeds = BreedCategory.query.all()
+            pens = Pen.query.all()
+            rations = FeedRation.query.all()
+            
+            for i in range(1, 21): # ایجاد ۲۰ راس دام نمونه
+                breed = random.choice(breeds).name if breeds else 'افشاری'
+                gender = random.choice(['میش', 'قوچ', 'بره ماده', 'بره نر'])
+                status = 'آبستن' if gender == 'میش' and random.random() > 0.7 else 'زنده و سالم'
+                
+                new_sheep = Sheep(
+                    ear_tag=f"TAG-{1000 + i}",
+                    breed=breed,
+                    gender=gender,
+                    weight=random.uniform(30, 80),
+                    status=status,
+                    purpose='پرواربندی' if 'بره' in gender else 'داشتی (تولیدمثل)',
+                    birth_date=today - timedelta(days=random.randint(100, 1000)),
+                    pen_id=random.choice(pens).id if pens else None,
+                    feed_ration_id=random.choice(rations).id if rations else None,
+                    purchase_price=random.randint(5000000, 15000000)
+                )
+                db.session.add(new_sheep)
+            db.session.commit()
 
         print("✨ بذرپاشی هوشمند با موفقیت به پایان رسید. تمام بخش‌های سیستم دارای دیتای نمونه هستند.")
+        db.session.commit()
 
 if __name__ == '__main__':
     seed_data()

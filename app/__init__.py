@@ -134,6 +134,13 @@ def create_app():
         return f"{formatted} {unit}"
 
     with app.app_context():
+        # ایجاد خودکار جداول در صورت عدم وجود (اولین اجرا)
+        # این خط باعث می‌شود کوئری‌های بعدی با خطای "no such table" مواجه نشوند
+        try:
+            db.create_all()
+        except Exception as e:
+            app.logger.error(f"Database creation failed: {e}")
+
         # ---> رفع باگ: ساخت ادمین با نقش دقیق "مدیر" و تمام دسترسی‌های True <---
         if not User.query.filter_by(username=app.config['ADMIN_USERNAME']).first():
             admin_user = User(
