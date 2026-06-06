@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-users text-primary"></i> پنل پرسنل و وظایف</h2>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-4 flex-column-reverse flex-lg-row">
+    
+    <!-- این ستون فقط برای مدیر ارشد نمایش داده میشود -->
+    {% if current_user.role == 'مدیر' %}
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100 border-top border-primary border-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <span class="fw-bold fs-5 text-primary"><i class="fa-solid fa-address-book"></i> لیست پرسنل و کارگران</span>
+                <button class="btn btn-sm btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#newWorkerModal"><i class="fa-solid fa-user-plus"></i> ثبت پرسنل جدید</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center mb-0">
+                        <thead class="table-light"><tr><th>کد پرسنلی</th><th>نام</th><th>نقش</th><th>وضعیت</th><th>ارزیابی سیستم (KPI)</th><th>پرونده</th></tr></thead>
+                        <tbody>
+                            {% for w in workers %}
+                            <tr>
+                                <td class="fw-bold text-secondary">{{ w.worker_code }}</td>
+                                <td class="fw-bold">{{ w.name }}</td>
+                                <td><span class="badge bg-secondary">{{ w.role }}</span></td>
+                                <td><span class="badge {% if w.status == 'فعال' or w.status == 'حاضر' %}bg-success{% else %}bg-danger{% endif %}">{{ w.status }}</span></td>
+                                
+                                <!-- سیستم هوشمند پاداش و نمره -->
+                                <td>
+                                    <div class="d-flex flex-column align-items-center">
+                                        <div class="progress w-75 mb-1" style="height: 6px;">
+                                            <div class="progress-bar {% if kpi_data[w.id].score < 50 %}bg-danger{% elif kpi_data[w.id].score < 80 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ kpi_data[w.id].score }}%;"></div>
+                                        </div>
+                                        {% if kpi_data[w.id].bonus > 0 %}
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success">پاداش: {{ "{:,.0f}".format(kpi_data[w.id].bonus) }} ت</span>
+                                        {% else %}
+                                        <span class="small text-muted" style="font-size: 0.7rem;">{{ kpi_data[w.id].notes }}</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                
+                                <td><a href="{{ url_for('hr.profile', id=w.id) }}" class="btn btn-sm btn-outline-info">مشاهده پرونده</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ستون موبایلی: وظایف امروز + گزارش سریع خطر (برای همه نمایش داده میشود) -->
+    <div class="{% if current_user.role == 'مدیر' %}col-lg-5{% else %}col-lg-8 mx-auto{% endif %}">
+        
+        <div class="card border-0 shadow-sm mb-4 bg-danger bg-opacity-10 border border-danger">
+            <div class="card-body">
+                <h6 class="fw-bold text-danger mb-3"><i class="fa-solid fa-triangle-exclamation"></i> گزارش سریع مشکل دام (به دامپزشک)</h6>
+                <form id="quickReportForm" action="{{ url_for('hr.quick_report') }}" method="POST">
+                    
+                    <button class="btn btn-success w-100 mb-4 fw-bold btn-lg shadow-sm" data-bs-toggle="modal" data-bs-target="#quickWeightModal"><i class="fa-solid fa-scale-balanced"></i> ثبت سریع وزن دام</button>
+
+                    <div class="row g-2 text-center mb-3">
+                        <div class="col-4">
+                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue1" value="لنگش شدید" autocomplete="off" required>
+                            <label class="btn btn-outline-danger w-100 py-3" for="issue1"><i class="fa-solid fa-crutch fa-2x mb-1 d-block"></i> لنگش</label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue2" value="غذا نخوردن/بی‌حالی" autocomplete="off">
+                            <label class="btn btn-outline-danger w-100 py-3" for="issue2"><i class="fa-solid fa-bed fa-2x mb-1 d-block"></i> بی‌حالی</label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue3" value="سقط / خونریزی" autocomplete="off">
+                            <label class="btn btn-outline-danger w-100 py-3" for="issue3"><i class="fa-solid fa-droplet fa-2x mb-1 d-block"></i> خونریزی</label>
+                        </div>
+                        <!-- دو دکمه جدید (درخواست 10) -->
+                        <div class="col-6 mt-2">
+                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue4" value="کمبود انبار" autocomplete="off">
+                            <label class="btn btn-outline-warning w-100 py-3 text-dark" for="issue4"><i class="fa-solid fa-box-open fa-2x mb-1 d-block"></i> کمبود انبار</label>
+                        </div>
+                        <div class="col-6 mt-2">
+                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue5" value="سایر موارد" autocomplete="off">
+                            <label class="btn btn-outline-secondary w-100 py-3" for="issue5"><i class="fa-solid fa-comment-dots fa-2x mb-1 d-block"></i> سایر موارد</label>
+                        </div>
+
+                    </div>
+
+                    <!-- بخش پلاک (فقط برای بیماری نشان داده میشود) همراه با اسکنر -->
+                    <div id="sheepTagSection">
+                        <label class="fw-bold mb-1 small text-muted">شماره پلاک دام:</label>
+                        <div class="input-group mb-3">
+                            <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-qrcode"></i> اسکن</button>
+                            <input type="text" id="earTagInput" name="ear_tag" class="form-control form-control-lg" placeholder="اسکن یا تایپ پلاک...">
+                        </div>
+                    </div>
+
+                    <!-- کادر کمبود انبار -->
+                    <div id="inventorySection" class="mb-3 p-3 bg-light rounded border" style="display: none;">
+                        <label class="fw-bold mb-1 small">چه چیزی تمام شده؟</label>
+                        <select name="inventory_item" class="form-select mb-2">
+                            <option value="">انتخاب از لیست موجود...</option>
+                            <option value="یونجه">یونجه</option>
+                            <option value="جو">جو</option>
+                            <option value="کنسانتره">کنسانتره</option>
+                        </select>
+                        <input type="text" name="custom_inventory" class="form-control" placeholder="یا نام آن را تایپ کنید...">
+                    </div>
+
+                    <!-- کادر سایر موارد -->
+                    <div id="otherSection" class="mb-3" style="display: none;">
+                        <label class="fw-bold mb-1 small">توضیح مشکل:</label>
+                        <textarea name="custom_desc" class="form-control" rows="2" placeholder="مشکل را اینجا بنویسید..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger w-100 fw-bold btn-lg shadow-sm">ارسال گزارش</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <span class="fw-bold fs-5"><i class="fa-solid fa-list-check text-success"></i> چک‌لیست وظایف امروز</span>
+                {% if current_user.role == 'مدیر' %}
+                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#newTaskModal"><i class="fa-solid fa-plus"></i> تسک جدید</button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for task in tasks %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3 {% if task.is_done %}bg-light opacity-50{% endif %}">
+                        <div>
+                            <div class="fw-bold fs-5 mb-1 {% if task.is_done %}text-decoration-line-through text-muted{% endif %}">{{ task.description }}</div>
+                            <small class="text-primary fw-bold"><i class="fa-solid fa-user me-1"></i> مسئول: {{ task.worker.name }}</small>
+                        </div>
+                        <a href="{{ url_for('hr.toggle_task', task_id=task.id) }}" class="btn btn-lg {% if task.is_done %}btn-success{% else %}btn-outline-secondary{% endif %} rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                            <i class="fa-solid fa-check fs-4"></i>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-5 text-muted">وظیفه‌ای برای امروز یافت نشد.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_user.role == 'مدیر' %}
+<!-- Modal ثبت پرسنل با فیلدهای جدید -->
+<!-- Modal ثبت پرسنل با فیلدهای قانون کار -->
+<div class="modal fade" id="newWorkerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white"><h5 class="modal-title"><i class="fa-solid fa-user-plus"></i> تشکیل پرونده پرسنلی</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_worker') }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    
+                    <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">۱. اطلاعات هویتی و تماس</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3"><label class="small text-muted fw-bold">کد پرسنلی</label><input type="text" name="worker_code" class="form-control" dir="ltr" placeholder="تولید خودکار"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">نام و نام خانوادگی</label><input type="text" name="name" class="form-control" required></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">کد ملی</label><input type="text" name="national_id" class="form-control" dir="ltr" maxlength="10"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">تلفن موبایل</label><input type="text" name="phone" class="form-control" dir="ltr"></div>
+                        
+                        <div class="col-md-4"><label class="small text-muted fw-bold">مدرک تحصیلی</label><input type="text" name="education" class="form-control" placeholder="مثال: دیپلم، لیسانس دامپزشکی"></div>
+                        <div class="col-md-8"><label class="small text-muted fw-bold">آدرس محل سکونت</label><input type="text" name="address" class="form-control"></div>
+                    </div>
+
+                    <h6 class="fw-bold text-success mb-3 border-bottom pb-2">۲. اطلاعات حقوق و مزایای ثابت (ماهانه)</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3"><label class="small text-muted fw-bold">پایه حقوق (تومان)</label><input type="text" class="form-control fw-bold text-success" dir="ltr" onkeyup="formatCurrency(this, 'raw_s1')"><input type="hidden" name="salary" id="raw_s1"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق مسکن (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s2')"><input type="hidden" name="housing_allowance" id="raw_s2"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق بن/خواربار (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s3')"><input type="hidden" name="food_allowance" id="raw_s3"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق اولاد/عائله‌مندی</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s4')"><input type="hidden" name="family_allowance" id="raw_s4"></div>
+                        <div class="col-md-6"><label class="small text-muted fw-bold">شماره کارت / شبا برای واریز حقوق</label><input type="text" name="bank_account" class="form-control" dir="ltr" placeholder="IR..."></div>
+                    </div>
+
+                    <h6 class="fw-bold text-warning text-dark mb-3 border-bottom pb-2">۳. اطلاعات شغلی و مدارک</h6>
+                    <div class="row g-3">
+                        <div class="col-md-3"><label class="small text-muted fw-bold">سمت / نقش سیستم</label><input list="roleList" name="role" class="form-control" required><datalist id="roleList"><option value="کارگر ساده"><option value="دامپزشک"><option value="نگهبان"><option value="تنخواه‌دار"></datalist></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">تخصیص بهاربند (مسئولیت)</label><select name="assigned_pen_id" class="form-select"><option value="">بدون بهاربند اختصاصی</option>{% for p in pens %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">تاریخ استخدام (شمسی)</label><input type="text" class="form-control jalali-datepicker" placeholder="انتخاب"><input type="hidden" name="start_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">وضعیت بیمه</label><select name="insurance_status" class="form-select"><option value="بدون بیمه">بدون بیمه</option><option value="بیمه تامین اجتماعی">بیمه تامین اجتماعی</option><option value="بیمه حوادث/عشایری">بیمه حوادث</option></select></div>
+                        
+                        <div class="col-12 p-3 bg-light border rounded mt-3">
+                            <label class="fw-bold"><i class="fa-solid fa-images text-secondary"></i> گالری مدارک پرسنلی (کارت ملی، شناسنامه، قرارداد)</label>
+                            <input type="file" name="documents" class="form-control mt-2" accept="image/*,.pdf" multiple>
+                            <small class="text-muted mt-1 d-block">می‌توانید چندین فایل را همزمان انتخاب و آپلود کنید.</small>
+                        </div>
+                    </div>
+                    
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold fs-5">ثبت کامل پرونده پرسنل</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">وظیفه جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_task') }}" method="POST">
+                <div class="modal-body">
+                    <select name="worker_id" class="form-select mb-3">{% for w in workers %}<option value="{{ w.id }}">{{ w.name }} ({{ w.role }})</option>{% endfor %}</select>
+                    <textarea name="description" class="form-control" rows="3" placeholder="شرح وظیفه..." required></textarea>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success w-100">ثبت</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    const reportForm = document.getElementById('quickReportForm');
+    if(reportForm) {
+        reportForm.addEventListener('submit', function(e) {
+            if (!navigator.onLine) {
+                e.preventDefault(); 
+                const formData = new FormData(reportForm);
+                const report = { ear_tag: formData.get('ear_tag'), issue_type: formData.get('issue_type'), timestamp: new Date().getTime() };
+                let offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
+                offlineReports.push(report);
+                localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
+                alert("شما آفلاین هستید! گزارش در گوشی ذخیره شد و به محض اتصال به اینترنت ارسال می‌شود.");
+                reportForm.reset();
+            }
+        });
+    }
+
+    window.addEventListener('online', function() {
+        let offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
+        if(offlineReports.length > 0) {
+            alert("اینترنت وصل شد! گزارش‌های آفلاین در پس‌زمینه ارسال خواهند شد.");
+            localStorage.removeItem('offlineReports');
+        }
+    });
+</script>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+    // کنترل نمایش فرم ها بر اساس نوع گزارش
+    document.querySelectorAll('.issue-radio').forEach(radio => {
+        radio.addEventListener('change', function() {
+            document.getElementById('sheepTagSection').style.display = (this.value === 'کمبود انبار' || this.value === 'سایر موارد') ? 'none' : 'block';
+            document.getElementById('inventorySection').style.display = (this.value === 'کمبود انبار') ? 'block' : 'none';
+            document.getElementById('otherSection').style.display = (this.value === 'سایر موارد') ? 'block' : 'none';
+            
+            document.getElementById('earTagInput').required = (this.value !== 'کمبود انبار' && this.value !== 'سایر موارد');
+        });
+    });
+
+    // اسکنر دوربین برای موبایل کارگر
+    document.getElementById('qrScannerModal').addEventListener('shown.bs.modal', function () {
+        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+        html5QrcodeScanner.render(function(decodedText) {
+            let match = decodedText.match(/پلاک:\s*([^\n]+)/);
+            if(match) {
+                document.getElementById('earTagInput').value = match[1];
+                html5QrcodeScanner.clear();
+                bootstrap.Modal.getInstance(document.getElementById('qrScannerModal')).hide();
+            }
+        });
+    });
+</script>
+
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+</script>
+
+
+<!-- به یاد داشته باشید مودال qrScannerModal را هم در انتهای فایل بگذارید -->
+<div class="modal fade" id="qrScannerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">اسکن پلاک با دوربین گوشی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><div id="reader"></div></div></div></div></div>
+
+<div class="modal fade" id="quickWeightModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-bolt text-warning"></i> ثبت سریع وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.quick_weight') }}" method="POST"><div class="modal-body"><div class="input-group mb-3"><button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-camera"></i></button><input type="text" name="ear_tag" class="form-control form-control-lg text-center fw-bold" placeholder="اسکن یا تایپ پلاک" required></div><div class="mb-3"><label>وزن جدید (کیلوگرم)</label><input type="number" step="0.1" name="weight" class="form-control form-control-lg text-center text-success fw-bold" required></div></div><div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ثبت</button></div></form></div></div></div>
+
+{% endblock %}

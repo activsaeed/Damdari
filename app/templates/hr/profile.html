@@ -1,0 +1,259 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- استایل مخصوص پرینت (مخفی کردن سایدبارها و دکمه ها) -->
+<style>
+    @media print {
+        #sidebar-wrapper, .navbar, .btn, .nav-tabs, .modal { display: none !important; }
+        #page-content-wrapper { margin: 0 !important; width: 100% !important; padding: 0 !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        .print-only { display: block !important; }
+    }
+    .print-only { display: none; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-id-badge text-primary"></i> پرونده پرسنلی - {{ worker.name }}</h2>
+    <div>
+        <a href="{{ url_for('hr.index') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت</a>
+        <button class="btn btn-dark shadow-sm mx-1 fw-bold" onclick="window.print()"><i class="fa-solid fa-print"></i> چاپ پرونده</button>
+        <button class="btn btn-warning shadow-sm mx-1 fw-bold" data-bs-toggle="modal" data-bs-target="#editWorkerModal"><i class="fa-solid fa-pen"></i> ویرایش</button>
+        <a href="{{ url_for('hr.delete_worker', id=worker.id) }}" class="btn btn-danger shadow-sm" onclick="return confirm('آیا از حذف کامل این شخص و تمام سوابق مالی و کاری او مطمئن هستید؟')"><i class="fa-solid fa-trash"></i></a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<!-- هدر مخصوص چاپ -->
+<div class="print-only text-center border-bottom border-2 pb-3 mb-4">
+    <h3 class="fw-bold">فرم مشخصات و پرونده پرسنلی</h3>
+    <p class="text-muted mb-0">سیستم مدیریت دامداری - تاریخ گزارش: {{ today_str|jalali }}</p>
+</div>
+
+<div class="row g-4">
+    <!-- اطلاعات هویتی و پرسنلی -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100 border-top border-primary border-4">
+            <div class="card-body text-center">
+                <i class="fa-solid fa-circle-user fa-5x text-secondary mb-3 opacity-50"></i>
+                <h4 class="fw-bold mb-1">{{ worker.name }}</h4>
+                <div class="badge bg-primary fs-6 mb-3">{{ worker.role }}</div>
+                
+                <ul class="list-group list-group-flush text-start small">
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">کد پرسنلی:</span><span class="fw-bold">{{ worker.worker_code }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">وضعیت:</span><span class="badge {% if worker.status == 'فعال' %}bg-success{% else %}bg-danger{% endif %}">{{ worker.status }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">کد ملی:</span><span class="fw-bold">{{ worker.national_id or '-' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">موبایل:</span><span class="fw-bold" dir="ltr">{{ worker.phone or '-' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">تاریخ شروع کار:</span><span class="fw-bold text-success">{{ worker.start_date|jalali }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">مدرک تحصیلی:</span><span class="fw-bold">{{ worker.education or '-' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">شماره حساب/شبا:</span><span class="fw-bold" dir="ltr">{{ worker.bank_account or '-' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">بیمه:</span><span class="fw-bold text-info text-dark">{{ worker.insurance_status }}</span></li>
+                </ul>
+                
+                <div class="bg-light p-3 mt-3 rounded text-start small">
+                    <strong class="d-block text-success mb-2 border-bottom pb-1">حقوق و مزایای ثابت (ماهانه):</strong>
+                    <div class="d-flex justify-content-between mb-1"><span>پایه حقوق:</span><strong>{{ "{:,.0f}".format(worker.salary) }} ت</strong></div>
+                    <div class="d-flex justify-content-between mb-1"><span>حق مسکن:</span><strong>{{ "{:,.0f}".format(worker.housing_allowance) }} ت</strong></div>
+                    <div class="d-flex justify-content-between mb-1"><span>بن خواربار:</span><strong>{{ "{:,.0f}".format(worker.food_allowance) }} ت</strong></div>
+                    <div class="d-flex justify-content-between"><span>حق اولاد:</span><strong>{{ "{:,.0f}".format(worker.family_allowance) }} ت</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- تب های خط خدمت، وام و مدارک -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                <ul class="nav nav-tabs" id="hrTab">
+                    <li class="nav-item"><button class="nav-link active fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#timeline"><i class="fa-solid fa-timeline text-primary me-1"></i> خط خدمت</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#loans"><i class="fa-solid fa-hand-holding-dollar me-1"></i> وام و مساعده</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#documents"><i class="fa-solid fa-folder-open me-1"></i> بایگانی مدارک</button></li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    
+                    <!-- خط خدمت (Timeline) -->
+                    <div class="tab-pane fade show active p-3" id="timeline">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="text-muted">سوابق و رویدادهای پرسنلی</h5>
+                            <button class="btn btn-sm btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addEventModal"><i class="fa-solid fa-plus"></i> ثبت رویداد جدید</button>
+                        </div>
+                        <div class="position-relative ms-3 border-start border-2 border-secondary pb-4">
+                            {% for e in events %}
+                            <div class="mb-4 position-relative ps-4">
+                                {% set color = 'primary' %}
+                                {% if e.event_type == 'تشویق' %}{% set color = 'success' %}{% elif e.event_type == 'جریمه' or e.event_type == 'غیبت' %}{% set color = 'danger' %}{% elif e.event_type == 'مالی' %}{% set color = 'warning' %}{% endif %}
+                                <div class="position-absolute bg-{{ color }} text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 32px; height: 32px; left: -17px; top: 0;"><i class="fa-solid fa-check small"></i></div>
+                                <div class="bg-light p-3 rounded border">
+                                    <div class="d-flex justify-content-between align-items-center mb-1"><h6 class="fw-bold mb-0 text-{{ color }}">{{ e.event_type }}</h6><small class="text-muted fw-bold">{{ e.event_date|jalali }}</small></div>
+                                    <p class="mb-0 small text-dark">{{ e.description }}</p>
+                                </div>
+                            </div>
+                            {% else %}<p class="text-muted ms-4">رویدادی ثبت نشده است.</p>{% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- وام و مساعده -->
+                    <div class="tab-pane fade p-3" id="loans">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="text-muted">سوابق وام و مساعده</h5>
+                            <button class="btn btn-sm btn-outline-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLoanModal"><i class="fa-solid fa-money-bill-wave"></i> پرداخت جدید</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center align-middle">
+                                <thead class="table-light"><tr><th>تاریخ</th><th>نوع</th><th>مبلغ کل</th><th>قسط ماهانه</th><th>توضیحات</th><th>سند</th></tr></thead>
+                                <tbody>
+                                    {% for l in loans %}
+                                    <tr>
+                                        <td class="fw-bold text-primary">{{ l.issue_date|jalali }}</td><td><span class="badge bg-success">{{ l.loan_type }}</span></td>
+                                        <td class="fw-bold">{{ "{:,.0f}".format(l.amount) }} ت</td><td>{{ "{:,.0f}".format(l.installment_amount) if l.installment_amount else '-' }}</td>
+                                        <td class="small">{{ l.description }}</td>
+                                        <td>{% if l.document_image %}<a href="{{ url_for('static', filename=l.document_image) }}" target="_blank" class="btn btn-sm btn-info text-white"><i class="fa-solid fa-image"></i></a>{% else %}-{% endif %}</td>
+                                    </tr>
+                                    {% else %}<tr><td colspan="6" class="text-center py-4 text-muted">سابقه وامی وجود ندارد.</td></tr>{% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- بایگانی مدارک پرسنلی -->
+                    <div class="tab-pane fade p-3" id="documents">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="text-muted">مدارک هویتی و قراردادها</h5>
+                        </div>
+                        <div class="row g-3">
+                            {% if worker.contract_image %}
+                            <div class="col-md-4 text-center">
+                                <a href="{{ url_for('static', filename=worker.contract_image) }}" target="_blank">
+                                    <img src="{{ url_for('static', filename=worker.contract_image) }}" class="img-thumbnail shadow-sm mb-2" style="height: 150px; object-fit: cover;">
+                                </a>
+                                <span class="d-block small fw-bold text-muted">قرارداد اصلی</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% for doc in worker.documents %}
+                            <div class="col-md-4 text-center">
+                                <a href="{{ url_for('static', filename=doc.file_path) }}" target="_blank">
+                                    <img src="{{ url_for('static', filename=doc.file_path) }}" class="img-thumbnail shadow-sm mb-2" style="height: 150px; object-fit: cover;">
+                                </a>
+                                <span class="d-block small fw-bold text-muted">{{ doc.doc_title }}</span>
+                            </div>
+                            {% endfor %}
+                            
+                            {% if not worker.contract_image and worker.documents|length == 0 %}
+                            <div class="col-12 text-center py-5 text-muted">
+                                <i class="fa-regular fa-folder-open fa-3x mb-3 opacity-50"></i><br>مدرکی در پرونده بایگانی نشده است. از طریق دکمه ویرایش مدارک را آپلود کنید.
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ویرایش پرسنل -->
+<div class="modal fade" id="editWorkerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش پرونده پرسنلی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.edit_worker', id=worker.id) }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">۱. اطلاعات هویتی و تماس</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4"><label class="small text-muted fw-bold">نام و نام خانوادگی</label><input type="text" name="name" class="form-control" value="{{ worker.name }}" required></div>
+                        <div class="col-md-4"><label class="small text-muted fw-bold">کد ملی</label><input type="text" name="national_id" class="form-control" dir="ltr" value="{{ worker.national_id or '' }}"></div>
+                        <div class="col-md-4"><label class="small text-muted fw-bold">تلفن موبایل</label><input type="text" name="phone" class="form-control" dir="ltr" value="{{ worker.phone or '' }}"></div>
+                        <div class="col-md-4"><label class="small text-muted fw-bold">مدرک تحصیلی</label><input type="text" name="education" class="form-control" value="{{ worker.education or '' }}"></div>
+                        <div class="col-md-8"><label class="small text-muted fw-bold">آدرس محل سکونت</label><input type="text" name="address" class="form-control" value="{{ worker.address or '' }}"></div>
+                    </div>
+
+                    <h6 class="fw-bold text-success mb-3 border-bottom pb-2">۲. حقوق و مزایای ثابت (محاسبه فیش)</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3"><label class="small text-muted fw-bold">پایه حقوق</label><input type="text" class="form-control fw-bold text-success" dir="ltr" value="{{ worker.salary }}" onkeyup="formatCurrency(this, 'raw_es1')"><input type="hidden" name="salary" id="raw_es1" value="{{ worker.salary }}"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق مسکن</label><input type="text" class="form-control" dir="ltr" value="{{ worker.housing_allowance }}" onkeyup="formatCurrency(this, 'raw_es2')"><input type="hidden" name="housing_allowance" id="raw_es2" value="{{ worker.housing_allowance }}"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق بن/خواربار</label><input type="text" class="form-control" dir="ltr" value="{{ worker.food_allowance }}" onkeyup="formatCurrency(this, 'raw_es3')"><input type="hidden" name="food_allowance" id="raw_es3" value="{{ worker.food_allowance }}"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق اولاد/عائله‌مندی</label><input type="text" class="form-control" dir="ltr" value="{{ worker.family_allowance }}" onkeyup="formatCurrency(this, 'raw_es4')"><input type="hidden" name="family_allowance" id="raw_es4" value="{{ worker.family_allowance }}"></div>
+                        <div class="col-md-6"><label class="small text-muted fw-bold">شماره کارت / شبا</label><input type="text" name="bank_account" class="form-control" dir="ltr" value="{{ worker.bank_account or '' }}"></div>
+                    </div>
+
+                    <h6 class="fw-bold text-warning text-dark mb-3 border-bottom pb-2">۳. شغلی و مدارک</h6>
+                    <div class="row g-3">
+                        <div class="col-md-3"><label class="small text-muted fw-bold">سمت</label><input list="roleList" name="role" class="form-control" value="{{ worker.role }}" required></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">تخصیص بهاربند</label><select name="assigned_pen_id" class="form-select"><option value="">بدون بهاربند</option>{% for p in pens %}<option value="{{ p.id }}" {% if worker.assigned_pen_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">وضعیت بیمه</label><select name="insurance_status" class="form-select"><option value="بدون بیمه" {% if worker.insurance_status == 'بدون بیمه' %}selected{% endif %}>بدون بیمه</option><option value="بیمه تامین اجتماعی" {% if worker.insurance_status == 'بیمه تامین اجتماعی' %}selected{% endif %}>بیمه تامین اجتماعی</option></select></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">وضعیت همکاری</label><select name="status" class="form-select"><option value="فعال" {% if worker.status == 'فعال' %}selected{% endif %}>فعال (حاضر)</option><option value="مرخصی" {% if worker.status == 'مرخصی' %}selected{% endif %}>مرخصی</option><option value="پایان همکاری" {% if worker.status == 'پایان همکاری' %}selected{% endif %}>پایان همکاری</option></select></div>
+                        
+                        <div class="col-12 p-3 bg-light border rounded mt-3">
+                            <label class="fw-bold"><i class="fa-solid fa-camera text-secondary"></i> افزودن عکس مدارک جدید (شناسنامه، سفته و...)</label>
+                            <input type="file" name="documents" class="form-control mt-2" accept="image/*,.pdf" multiple>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">ذخیره تغییرات</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ثبت رویداد خط خدمت -->
+<div class="modal fade" id="addEventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">ثبت رویداد جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_event', id=worker.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3"><label>تاریخ (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="event_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
+                    <div class="mb-3"><label>نوع رویداد</label><select name="event_type" class="form-select"><option value="عادی">گزارش کار عادی</option><option value="تشویق">تشویق / پاداش</option><option value="جریمه">جریمه / توبیخ</option><option value="غیبت">غیبت غیرموجه</option></select></div>
+                    <div class="mb-3"><label>شرح رویداد</label><textarea name="description" class="form-control" rows="3" required></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100">ثبت در خط خدمت</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal پرداخت وام و مساعده -->
+<div class="modal fade" id="addLoanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title text-success"><i class="fa-solid fa-money-bill-wave"></i> پرداخت وام / مساعده</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_loan', id=worker.id) }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-warning small">مبلغ این وام به صورت اتوماتیک در دفتر کل (هزینه‌ها) ثبت شده و اقساط آن در زمان صدور فیش حقوقی کسر خواهد شد.</div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label>نوع پرداختی</label><select name="loan_type" class="form-select"><option value="مساعده (پیش‌پرداخت)">مساعده (از حقوق)</option><option value="وام پرسنلی">وام پرسنلی</option></select></div>
+                        <div class="col-6"><label>مبلغ کل (تومان)</label><input type="text" class="form-control fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_loan')" required><input type="hidden" name="amount" id="raw_loan" required></div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label>تاریخ پرداخت (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="issue_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
+                        <div class="col-6"><label>مبلغ قسط ماهانه (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_inst')"><input type="hidden" name="installment_amount" id="raw_inst"></div>
+                    </div>
+                    <div class="mb-3"><label>توضیحات (شرح چک/نقد)</label><input type="text" name="description" class="form-control"></div>
+                    <div class="mb-2 p-2 bg-light border rounded"><label><i class="fa-solid fa-image text-secondary"></i> عکس سفته یا رسید</label><input type="file" name="document_image" class="form-control mt-1" accept="image/*"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">تایید و پرداخت</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+    
+    // تبدیل قیمت ها به فرمت کاما دار هنگام لود مودال ویرایش
+    document.addEventListener("DOMContentLoaded", function() {
+        let moneyInputs = document.querySelectorAll('input[onkeyup*="formatCurrency"]');
+        moneyInputs.forEach(inp => { if(inp.value && inp.value !== "0.0") inp.value = Number(inp.value).toLocaleString('en-US'); });
+    });
+</script>
+{% endblock %}

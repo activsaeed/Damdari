@@ -1,0 +1,466 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid py-2">
+    <!-- هدر جدید و حرفه‌ای -->
+    <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+        <div class="card-body p-0">
+            <div class="row g-0">
+                <div class="col-md-8 p-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                            <i class="fa-solid fa-address-card fa-2x text-primary"></i>
+                        </div>
+                        <div>
+                            <h2 class="fw-bold mb-0">{{ c.name }}</h2>
+                            <span class="badge bg-secondary mt-1">{{ c.contact_type }}</span>
+                        </div>
+                    </div>
+                    <div class="row g-3 align-items-center">
+                        <div class="col-auto"><i class="fa-solid fa-phone text-muted me-1"></i> {{ c.phone or 'ثبت نشده' }}</div>
+                        <div class="col-auto"><i class="fa-solid fa-calendar text-muted me-1"></i> عضویت: {{ c.created_at|jalali }}</div>
+                        <div class="col-auto border-start ps-3">
+                            <span class="text-muted small fw-bold">کد اقتصادی:</span> 
+                            <span class="badge bg-light text-dark font-monospace border">{{ c.economic_code or 'ثبت نشده' }}</span>
+                            <button class="btn btn-sm btn-link p-0 ms-1" data-bs-toggle="modal" data-bs-target="#editContactModal"><i class="fa-solid fa-pen-to-square"></i></button>
+                        </div>
+                        <div class="col-auto border-start ps-3">
+                            <span class="text-muted small fw-bold">شماره کارت:</span> 
+                            <span class="badge bg-white text-primary border font-monospace px-2" id="cardNumDisplay" style="letter-spacing: 1px;">{{ c.bank_card if c.bank_card else 'ثبت نشده' }}</span>
+                            {% if c.bank_card %}
+                            <button class="btn btn-sm btn-outline-primary py-0 px-2 ms-1" onclick="copyCardNumber()" title="کپی شماره کارت">
+                                <i class="fa-solid fa-copy"></i> کپی
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 bg-light p-4 text-center border-start d-flex flex-column justify-content-center">
+                    <h6 class="text-muted mb-2 small fw-bold text-uppercase">مانده حساب فعلی</h6>
+                    <h2 class="fw-bold {% if c.balance > 0 %}text-success{% elif c.balance < 0 %}text-danger{% else %}text-muted{% endif %} mb-0" dir="ltr">
+                        {{ c.balance|abs|currency }}
+                    </h2>
+                    <div class="mt-2 fw-bold small">
+                        {% if c.balance > 0 %}<span class="text-success">طلبکاریم (مثبت)</span>{% elif c.balance < 0 %}<span class="text-danger">بدهکاریم (منفی)</span>{% else %}تسویه صفر{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} rounded-3 shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+    <!-- تب‌بندی عملیات -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white pt-3 pb-0 border-0">
+            <ul class="nav nav-pills nav-fill" id="contactTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active fw-bold" id="tab-ledger" data-bs-toggle="pill" data-bs-target="#ledger" type="button"><i class="fa-solid fa-list-check me-2"></i> ریز تراکنش‌ها</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold" id="tab-actions" data-bs-toggle="pill" data-bs-target="#actions" type="button"><i class="fa-solid fa-hand-holding-dollar me-2"></i> ثبت واریز/دریافت</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold" id="tab-reports" data-bs-toggle="pill" data-bs-target="#reports" type="button"><i class="fa-solid fa-file-invoice me-2"></i> چاپ گزارش رسمی</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold" id="tab-docs" data-bs-toggle="pill" data-bs-target="#docs" type="button"><i class="fa-solid fa-folder-open me-2"></i> اسناد و قراردادها</button></li>
+            </ul>
+        </div>
+        <div class="card-body p-4">
+            <form action="{{ url_for('finance.contact_bulk_action') }}" method="POST" id="bulkActionForm">
+                <input type="hidden" name="contact_id" value="{{ c.id }}">
+            <div class="tab-content" id="pills-tabContent">
+                
+                <!-- تب ۱: گردش حساب با فیلتر هوشمند -->
+                <div class="tab-pane fade show active" id="ledger">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <h5 class="fw-bold mb-0">تاریخچه مالی</h5>
+                            <div class="input-group input-group-sm" style="width: auto;">
+                                <select name="action" id="bulkActionSelect" class="form-select">
+                                <option value="">عملیات گروهی...</option>
+                                <option value="archive">بایگانی انتخاب شده‌ها</option>
+                                <option value="delete">حذف نهایی انتخاب شده‌ها</option>
+                            </select>
+                                <button type="submit" class="btn btn-dark fw-bold">اجرا</button>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <button class="btn btn-sm btn-outline-primary fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#contactFilterOffcanvas"><i class="fa-solid fa-filter"></i> فیلتر پیشرفته {% if starred_only or moadian_only or request.args.get('date_from_jalali') or show_archived %}<span class="badge bg-danger rounded-circle p-1" style="font-size: 0.2rem; vertical-align: top;"> </span>{% endif %}</button>
+                            <a href="{{ url_for('finance.contact_export_tx', id=c.id, date_from=request.args.get('date_from'), date_to=request.args.get('date_to'), date_from_jalali=request.args.get('date_from_jalali'), date_to_jalali=request.args.get('date_to_jalali'), moadian=(1 if moadian_only else 0), starred=(1 if starred_only else 0), show_archived=(1 if show_archived else 0)) }}" class="btn btn-sm btn-success fw-bold"><i class="fa-solid fa-file-excel"></i> خروجی اکسل</a>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle text-center border-top">
+                            <thead class="table-light"><tr><th><input type="checkbox" id="selectAll"></th><th><i class="fa-solid fa-star"></i></th><th>تاریخ</th><th>نوع</th><th>مبلغ ({{ current_currency_unit }})</th><th>شرح و پیگیری</th><th>فایل</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+                            <tbody>
+                                {% for t in transactions %}
+                                <tr class="{% if t.t_type == 'درآمد' and c.balance > 0 and 'تسویه' not in t.category %}table-warning bg-opacity-10{% elif t.t_type == 'هزینه' and c.balance < 0 and 'تسویه' not in t.category %}table-warning bg-opacity-10{% endif %}">
+                                    <td><input type="checkbox" name="tx_ids" value="{{ t.id }}" class="tx-checkbox"></td>
+                                    <td><a href="javascript:void(0)" onclick="toggleStarTx({{ t.id }}, this)">{% if t.is_starred %}<i class="fa-solid fa-star text-warning"></i>{% else %}<i class="fa-regular fa-star text-muted"></i>{% endif %}</a></td>
+                                    <td class="fw-bold">{{ t.t_date|jalali }}</td>
+                                    <td><span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }}</span></td>
+                                    <td class="fw-bold fs-6">{{ t.amount|currency }}</td>
+                                    <td class="small text-start">
+                                        <div class="fw-bold">{{ t.description or t.category }}</div>
+                                        {% if t.follow_up_note %}
+                                        <div class="mt-1 p-2 bg-info bg-opacity-10 border-start border-3 border-info text-dark rounded-1" style="font-size: 0.75rem;">
+                                            <i class="fa-solid fa-comment-dots text-info me-1"></i> {{ t.follow_up_note }}
+                                        </div>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none mt-1 text-primary" data-bs-toggle="modal" data-bs-target="#followupModal{{ t.id }}">
+                                            <i class="fa-solid fa-pen-to-square small"></i> {% if t.follow_up_note %}ویرایش یادداشت{% else %}افزودن پیگیری{% endif %}
+                                        </button>
+                                    </td>
+                                    <td>
+                                        {% if t.documents %}<a href="{{ url_for('static', filename=t.documents[0].file_path) }}" target="_blank" class="text-primary"><i class="fa-solid fa-paperclip fa-lg"></i></a>{% else %}-{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if 'تسویه' in t.category %}<span class="badge bg-info text-dark">رسید نقدی</span>
+                                        {% elif (t.t_type == 'درآمد' and c.balance <= 0) or (t.t_type == 'هزینه' and c.balance >= 0) %}<span class="badge bg-success">تسویه شده</span>
+                                        {% else %}<span class="badge border border-warning text-dark">در انتظار تسویه</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            {% if not t.is_archived %}
+                                            <a href="{{ url_for('finance.archive_tx', id=t.id) }}" class="btn btn-sm btn-outline-warning" title="بایگانی" onclick="return confirm('آیا از بایگانی این فاکتور اطمینان دارید؟')"><i class="fa-solid fa-box-archive"></i></a>
+                                            {% endif %}
+                                            <a href="{{ url_for('finance.delete_tx', id=t.id) }}" class="btn btn-sm btn-outline-danger" title="حذف" onclick="return confirm('هشدار: آیا از حذف دائمی این تراکنش اطمینان دارید؟ این عمل غیرقابل بازگشت است.')"><i class="fa-solid fa-trash-can"></i></a>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Modal اختصاصی یادداشت پیگیری -->
+                                <div class="modal fade" id="followupModal{{ t.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered modal-sm">
+                                        <div class="modal-content border-0 shadow-lg">
+                                            <div class="modal-header bg-light border-0"><h6 class="modal-title fw-bold">یادداشت پیگیری</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                            <form action="{{ url_for('finance.update_followup', tx_id=t.id) }}" method="POST">
+                                                <div class="modal-body">
+                                                    <textarea name="follow_up_note" class="form-control" rows="4" placeholder="جزئیات پیگیری تسویه یا وضعیت چک...">{{ t.follow_up_note or '' }}</textarea>
+                                                </div>
+                                                <div class="modal-footer border-0 p-2"><button type="submit" class="btn btn-primary w-100 fw-bold">ذخیره یادداشت</button></div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}<tr><td colspan="8" class="py-5 text-muted">تراکنشی یافت نشد. در صورت وجود فیلتر، دکمه 'حذف فیلتر' را بزنید.</td></tr>{% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </form>
+
+                <!-- تب ۲: ثبت تراکنش جدید -->
+                <div class="tab-pane fade" id="actions">
+                    <div class="row justify-content-center">
+                        <div class="col-md-6">
+                            <!-- نمایش خطاهای اختصاصی همین باکس -->
+                            {% with errors = get_flashed_messages(category_filter=['contact_tx_error']) %}
+                                {% if errors %}{% for msg in errors %}<div class="alert alert-danger py-2 small fw-bold mb-3"><i class="fa-solid fa-circle-exclamation"></i> {{ msg }}</div>{% endfor %}{% endif %}
+                            {% endwith %}
+                            
+                            <form action="{{ url_for('finance.contact_add_tx', id=c.id) }}" method="POST" enctype="multipart/form-data" onsubmit="return confirm('آیا از ثبت این رسید اطمینان دارید؟');">
+                                {% if c.bank_card %}
+                                <div class="alert alert-light border small mb-3">
+                                    <i class="fa-solid fa-credit-card text-primary me-1"></i>
+                                    شماره کارت جهت تسویه: <strong class="ms-1">{{ c.bank_card }}</strong>
+                                </div>
+                                {% endif %}
+                                <div class="mb-4"><label class="form-label fw-bold">نوع عملیات تسویه</label><select name="tx_type" class="form-select form-select-lg fw-bold"><option value="پرداخت به شخص (تسویه بدهی)">پرداخت پول به ایشان</option><option value="دریافت از شخص (وصول طلب)">دریافت پول از ایشان</option></select></div>
+                                <div class="mb-4"><label class="form-label fw-bold">مبلغ رسید ({{ current_currency_unit }})</label><input type="text" class="form-control form-control-lg text-center fw-bold text-success" onkeyup="formatCurrency(this, 'raw_amt')" required><input type="hidden" name="amount" id="raw_amt"></div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-6"><label class="form-label small fw-bold">تاریخ شمسی</label><input type="text" name="t_date_jalali" class="form-control jalali-datepicker" required><input type="hidden" name="t_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
+                                    <div class="col-6"><label class="form-label small fw-bold">تصویر فیش/چک</label><input type="file" name="receipt" class="form-control" accept="image/*,.pdf"></div>
+                                </div>
+                                <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">تایید و بروزرسانی تراز شخص</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- تب ۳: گزارش‌گیری و چاپ رسمی -->
+                <div class="tab-pane fade" id="reports">
+                    <div class="row justify-content-center py-4">
+                        <div class="col-md-9">
+                            <div class="card border-0 shadow-sm bg-white p-4">
+                                <h5 class="fw-bold mb-4 text-center text-dark border-bottom pb-3"><i class="fa-solid fa-print text-primary"></i> تنظیمات صدور صورت‌حساب رسمی</h5>
+                                <form id="reportForm" method="GET" target="_blank">
+                                    <input type="hidden" name="show_archived" value="{{ '1' if show_archived else '0' }}">
+                                    <input type="hidden" name="starred" value="{{ '1' if starred_only else '0' }}">
+                                    <input type="hidden" name="moadian" value="{{ '1' if moadian_only else '0' }}">
+                                    
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold small">نوع فیلتر زمانی:</label>
+                                        <div class="d-flex gap-4 justify-content-center bg-light p-3 rounded-3">
+                                            <div class="form-check"><input class="form-check-input" type="radio" name="report_type" id="type_seasonal" value="seasonal" checked onchange="toggleReportInputs()"><label class="form-check-label fw-bold" for="type_seasonal">گزارش فصلی</label></div>
+                                            <div class="form-check"><input class="form-check-input" type="radio" name="report_type" id="type_custom" value="custom" onchange="toggleReportInputs()"><label class="form-check-label fw-bold" for="type_custom">بازه انتخابی (آزاد)</label></div>
+                                        </div>
+                                    </div>
+
+                                    <div id="seasonal_inputs" class="row g-3 mb-4">
+                                        <div class="col-md-6"><label class="form-label small fw-bold">سال مالی</label><select name="year" class="form-select"><option value="1403">1403</option><option value="1404">1404</option><option value="1405" selected>1405</option></select></div>
+                                        <div class="col-md-6"><label class="form-label small fw-bold">فصل</label><select name="quarter" class="form-select"><option value="1">بهار</option><option value="2">تابستان</option><option value="3">پاییز</option><option value="4">زمستان</option></select></div>
+                                    </div>
+
+                                    <div id="custom_inputs" class="row g-3 mb-4" style="display: none;">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold">از تاریخ</label>
+                                            <input type="text" name="date_from_jalali" class="form-control jalali-datepicker text-center" placeholder="140x/xx/xx">
+                                            <input type="hidden" name="date_from" class="gregorian-hidden-field">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold">تا تاریخ</label>
+                                            <input type="text" name="date_to_jalali" class="form-control jalali-datepicker text-center" placeholder="140x/xx/xx">
+                                            <input type="hidden" name="date_to" class="gregorian-hidden-field">
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-md-6"><button type="button" onclick="submitReport('html')" class="btn btn-outline-dark btn-lg w-100 fw-bold shadow-sm"><i class="fa-solid fa-eye"></i> مشاهده نسخه چاپی</button></div>
+                                        <div class="col-md-6"><button type="button" onclick="submitReport('pdf')" class="btn btn-primary btn-lg w-100 fw-bold shadow-sm"><i class="fa-solid fa-file-pdf"></i> دریافت فایل PDF</button></div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- تب ۴: اسناد -->
+                <div class="tab-pane fade" id="docs">
+                    <div class="p-4 bg-light border-bottom">
+                        <h6 class="fw-bold mb-3"><i class="fa-solid fa-upload text-primary"></i> آپلود مدارک یا قرارداد جدید</h6>
+                        <form action="{{ url_for('finance.upload_contact_doc', id=c.id) }}" method="POST" enctype="multipart/form-data">
+                            <div class="row g-3">
+                                <div class="col-md-5">
+                                    <input type="text" name="doc_title" class="form-control" placeholder="عنوان مدرک (مثلاً: قرارداد خرید سال 1404)" required>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="file" name="documents" class="form-control" accept="image/*,.pdf" multiple required>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-primary w-100 fw-bold">آپلود فایل</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="p-4">
+                        <div class="row g-3">
+                            {% for doc in c.documents %}
+                            <div class="col-md-3">
+                                <div class="card h-100 border-0 shadow-sm text-center border-top border-3 {% if doc.file_path.lower().endswith('.pdf') %}border-danger{% else %}border-info{% endif %}">
+                                    <div class="card-body p-3">
+                                        {% if doc.file_path.lower().endswith('.pdf') %}
+                                            <i class="fa-solid fa-file-pdf fa-3x text-danger mb-3"></i>
+                                        {% else %}
+                                            <i class="fa-solid fa-file-image fa-3x text-info mb-3"></i>
+                                        {% endif %}
+                                        <h6 class="small fw-bold text-truncate">{{ doc.doc_title }}</h6>
+                                        <small class="text-muted d-block mb-3">{{ doc.upload_date|jalali }}</small>
+                                        <div class="d-flex gap-1">
+                                            <a href="{{ url_for('static', filename=doc.file_path) }}" target="_blank" class="btn btn-sm btn-outline-dark w-100">مشاهده</a>
+                                            <a href="{{ url_for('finance.delete_contact_doc', doc_id=doc.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('آیا از حذف این مدرک اطمینان دارید؟')"><i class="fa-solid fa-trash"></i></a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-5 text-muted col-12">
+                                <i class="fa-regular fa-folder-open fa-3x mb-3 opacity-25"></i>
+                                <p>هنوز مدرک یا قراردادی برای این شخص بایگانی نشده است.</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- منوی کشویی فیلترها (Offcanvas) - منتقل شده به خارج از فرم عملیات گروهی برای رفع مشکل عدم اعمال فیلترها -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="contactFilterOffcanvas">
+    <div class="offcanvas-header bg-light border-bottom">
+        <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-filter text-primary"></i> فیلتر ریزتراکنش‌ها</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form method="GET" action="{{ url_for('finance.contact_profile', id=c.id) }}">
+            <div class="mb-3">
+                <label class="form-label fw-bold small">نمایش تراکنش‌ها</label>
+                <select name="show_archived" class="form-select border-secondary">
+                    <option value="0" {% if not show_archived %}selected{% endif %}>تراکنش‌های جاری (فعال)</option>
+                    <option value="1" {% if show_archived %}selected{% endif %}>تراکنش‌های بایگانی شده</option>
+                </select>
+            </div>
+            <div class="mb-3"><label class="form-label fw-bold small">فیلتر موارد نشان‌دار</label><select name="starred" class="form-select border-warning"><option value="0">همه تراکنش‌ها</option><option value="1" {% if starred_only %}selected{% endif %}>فقط ستاره‌دارها ⭐</option></select></div>
+            <div class="mb-3"><label class="form-label fw-bold small">فیلتر مودیان مالیاتی</label><select name="moadian" class="form-select border-danger"><option value="0">همه تراکنش‌ها</option><option value="1" {% if moadian_only %}selected{% endif %}>فقط فاکتورهای رسمی (مودیان)</option></select></div>
+            <hr>
+            <div class="mb-3"><label class="form-label fw-bold small">از تاریخ (شمسی):</label><input type="text" name="date_from_jalali" class="form-control jalali-datepicker" placeholder="از تاریخ..." value="{{ request.args.get('date_from_jalali', '') }}"><input type="hidden" name="date_from" class="gregorian-hidden-field" value="{{ request.args.get('date_from', '') }}"></div>
+            <div class="mb-3"><label class="form-label fw-bold small">تا تاریخ (شمسی):</label><input type="text" name="date_to_jalali" class="form-control jalali-datepicker" placeholder="تا تاریخ..." value="{{ request.args.get('date_to_jalali', '') }}"><input type="hidden" name="date_to" class="gregorian-hidden-field" value="{{ request.args.get('date_to', '') }}"></div>
+            <button type="submit" class="btn btn-primary w-100 fw-bold mt-3">اعمال فیلتر</button>
+            <a href="{{ url_for('finance.contact_profile', id=c.id) }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
+        </form>
+    </div>
+</div>
+
+<!-- مودال ویرایش اطلاعات شخص -->
+<div class="modal fade" id="editContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white"><h5 class="modal-title">ویرایش پروفایل</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.edit_contact', id=c.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label fw-bold">نام کامل</label><input type="text" name="name" class="form-control" value="{{ c.name }}" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">شماره تماس</label><input type="text" name="phone" class="form-control" value="{{ c.phone or '' }}" dir="ltr"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">نوع</label><select name="contact_type" class="form-select"><option value="عمومی" {% if c.contact_type == 'عمومی' %}selected{% endif %}>عمومی</option><option value="مشتری (خریدار دام/شیر)" {% if 'مشتری' in c.contact_type %}selected{% endif %}>مشتری</option><option value="تامین‌کننده (خوراک/دارو)" {% if 'تامین' in c.contact_type %}selected{% endif %}>تامین‌کننده</option></select></div>
+                    <div class="mb-3"><label class="form-label fw-bold text-danger">کد اقتصادی (۱۰ یا ۱۴ رقم)</label><input type="text" name="economic_code" class="form-control font-monospace" value="{{ c.economic_code or '' }}" dir="ltr" maxlength="14" pattern="\d{10}|\d{14}" title="کد اقتصادی باید ۱۰ یا ۱۴ رقم باشد"></div>
+                    <div class="mb-3"><label class="form-label fw-bold text-primary">شماره کارت بانکی (۱۶ رقم)</label><input type="text" name="bank_card" class="form-control font-monospace" value="{{ c.bank_card or '' }}" dir="ltr" maxlength="19" oninput="formatCard(this)" pattern="[0-9 ]{16,19}" title="شماره کارت باید ۱۶ رقم باشد"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-dark w-100 fw-bold">بروزرسانی اطلاعات</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatCard(input) {
+        let value = input.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+        let parts = [];
+        for (let i = 0; i < value.length; i += 4) {
+            parts.push(value.substring(i, i + 4));
+        }
+        input.value = parts.join(' ').trim();
+    }
+
+    function copyCardNumber() {
+        const cardText = document.getElementById('cardNumDisplay').innerText.replace(/\s/g, '').trim();
+        if (!cardText || cardText.includes('ثبت')) return;
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(cardText).then(() => {
+                alert('شماره کارت کپی شد: ' + cardText);
+            });
+        } else {
+            // Fallback برای محیط‌های غیر امن (HTTP)
+            let textArea = document.createElement("textarea");
+            textArea.value = cardText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert('شماره کارت کپی شد: ' + cardText);
+            } catch (err) {
+                alert('خطا در کپی: ' + cardText);
+            }
+            document.body.removeChild(textArea);
+        }
+    }
+
+    function handleBulkAction(e) {
+        const action = document.getElementById('bulkActionSelect').value;
+        const checked = document.querySelectorAll('.tx-checkbox:checked').length;
+        
+        if (!action) {
+            alert("لطفاً نوع عملیات گروهی را انتخاب کنید.");
+            e.preventDefault(); return false;
+        }
+        if (checked === 0) {
+            alert("لطفاً حداقل یک تراکنش را انتخاب کنید.");
+            e.preventDefault(); return false;
+        }
+        
+        let msg = action === 'delete' 
+            ? `هشدار جدی: آیا از حذف دائمی ${checked} مورد اطمینان دارید؟ این عمل غیرقابل بازگشت است.` 
+            : `آیا از بایگانی کردن ${checked} مورد اطمینان دارید؟ موارد بایگانی در محاسبات جاری لحاظ نمی‌شوند.`;
+            
+        if(!confirm(msg)) {
+            e.preventDefault(); return false;
+        }
+        return true;
+    }
+
+    // تابع فرمت کردن متن ساده (بدون نیاز به input)
+    function formatTextAsCard(text) {
+        let clean = text.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+        let parts = [];
+        for (let i = 0; i < clean.length; i += 4) {
+            parts.push(clean.substring(i, i + 4));
+        }
+        return parts.join(' ').trim();
+    }
+
+    // تابع تغییر آنی ستاره فاکتور در ریزحساب
+    function toggleStarTx(txId, element) {
+        fetch(`/finance/toggle_star_tx/${txId}`)
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    if(data.is_starred) {
+                        element.innerHTML = '<i class="fa-solid fa-star text-warning fs-5"></i>';
+                    } else {
+                        element.innerHTML = '<i class="fa-regular fa-star text-muted fs-5"></i>';
+                    }
+                }
+            });
+    }
+
+    // تابع قالب‌بندی پول و مقداردهی به فیلد مخفی (رفع خطای مبلغ صفر)
+    function formatCurrency(input, hiddenFieldId) {
+        let value = input.value.replace(/\D/g, "");
+        let hiddenInput = document.getElementById(hiddenFieldId);
+        if (hiddenInput) hiddenInput.value = value;
+        if (value) input.value = Number(value).toLocaleString('en-US');
+        else input.value = "";
+    }
+
+    function toggleReportInputs() {
+        const type = document.querySelector('input[name="report_type"]:checked').value;
+        document.getElementById('seasonal_inputs').style.display = type === 'seasonal' ? 'flex' : 'none';
+        document.getElementById('custom_inputs').style.display = type === 'custom' ? 'flex' : 'none';
+        
+        const customInputs = document.querySelectorAll('#custom_inputs input');
+        if (type === 'custom') {
+            customInputs.forEach(i => { if(i.name.includes('jalali')) i.setAttribute('required', ''); });
+        } else {
+            customInputs.forEach(i => i.removeAttribute('required'));
+        }
+    }
+
+    function submitReport(format) {
+        const form = document.getElementById('reportForm');
+        const baseUrl = format === 'html' 
+            ? "{{ url_for('finance.contact_statement', id=c.id) }}" 
+            : "{{ url_for('finance.export_contact_statement_pdf', id=c.id) }}";
+        
+        form.action = baseUrl;
+        form.submit();
+    }
+
+    // اسکریپت هوشمند برای حفظ تب فعال بعد از رفرش یا ثبت فرم
+    document.addEventListener("DOMContentLoaded", function() {
+        // فرمت اولیه شماره کارت در هدر صفحه
+        let cardDisplay = document.getElementById('cardNumDisplay');
+        if(cardDisplay && cardDisplay.innerText.length >= 16) {
+            cardDisplay.innerText = formatTextAsCard(cardDisplay.innerText);
+        }
+        // فرمت شماره کارت در فیلد ویرایش
+        let cardInput = document.querySelector('input[name="bank_card"]');
+        if(cardInput && cardInput.value) {
+            formatCard(cardInput);
+        }
+
+        var hash = window.location.hash;
+        if (hash) {
+            var triggerEl = document.querySelector('button[data-bs-target="' + hash + '"]');
+            if (triggerEl) bootstrap.Tab.getOrCreateInstance(triggerEl).show();
+        }
+        // آپدیت کردن هش URL هنگام کلیک روی تب‌ها
+        document.querySelectorAll('button[data-bs-toggle="pill"]').forEach(btn => {
+            btn.addEventListener('shown.bs.tab', e => window.location.hash = e.target.getAttribute('data-bs-target'));
+        });
+
+        // مدیریت چک‌باکس انتخاب همه
+        const selectAll = document.getElementById('selectAll');
+        if(selectAll) selectAll.onclick = e => document.querySelectorAll('.tx-checkbox').forEach(cb => cb.checked = e.target.checked);
+    });
+</script>
+<style>
+    .nav-pills .nav-link.active { background-color: var(--bs-primary); }
+    .nav-pills .nav-link { color: #444; border-radius: 10px; margin: 0 5px; }
+</style>
+{% endblock %}

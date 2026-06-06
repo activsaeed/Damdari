@@ -1,0 +1,627 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-gear text-secondary"></i> تنظیمات و پیکربندی سیستم</h2>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white pt-3 pb-0 border-bottom-0">
+        <ul class="nav nav-tabs" id="settingsTab" role="tablist">
+            <li class="nav-item"><button class="nav-link active fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#users"><i class="fa-solid fa-users-gear text-primary"></i> حساب‌های کاربری</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#base"><i class="fa-solid fa-sliders text-success"></i> تعاریف پایه (نژاد، هدف...)</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#vet"><i class="fa-solid fa-briefcase-medical text-danger"></i> دامپزشکی و دارو</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#pen"><i class="fa-solid fa-building text-warning"></i> بهاربندها و جیره</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#units"><i class="fa-solid fa-weight-hanging text-info"></i> واحدها</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#backup"><i class="fa-solid fa-database text-primary"></i> بک‌آپ</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#iot_api"><i class="fa-solid fa-microchip text-danger"></i> سخت‌افزار و API</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#system_vars"><i class="fa-solid fa-calculator text-dark"></i> متغیرهای محاسباتی</button></li>
+        </ul>
+    </div>
+    <div class="card-body bg-light">
+        <div class="tab-content p-2">
+            
+            <!-- تب کاربران -->
+            <div class="tab-pane fade show active" id="users">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-primary">مدیریت حساب‌های کاربری</h5>
+                    <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="fa-solid fa-plus"></i> اکانت جدید</button>
+                </div>
+                <div class="table-responsive bg-white rounded border">
+                    <table class="table table-hover text-center align-middle mb-0">
+                        <thead class="table-light"><tr><th>نام کاربری</th><th>نام</th><th>نقش</th><th>دسترسی‌ها</th><th>عملیات</th></tr></thead>
+                        <tbody>
+                            {% for u in users %}
+                            <tr>
+                                <td class="fw-bold" dir="ltr">{{ u.username }}</td><td>{{ u.name }}</td><td><span class="badge bg-primary">{{ u.role }}</span></td>
+                                <td>{% if u.role == 'مدیر' %}<span class="badge bg-success">دسترسی کامل</span>{% else %}<span class="text-muted small">سفارشی</span>{% endif %}</td>
+                                <td>{% if u.username != 'admin' %}<a href="{{ url_for('dashboard.delete_user', id=u.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('اکانت حذف شود؟')"><i class="fa-solid fa-trash"></i></a>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- تب تعاریف پایه -->
+            <div class="tab-pane fade" id="base">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-dna text-warning"></i> نژادها</span><button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#addBreedModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for b in breeds %}<tr><td>{{ b.name }}</td><td><a href="{{ url_for('dashboard.delete_setting', type='breed', id=b.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-bullseye text-primary"></i> اهداف پرورش</span><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addPurposeModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for p in purposes %}<tr><td>{{ p.name }}</td><td><a href="{{ url_for('dashboard.delete_setting', type='purpose', id=p.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-heart-pulse text-secondary"></i> وضعیت‌های دام</span><button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#addStatusModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for s in statuses %}<tr><td>{{ s.name }}</td><td><a href="{{ url_for('dashboard.delete_setting', type='status', id=s.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-users text-info"></i> انواع خریداران</span><button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#addBuyerModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for bc in buyer_categories|default([]) %}<tr><td>{{ bc.name }}</td><td><a href="{{ url_for('dashboard.delete_setting', type='buyer_cat', id=bc.id) }}" class="text-danger"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تب دامپزشکی -->
+            <div class="tab-pane fade" id="vet">
+                <div class="row g-4">
+                    <div class="col-md-5">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-pills text-danger"></i> داروها و واکسن‌ها</span><button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#addMedModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for m in medicines %}<tr><td>{{ m.name }} <span class="badge bg-light text-dark border">{{ m.category.name if m.category else 'بدون دسته' }}</span></td><td><a href="{{ url_for('dashboard.delete_setting', type='medicine', id=m.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-briefcase-medical text-info"></i> پروتکل‌های درمانی</span><button class="btn btn-sm btn-info text-dark" data-bs-toggle="modal" data-bs-target="#addProtocolModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for p in protocols %}<tr><td class="fw-bold">{{ p.name }}</td><td class="small">{{ p.medicines }}</td><td><a href="{{ url_for('dashboard.delete_setting', type='protocol', id=p.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تب بهاربند و جیره -->
+            <div class="tab-pane fade" id="pen">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-building text-primary"></i> بهاربندها و سالن‌ها</span><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addPenModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for p in pens %}<tr><td class="fw-bold">{{ p.name }}</td><td>{{ p.capacity }} رأس</td><td><a href="{{ url_for('dashboard.delete_setting', type='pen', id=p.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center"><span class="fw-bold"><i class="fa-solid fa-wheat-awn text-success"></i> جیره‌های غذایی</span><button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addRationModal"><i class="fa-solid fa-plus"></i></button></div>
+                        <div class="card-body p-0"><table class="table mb-0 text-center"><tbody>{% for r in rations %}<tr><td class="fw-bold">{{ r.name }}</td><td>{{ "{:,.0f}".format(r.daily_cost) }} ت/روز</td><td><a href="{{ url_for('dashboard.delete_setting', type='ration', id=r.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>{% endfor %}</tbody></table></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تب مدیریت بک‌آپ -->
+            <div class="tab-pane fade" id="backup">
+                <div class="card border-0 shadow-sm mb-4 bg-white border-start border-4 border-success">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="fw-bold mb-1">مدیریت مستقیم فایل دیتابیس</h5>
+                            <p class="text-muted small mb-0">دریافت خروجی کامل یا بازگردانی دیتابیس از فایل‌های قبلی</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('dashboard.backup_download') }}" class="btn btn-success fw-bold"><i class="fa-solid fa-download"></i> دانلود فایل .db</a>
+                            <button class="btn btn-outline-dark fw-bold" data-bs-toggle="modal" data-bs-target="#restoreModal"><i class="fa-solid fa-upload"></i> بازگردانی (Import)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-clock text-primary"></i> زمان‌بندی بک‌آپ خودکار</div>
+                            <div class="card-body">
+                                <form action="{{ url_for('dashboard.settings') }}" method="POST">
+                                    <input type="hidden" name="action" value="update_constants">
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold">ساعت (0-23)</label>
+                                            <input type="number" name="backup_hour" class="form-control" value="{{ settings.get('backup_hour', '0') }}" min="0" max="23">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold">دقیقه (0-59)</label>
+                                            <input type="number" name="backup_minute" class="form-control" value="{{ settings.get('backup_minute', '0') }}" min="0" max="59">
+                                        </div>
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm">بروزرسانی زمان‌بندی</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <hr>
+                                <div class="text-center">
+                                    <a href="{{ url_for('dashboard.backup_telegram') }}" class="btn btn-success fw-bold w-100 py-3 shadow animate__animated animate__pulse animate__infinite">
+                                        <i class="fa-solid fa-paper-plane me-2"></i> همین حالا بک‌آپ ارسال کن
+                                    </a>
+                                    <small class="text-muted mt-2 d-block">فایل بک‌آپ به تمام ربات‌های زیر ارسال خواهد شد.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fa-solid fa-robot text-info"></i> لیست گیرندگان (ربات‌ها)</span>
+                                <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#addTgBotModal"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-hover text-center align-middle mb-0">
+                                    <thead class="table-light small"><tr><th>نام گیرنده</th><th>Chat ID</th><th>عملیات</th></tr></thead>
+                                    <tbody>
+                                        {% for bot in tg_bots %}
+                                        <tr>
+                                            <td><strong>{{ bot.bot_name }}</strong></td>
+                                            <td dir="ltr" class="small">{{ bot.chat_id }}</td>
+                                            <td>
+                                                <a href="{{ url_for('dashboard.delete_setting', type='tg_bot', id=bot.id) }}" class="text-danger" onclick="return confirm('این ربات حذف شود؟')"><i class="fa-solid fa-trash-can"></i></a>
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr><td colspan="3" class="py-4 text-muted">هیچ رباتی تعریف نشده است.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تب مدیریت واحدها -->
+            <div class="tab-pane fade" id="units">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-info">واحدهای اندازه‌گیری (انبار و دارو)</h5>
+                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#addUnitModal"><i class="fa-solid fa-plus"></i> واحد جدید</button>
+                </div>
+                <div class="table-responsive bg-white rounded border">
+                    <table class="table table-hover text-center align-middle mb-0">
+                        <thead class="table-light"><tr><th>نام واحد</th><th>توضیحات</th><th>عملیات</th></tr></thead>
+                        <tbody>
+                            {% for unit in units %}
+                            <tr><td class="fw-bold">{{ unit.name }}</td><td>{{ unit.description or '-' }}</td><td><a href="{{ url_for('dashboard.delete_unit', id=unit.id) }}" class="text-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- تب سخت‌افزار و API (IoT) -->
+            <div class="tab-pane fade" id="iot_api">
+                <div class="row g-4">
+                    <!-- ستون راهنما -->
+                    <div class="col-lg-7">
+                        <div class="card border-0 shadow-sm rounded-4">
+                            <div class="card-header bg-dark text-white py-3">
+                                <h5 class="mb-0 fw-bold small-caps"><i class="fa-solid fa-book-open text-warning me-2"></i> راهنمای جامع اتصال هوشمند</h5>
+                            </div>
+                            <div class="card-body p-4 d-flex flex-column h-100">
+                                <div class="accordion accordion-flush" id="iotSteps">
+                                    <div class="alert alert-warning mb-4 border-0 shadow-sm">
+                                        <i class="fa-solid fa-tower-broadcast me-2"></i>
+                                        <strong>چالش فاصله دارید؟</strong> اگر فاصله سنسورها بیش از ۱۰۰ متر است، <a href="#" data-bs-toggle="modal" data-bs-target="#distanceGuideModal" class="alert-link">این راهنما</a> را بخوانید.
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header"><button class="accordion-button fw-bold text-primary" data-bs-toggle="collapse" data-bs-target="#step1">گام ۱: پیش‌نیازهای سخت‌افزاری</button></h2>
+                                        <div id="step1" class="accordion-collapse collapse show" data-bs-parent="#iotSteps">
+                                            <div class="accordion-body small text-muted">
+                                                برای مانیتورینگ سالن‌ها، شما به یک برد <strong>ESP32</strong> و سنسور <strong>DHT22</strong> (دقیق‌تر از DHT11) نیاز دارید. 
+                                                این قطعات را می‌توانید از فروشگاه‌های الکترونیک تهیه کنید. هزینه راه‌اندازی هر سالن بسیار پایین است.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header"><button class="accordion-button collapsed fw-bold text-primary" data-bs-toggle="collapse" data-bs-target="#step2">گام ۲: تنظیمات شبکه و IP</button></h2>
+                                        <div id="step2" class="accordion-collapse collapse" data-bs-parent="#iotSteps">
+                                            <div class="accordion-body small text-muted">
+                                                کامپیوتری که این برنامه روی آن نصب است و بردهای ESP32 باید به یک مودم وای‌فای مشترک متصل باشند. 
+                                                ابتدا آدرس IP کامپیوتر خود را پیدا کنید (در ویندوز دستور <code>ipconfig</code>). 
+                                                مثال: <code>192.168.1.15</code>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header"><button class="accordion-button collapsed fw-bold text-primary" data-bs-toggle="collapse" data-bs-target="#step3">گام ۳: آدرس‌های فراخوانی (Endpoints)</button></h2>
+                                        <div id="step3" class="accordion-collapse collapse" data-bs-parent="#iotSteps">
+                                            <div class="accordion-body">
+                                                <p class="small text-muted">سخت‌افزار باید داده‌های خود را به آدرس‌های زیر ارسال کند:</p>
+                                                <div class="bg-light p-2 rounded border font-monospace mb-2 small">
+                                                    <span class="text-danger fw-bold">POST</span> /finance/api/sensors/update <br>
+                                                    <span class="text-muted">(برای دما و رطوبت)</span>
+                                                </div>
+                                                <div class="bg-light p-2 rounded border font-monospace small">
+                                                    <span class="text-danger fw-bold">POST</span> /finance/api/iot/weight <br>
+                                                    <span class="text-muted">(برای باسکول دیجیتال)</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-code text-danger"></i> نمونه کد آماده (Arduino/C++):</h6>
+                                        <button class="btn btn-sm btn-outline-dark fw-bold" data-bs-toggle="modal" data-bs-target="#distanceGuideModal"><i class="fa-solid fa-circle-info"></i> راهکار فواصل دور</button>
+                                    </div>
+                                    <pre class="bg-dark text-success p-3 rounded small" style="max-height: 250px; overflow-y: auto;">
+// قطعه کد ارسال دیتا
+HTTPClient http;
+http.begin("http://[SERVER_IP]:5000/finance/api/sensors/update");
+http.addHeader("Content-Type", "application/json");
+
+// داده‌ها به صورت JSON
+String json = "{\"pen_id\":1, \"temperature\":28.5, \"humidity\":55.2}";
+int responseCode = http.POST(json);
+
+if (responseCode > 0) {
+    Serial.println("اتصال موفق! پاسخ سرور: " + String(responseCode));
+}
+http.end();</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ستون تست و شبیه‌ساز -->
+                    <div class="col-lg-5">
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-header bg-primary text-white py-3">
+                                <h5 class="mb-0 fw-bold small-caps"><i class="fa-solid fa-vial me-2"></i> شبیه‌ساز سنسور محیطی</h5>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">انتخاب بهاربند:</label>
+                                    <select id="test_pen_id" class="form-select border-primary">
+                                        {% for p in pens %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6"><label class="small fw-bold">دما:</label><input type="number" id="test_temp" class="form-control" value="24.5"></div>
+                                    <div class="col-6"><label class="small fw-bold">رطوبت:</label><input type="number" id="test_hum" class="form-control" value="60"></div>
+                                </div>
+                                <button type="button" onclick="testIotConnection()" class="btn btn-primary w-100 fw-bold">ارسال سیگنال دما/رطوبت</button>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm rounded-4">
+                            <div class="card-header bg-success text-white py-3">
+                                <h5 class="mb-0 fw-bold small-caps"><i class="fa-solid fa-weight-scale me-2"></i> شبیه‌ساز باسکول هوشمند</h5>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">شماره پلاک (Ear Tag):</label>
+                                    <input type="text" id="test_ear_tag" class="form-control border-success" placeholder="مثلاً: 1403-1024">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">وزن خوانده شده (kg):</label>
+                                    <input type="number" id="test_weight" class="form-control border-success" value="45.0">
+                                </div>
+                                <button type="button" onclick="testIotWeightConnection()" class="btn btn-success w-100 fw-bold">ثبت وزن آزمایشی</button>
+                            </div>
+                        </div>
+
+                        <div id="test_result" class="p-3 rounded-3 d-none mt-4 animate__animated animate__fadeIn border">
+                            <!-- نتیجه اینجا نمایش داده می‌شود -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تب متغیرهای سیستمی (Economic & Bio Constants) -->
+            <div class="tab-pane fade" id="system_vars">
+                <form action="{{ url_for('dashboard.settings') }}" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="update_constants">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-white fw-bold text-primary">ثوابت اقتصادی (داشبورد و مالیات)</div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-primary">واحد پول کل سیستم</label>
+                                        <select name="currency_unit" class="form-select border-primary fw-bold">
+                                            <option value="تومان" {% if settings.get('currency_unit') == 'تومان' %}selected{% endif %}>تومان (مدیریتی)</option>
+                                            <option value="ریال" {% if settings.get('currency_unit') == 'ریال' %}selected{% endif %}>ریال (رسمی/سازمانی)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small">قیمت روز بازار - هر کیلو گوشت زنده (تومان)</label>
+                                        <input type="number" name="market_price" class="form-control" value="{{ settings.get('market_price', '250000') }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small">نرخ مالیات بر ارزش افزوده (VAT) - درصد</label>
+                                        <input type="number" name="vat_rate" class="form-control" value="{{ settings.get('vat_rate', '10') }}">
+                                    </div>
+                                    <hr>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-danger">تنظیمات پنل پیامک</label>
+                                        <input type="text" name="sms_api_key" class="form-control mb-2" placeholder="API Key" value="{{ settings.get('sms_api_key', '') }}">
+                                        <input type="text" name="sms_sender_number" class="form-control" placeholder="شماره فرستنده" value="{{ settings.get('sms_sender_number', '') }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card border-0 shadow-sm mt-4">
+                                <div class="card-header bg-white fw-bold text-dark">هویت بصری دامداری</div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label small">نام رسمی دامداری (جهت چاپ گزارشات)</label>
+                                        <input type="text" name="farm_name" class="form-control" value="{{ settings.get('farm_name', 'مجتمع دامپروری هوشمند') }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small">لوگوی اختصاصی (تصویر)</label>
+                                        <input type="file" name="farm_logo" class="form-control">
+                                        {% if settings.get('farm_logo_path') %}
+                                            <img src="{{ url_for('static', filename=settings.get('farm_logo_path')) }}" class="mt-2 rounded border" style="height: 60px;">
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-white fw-bold text-success">پارامترهای بیولوژیک (گله)</div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label small">سن انتقال بره به گله بالغ (روز)</label>
+                                        <input type="number" name="maturity_days" class="form-control" value="{{ settings.get('maturity_days', '240') }}">
+                                    </div>
+                                    <button type="submit" class="btn btn-dark w-100 mt-2 fw-bold">بروزرسانی تمام متغیرها</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- بخش جدید: عملیات‌های بستن سال مالی و حسابداری (استاندارد ۲۶) -->
+<div class="card border-0 shadow-sm mb-4 border-top border-warning border-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold text-dark">
+            <i class="fa-solid fa-file-invoice-dollar text-warning"></i> عملیات‌های پایان دوره و حسابداری
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info border-0 shadow-sm mb-3 small">
+            <i class="fa-solid fa-circle-info text-info"></i> 
+            این بخش شامل ابزارهای کنترلی جهت بستن سال مالی، انبارگردانی و صدور اسناد تعدیلی طبق استانداردهای حسابداری است.
+        </div>
+        
+        <h6 class="fw-bold small text-muted border-bottom pb-2 mb-3">۱. ارزیابی بیولوژیک گله (Fair Value)</h6>
+        <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
+            <div class="row align-items-end g-3">
+                <div class="col-md-7">
+                    <label class="form-label fw-bold small text-muted">مبنای قیمت‌گذاری فعلی (از تنظیمات):</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-secondary">قیمت هر کیلوگرم:</span>
+                        <input type="text" class="form-control fw-bold text-primary bg-white"
+                               value="{{ (system_settings.get('market_price', '0')|float)|currency }}" readonly>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <button type="submit" class="btn btn-warning w-100 fw-bold py-2 shadow-sm">
+                        <i class="fa-solid fa-sync"></i> بروزرسانی ارزش و صدور سند
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <hr class="my-4">
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="p-3 border rounded bg-light h-100">
+                    <h6 class="fw-bold"><i class="fa-solid fa-sync text-warning"></i> تطبیق و انتقال مانده انبار</h6>
+                    <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را محاسبه کرده و مانده حساب دارایی (۱۱۰۲) را به‌روز می‌کند.</p>
+                    <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
+                        <button type="submit" class="btn btn-sm btn-outline-warning w-100 fw-bold">تطبیق انبار و دفتر</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 border rounded bg-light h-100">
+                    <h6 class="fw-bold text-primary"><i class="fa-solid fa-lock"></i> بستن حساب‌های موقت</h6>
+                    <p class="text-muted small">مانده تمام حساب‌های درآمد و هزینه را صفر کرده و سود یا زیان خالص را به «سود انباشته» منتقل می‌کند.</p>
+                    <form action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" onsubmit="return confirm('هشدار: آیا از بستن دفاتر مالی اطمینان دارید؟')">
+                        <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold">بستن دفاتر مالی</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 border rounded bg-light h-100">
+                    <h6 class="fw-bold text-success"><i class="fa-solid fa-door-open"></i> صدور سند افتتاحیه</h6>
+                    <p class="text-muted small">مانده نهایی تمام حساب‌های دارایی و بدهی را به عنوان «موجودی اول دوره» در سال جدید ثبت می‌کند.</p>
+                    <form action="{{ url_for('dashboard.issue_opening_entry') }}" method="POST" onsubmit="return confirm('آیا از صدور سند افتتاحیه سال جدید اطمینان دارید؟')">
+                        <button type="submit" class="btn btn-sm btn-outline-success w-100 fw-bold">صدور سند افتتاحیه</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- بخش جدید: ابزارهای نگهداری و سبک‌سازی دیتابیس -->
+<div class="card border-0 shadow-sm rounded-4 border-top border-danger border-5 mb-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold text-danger"><i class="fa-solid fa-broom"></i> نگهداری و بهینه‌سازی دیتابیس</h5>
+    </div>
+    <div class="card-body">
+        <!-- گزارش سلامت دیتابیس -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-12">
+                <div class="p-3 bg-light rounded border d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="fa-solid fa-database text-primary"></i> آنالیز سهم جداول از فضای دیتابیس</span>
+                    <span class="badge bg-primary fs-6">حجم کل فایل: 
+                        {% if db_file_mb < 1 %}
+                            {{ (db_file_mb * 1024) | round(0) }} کیلوبایت
+                        {% else %}
+                            {{ db_file_mb | round(2) }} مگابایت
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            {% for stat in db_stats %}
+            <div class="col-md col-6">
+                <div class="card border-0 shadow-none bg-white border-start border-3 border-secondary text-center p-2">
+                    <small class="text-muted d-block text-nowrap"><i class="fa-solid {{ stat.icon }} small"></i> {{ stat.name }}</small>
+                    <strong class="fs-5">{{ stat.count }}</strong>
+                    <small class="d-block text-primary" style="font-size: 0.7rem;">
+                        {% if stat.size_mb < 0.1 %}
+                            {{ (stat.size_mb * 1024) | round(1) }} KB
+                        {% else %}
+                            {{ stat.size_mb | round(2) }} MB
+                        {% endif %}
+                    </small>
+                    <div class="progress mt-1" style="height: 4px;">
+                        {% set percent = (stat.count / 10000 * 100) if stat.count < 10000 else 100 %}
+                        <div class="progress-bar bg-secondary" style="width: {{ percent }}%"></div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <hr class="my-4">
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-8">
+                <h6 class="fw-bold">پاکسازی تاریخچه وزن‌کشی قدیمی (۲ سال+)</h6>
+                <p class="text-muted small mb-0">
+                    تعداد کل رکوردهای ثبت شده: <span class="badge bg-secondary">{{ weight_count }}</span>
+                    <br>
+                    با اجرای این عملیات، تمامی رکوردهای قدیمی در جدول تاریخچه وزن که بیش از ۷۳۰ روز از ثبت آن‌ها گذشته است، حذف می‌شوند. 
+                    این کار باعث افزایش سرعت گزارش‌گیری و نمودارهای رشد در سیستم‌های با دیتای انبوه می‌شود.
+                    <br><strong class="text-danger">توجه: این عملیات تأثیری بر "وزن فعلی" دام‌ها ندارد.</strong>
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <form action="{{ url_for('livestock.cleanup_weights') }}" method="POST" onsubmit="return confirm('آیا از حذف دائمی رکوردهای قدیمی اطمینان دارید؟ این عملیات قابل بازگشت نیست.')">
+                    <button type="submit" class="btn btn-danger fw-bold shadow-sm px-4">
+                        <i class="fa-solid fa-microchip"></i> شروع عملیات سبک‌سازی
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-8">
+                <h6 class="fw-bold">پاکسازی فاکتورهای بایگانی شده (۲ سال+)</h6>
+                <p class="text-muted small mb-0">
+                    حذف دائمی فاکتورهای «بایگانی شده» که تاریخ ثبت آن‌ها قدیمی‌تر از ۷۳۰ روز پیش است.
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <form action="{{ url_for('dashboard.cleanup_transactions') }}" method="POST" onsubmit="return confirm('آیا از حذف دائمی فاکتورهای بایگانی اطمینان دارید؟')">
+                    <button type="submit" class="btn btn-outline-warning fw-bold shadow-sm px-4">
+                        <i class="fa-solid fa-file-excel"></i> حذف فاکتورهای بایگانی
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-8">
+                <h6 class="fw-bold">پاکسازی چک‌های مختومه قدیمی (۲ سال+)</h6>
+                <p class="text-muted small mb-0">
+                    حذف چک‌های «پاس شده» که بیش از ۷۳۰ روز از سررسید آن‌ها گذشته است.
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <form action="{{ url_for('dashboard.cleanup_cheques') }}" method="POST" onsubmit="return confirm('آیا از حذف چک‌های پاس شده قدیمی اطمینان دارید؟')">
+                    <button type="submit" class="btn btn-outline-info fw-bold shadow-sm px-4">
+                        <i class="fa-solid fa-money-check-slash"></i> حذف چک‌های قدیمی
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-8">
+                <h6 class="fw-bold">پاکسازی شناسنامه دام‌های خارج شده (۲ سال+)</h6>
+                <p class="text-muted small mb-0">
+                    حذف دائمی اطلاعات شناسنامه‌ای، سوابق پزشکی و وزن‌کشی دام‌هایی که بیش از ۲ سال پیش «فروخته» یا «تلف» شده‌اند.
+                    <br><strong class="text-danger small">نکته: این عملیات برای آزاد کردن حجم دیتابیس بسیار موثر است.</strong>
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <form action="{{ url_for('dashboard.cleanup_removed_sheep') }}" method="POST" onsubmit="return confirm('هشدار: با این کار تمام سوابق دام‌های خارج شده قدیمی حذف می‌شود. ادامه می‌دهید؟')">
+                    <button type="submit" class="btn btn-outline-secondary fw-bold shadow-sm px-4">
+                        <i class="fa-solid fa-trash-can"></i> حذف شناسنامه‌های قدیمی
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h6 class="fw-bold">پاکسازی لاگ‌های امنیتی قدیمی (۱ سال+)</h6>
+                <p class="text-muted small mb-0">
+                    تعداد کل لاگ‌های موجود: <span class="badge bg-secondary">{{ audit_count }}</span>
+                    <br>
+                    حذف تاریخچه ورود و خروج و تغییرات سیستمی که قدیمی‌تر از یک سال هستند جهت بهینه‌سازی دیتابیس.
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <form action="{{ url_for('dashboard.cleanup_audit_logs') }}" method="POST" onsubmit="return confirm('آیا از حذف دائمی لاگ‌های قدیمی اطمینان دارید؟')">
+                    <button type="submit" class="btn btn-outline-danger fw-bold shadow-sm px-4">
+                        <i class="fa-solid fa-shield-slash"></i> پاکسازی لاگ‌ها
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- مودال های تنظیمات (همان کدهای قبلی را اینجا بگذارید) -->
+<div class="modal fade text-start" id="restoreModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title"><i class="fa-solid fa-triangle-exclamation"></i> بازگردانی اطلاعات</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.backup_restore') }}" method="POST" enctype="multipart/form-data"><div class="modal-body text-dark"><div class="alert alert-warning fw-bold small">اخطار جدی: با انجام این کار، تمام اطلاعات فعلی پاک شده و با اطلاعات فایل بک‌آپ جایگزین می‌شود.</div><label class="form-label fw-bold">فایل بک‌آپ (فقط .db) را انتخاب کنید:</label><input type="file" name="backup_file" class="form-control" accept=".db" required></div><div class="modal-footer"><button type="submit" class="btn btn-danger w-100 fw-bold" onclick="return confirm('مطمئن هستید؟')">تایید و بازگردانی اطلاعات</button></div></form></div></div></div>
+<div class="modal fade" id="addUserModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-dark text-white"><h5 class="modal-title">ساخت اکانت</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_user"><div class="row g-3 mb-4"><div class="col-md-6"><input type="text" name="name" class="form-control" required placeholder="نام شخص"></div><div class="col-md-6"><select name="role" class="form-select"><option value="مدیر">مدیر ارشد</option><option value="دامپزشک">دامپزشک</option><option value="تنخواه‌دار">تنخواه‌دار</option><option value="کارگر">کارگر</option></select></div><div class="col-md-6"><input type="text" name="username" class="form-control" dir="ltr" required placeholder="نام کاربری (انگلیسی)"></div><div class="col-md-6"><input type="password" name="password" class="form-control" dir="ltr" required placeholder="رمز عبور"></div></div><h6 class="fw-bold mb-3">دسترسی‌ها:</h6><div class="row g-3 px-3"><div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="permissions" value="livestock" id="p1"><label class="form-check-label" for="p1">دام</label></div></div><div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="permissions" value="finance" id="p2"><label class="form-check-label" for="p2">مالی</label></div></div><div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="permissions" value="inventory" id="p3"><label class="form-check-label" for="p3">انبار</label></div></div><div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="permissions" value="hr" id="p4" checked><label class="form-check-label" for="p4">پرسنل</label></div></div><div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="permissions" value="reports" id="p5"><label class="form-check-label" for="p5">گزارشات</label></div></div></div></div><div class="modal-footer"><button type="submit" class="btn btn-dark w-100 fw-bold">ایجاد اکانت</button></div></form></div></div></div>
+<div class="modal fade" id="addPenModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">بهاربند جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_pen"><input type="text" name="name" class="form-control mb-2" required placeholder="نام سالن"><input type="number" name="capacity" class="form-control mb-2" placeholder="ظرفیت"><input type="text" name="pen_type" class="form-control mb-2" placeholder="نوع"></div><div class="modal-footer"><button type="submit" class="btn btn-primary w-100">ذخیره</button></div></form></div></div></div>
+<div class="modal fade" id="addMedModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">داروی جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_medicine"><input type="text" name="name" class="form-control mb-2" required placeholder="نام دارو"><select name="medicine_category_id" class="form-select">{% for mc in medicine_categories %}<option value="{{ mc.id }}">{{ mc.name }}</option>{% endfor %}</select></div><div class="modal-footer"><button type="submit" class="btn btn-danger w-100">ذخیره</button></div></form></div></div></div>
+<div class="modal fade" id="addProtocolModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">پروتکل درمانی جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_protocol"><input type="text" name="name" class="form-control mb-2" required placeholder="نام پروتکل"><textarea name="medicines" class="form-control mb-2" rows="2" required placeholder="داروهای این پروتکل"></textarea><input type="text" name="description" class="form-control mb-2" placeholder="توضیحات"></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark fw-bold w-100">ذخیره پروتکل</button></div></form></div></div></div>
+<div class="modal fade" id="addRationModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">جیره غذایی جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_ration"><input type="text" name="name" class="form-control mb-2" required placeholder="نام جیره"><input type="number" step="0.1" name="daily_cost" class="form-control mb-2" placeholder="هزینه روزانه (تومان)"><input type="text" name="description" class="form-control mb-2" placeholder="توضیحات"></div><div class="modal-footer"><button type="submit" class="btn btn-success w-100">ذخیره</button></div></form></div></div></div>
+<div class="modal fade" id="addBreedModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">نژاد جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_breed"><input type="text" name="name" class="form-control mb-2" required placeholder="نام نژاد"></div><div class="modal-footer"><button type="submit" class="btn btn-warning w-100">ذخیره</button></div></form></div></div></div>
+<div class="modal fade" id="addPurposeModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">هدف پرورش جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_purpose"><input type="text" name="name" class="form-control mb-2" required placeholder="نام هدف (مثل داشتی)"></div><div class="modal-footer"><button type="submit" class="btn btn-primary w-100">ذخیره</button></div></form></div></div></div>
+<div class="modal fade" id="addStatusModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">وضعیت دام جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('dashboard.settings') }}" method="POST"><div class="modal-body"><input type="hidden" name="action" value="add_status"><input type="text" name="name" class="form-control mb-2" required placeholder="وضعیت"><select name="type" class="form-select"><option value="عادی">عادی (سبز)</option><option value="خطر">خطر (قرمز)</option><option value="پایان">پایان دوره (بایگانی)</option></select></div><div class="modal-footer"><button type="submit" class="btn btn-secondary w-100">ذخیره</button></div></form></div></div></div>
+
+<!-- مودال اضافه کردن واحد اندازه‌گیری جدید -->
+<div class="modal fade" id="addUnitModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white"><h5 class="modal-title"><i class="fa-solid fa-plus-circle"></i> واحد اندازه‌گیری جدید</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('dashboard.settings') }}" method="POST">
+                <div class="modal-body"><input type="hidden" name="action" value="add_unit"><div class="mb-3"><label class="form-label fw-bold">نام واحد</label><input type="text" name="name" class="form-control" required placeholder="مثلا: کیلوگرم، ویال، سر"></div><div class="mb-3"><label class="form-label fw-bold">توضیحات</label><input type="text" name="description" class="form-control" placeholder="توضیحات اختیاری"></div></div>
+                <div class="modal-footer"><button type="submit" class="btn btn-info text-white w-100 fw-bold">ذخیره واحد جدید</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ثبت ربات جدید -->
+<div class="modal fade" id="addTgBotModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white"><h5 class="modal-title"><i class="fa-brands fa-telegram"></i> افزودن ربات تلگرام</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('dashboard.settings') }}" method="POST">
+                <div class="modal-body"><input type="hidden" name="action" value="add_tg_bot">
+                    <div class="mb-3"><label class="form-label fw-bold">نام گیرنده (مثلاً: گوشی شخصی)</label><input type="text" name="bot_name" class="form-control" required placeholder="برای شناسایی"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Bot Token</label><input type="text" name="bot_token" class="form-control" dir="ltr" required placeholder="از BotFather بگیرید"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Chat ID</label><input type="text" name="chat_id" class="form-control" dir="ltr" required placeholder="شناسه عددی شما"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-info text-white w-100 fw-bold">تایید و ثبت ربات</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

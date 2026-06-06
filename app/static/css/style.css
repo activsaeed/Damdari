@@ -1,0 +1,55 @@
+body { font-family: 'Vazirmatn', sans-serif !important; background-color: #f8f9fa; }
+
+#sidebar-wrapper {
+    height: 100vh; /* ارتفاع دقیقاً اندازه صفحه باشد */
+    position: sticky; /* چسبیدن به بالای صفحه */
+    top: 0;
+    overflow-y: auto; /* اگر محتوای منو زیاد بود، فقط خودش اسکرول بخورد */
+    width: 260px;
+    background-color: #2c3e50;
+    transition: margin .3s ease-out, transform .3s ease-out;
+}
+
+/* زیباتر کردن اسکرول‌بار داخل منو */
+#sidebar-wrapper::-webkit-scrollbar { width: 6px; }
+#sidebar-wrapper::-webkit-scrollbar-thumb { background: #34495e; border-radius: 4px; }
+
+#sidebar-wrapper .list-group-item {
+    border: none; padding: 12px 20px; transition: all 0.3s;
+}
+
+#sidebar-wrapper .list-group-item:hover, 
+#sidebar-wrapper .list-group-item.active {
+    background-color: rgba(255,255,255,0.1) !important;
+    border-right: 4px solid #3498db; color: #fff !important;
+}
+
+#page-content-wrapper { min-width: 0; width: 100%; }
+
+/* تنظیمات موبایل */
+@media (max-width: 992px) {
+    #sidebar-wrapper {
+        margin-right: -260px; position: fixed; z-index: 1050; height: 100vh;
+    }
+    #sidebar-wrapper.toggled { margin-right: 0; }
+    
+    #sidebar-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.5); z-index: 1040;
+    }
+}
+
+/* رفع باگ 4: مشکل مخفی شدن دراپ داون در جدول */
+.table-responsive {
+    overflow-x: auto;
+    overflow-y: visible !important; /* این خط مشکل مخفی شدن منو را حل میکند */
+}
+
+.pulse { animation: pulse-animation 2s infinite; }
+@keyframes pulse-animation {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+@media print { #sidebar-wrapper, .navbar { display: none; } }

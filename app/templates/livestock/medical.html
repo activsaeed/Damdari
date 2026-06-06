@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-syringe text-danger"></i> تقویم دارو و درمان گله</h2>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-danger border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-bell text-danger"></i> واکسن‌ها و درمان‌های پیش‌رو</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for med in upcoming_meds %}
+                    <li class="list-group-item py-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1 fw-bold">{{ med.medicine_name }} <span class="badge bg-secondary ms-2">پلاک {{ med.sheep.ear_tag }}</span></h6>
+                            <small class="text-muted">موعد: <strong class="text-danger">{{ med.next_date.strftime('%Y-%m-%d') }}</strong></small>
+                        </div>
+                        <!-- با کلیک روی این دکمه از لیست پاک میشود -->
+                        <a href="{{ url_for('livestock.mark_med_done', med_id=med.id) }}" class="btn btn-sm btn-success">ثبت انجام شد</a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-5 text-muted">هیچ نوبت دارویی ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-warning border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-bed text-warning"></i> لیست دام‌های بیمار</div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle text-center mb-0">
+                    <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>عملیات</th></tr></thead>
+                    <tbody>
+                        {% for sheep in sick_sheep %}
+                        <tr>
+                            <td class="fw-bold">{{ sheep.ear_tag }}</td><td>{{ sheep.breed }}</td>
+                            <td>
+                                <!-- با کلیک روی ترخیص، دام سالم شده و از لیست میرود -->
+                                <a href="{{ url_for('livestock.mark_healthy', id=sheep.id) }}" class="btn btn-sm btn-success">ترخیص (سالم)</a>
+                                <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-sm btn-outline-secondary">پرونده</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center py-5 text-muted">خوشبختانه هیچ دام بیماری در گله وجود ندارد.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

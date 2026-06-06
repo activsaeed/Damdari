@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-file-invoice-dollar text-danger"></i> داشبورد مالیاتی و سامانه مودیان</h2>
+    <div>
+        <!-- دکمه تنظیمات کلیدهای مالیاتی -->
+        <button class="btn btn-outline-dark shadow-sm fw-bold me-2" data-bs-toggle="modal" data-bs-target="#moadianConfigModal"><i class="fa-solid fa-key text-warning"></i> کلیدهای مالیاتی</button>
+        <!-- دکمه اظهارنامه به پایتون وصل شد -->
+        <a href="{{ url_for('finance.export_vat_return') }}" class="btn btn-dark shadow-sm fw-bold"><i class="fa-solid fa-file-excel"></i> تولید اظهارنامه فصلی (فایل اکسل)</a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm fw-bold border-0 border-end border-{{ category }} border-5"><i class="fa-solid fa-check-circle fs-5 align-middle me-2"></i> {{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="alert alert-info border-0 shadow-sm mb-4 border-end border-info border-5">
+    <h6 class="fw-bold text-dark"><i class="fa-solid fa-robot text-info"></i> دستیار هوشمند مالیاتی:</h6>
+    <p class="mb-0 small text-dark">سیستم به صورت خودکار ۱۰٪ مالیات بر ارزش افزوده (VAT) را از فاکتورهای درآمد و هزینه شما استخراج کرده و تراز مالیاتی شما با دولت را محاسبه می‌کند. از جدول پایین می‌توانید فاکتورها را مستقیم به کارپوشه سامانه مودیان بفرستید.</p>
+</div>
+
+<!-- کارت های تراز مالیاتی -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 bg-white border-top border-danger border-4">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-3"><i class="fa-solid fa-hand-holding-dollar text-danger"></i> مالیات فروش (بدهی به دولت)</h6>
+                <h3 class="fw-bold text-danger mb-0">{{ vat_payable|currency }}</h3>
+                <small class="text-muted d-block mt-2">VAT دریافت شده از مشتریان</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 bg-white border-top border-success border-4">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-3"><i class="fa-solid fa-receipt text-success"></i> اعتبار مالیاتی (طلب از دولت)</h6>
+                <h3 class="fw-bold text-success mb-0">{{ vat_receivable|currency }}</h3>
+                <small class="text-muted d-block mt-2">VAT پرداخت شده بابت خرید نهاده</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 {% if net_tax_due > 0 %}bg-danger text-white{% elif net_tax_due < 0 %}bg-success text-white{% else %}bg-dark text-white{% endif %}">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="mb-3 opacity-75"><i class="fa-solid fa-scale-balanced"></i> تراز نهایی مالیات ارزش افزوده</h6>
+                <h2 class="fw-bold mb-0" dir="ltr">{{ (net_tax_due|abs)|currency }}</h2>
+                <h6 class="mt-2 fw-bold">
+                    {% if net_tax_due > 0 %}شما باید به اداره مالیات پرداخت کنید
+                    {% elif net_tax_due < 0 %}اعتبار مازاد (طلب از اداره مالیات)
+                    {% else %}تراز صفر{% endif %}
+                </h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- سیستم اتصال به سامانه مودیان -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-cloud-arrow-up text-warning"></i> کارپوشه اتصال به سامانه مودیان (my.tax.gov.ir)</span>
+        <button class="btn btn-sm btn-warning fw-bold" onclick="submitToMoadian()"><i class="fa-solid fa-paper-plane"></i> ارسال فاکتورهای انتخاب شده</button>
+    </div>
+    <div class="card-body p-0">
+        <form id="moadianForm" action="{{ url_for('finance.send_to_moadian') }}" method="POST">
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover align-middle text-center mb-0">
+                    <thead class="table-light" style="position: sticky; top: 0;">
+                        <tr>
+                            <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)"></th>
+                            <th>تاریخ</th>
+                            <th>شماره فاکتور</th>
+                            <th>نوع سند</th>
+                            <th>مبلغ خالص ({{ current_currency_unit }})</th>
+                            <th>ارزش افزوده ({{ (vat_rate * 100)|int }}%)</th>
+                            <th>مبلغ کل فاکتور</th>
+                            <th>وضعیت سامانه</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in transactions %}
+                        <tr>
+                            <td><input type="checkbox" name="tx_ids" value="{{ t.id }}" class="tx-checkbox"></td>
+                            <td class="text-primary fw-bold">{{ t.t_date|jalali }}</td>
+                            <td dir="ltr" class="fw-bold text-secondary">{{ t.invoice_number or 'ثبت نشده' }}</td>
+                            <td><span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }} (صورتحساب نوع 1)</span></td>
+                            <!-- محاسبه معکوس برای نمایش (چون مبلغ ثبت شده در فرم مبلغ خالص بوده است) -->
+                            <td>{{ t.amount|currency }}</td>
+                            <td class="text-danger fw-bold">{{ (t.amount * vat_rate)|currency }}</td>
+                            <td class="fw-bold text-dark fs-6">{{ (t.amount * (1 + vat_rate))|currency }}</td>
+                            <td><span class="badge bg-secondary"><i class="fa-solid fa-clock"></i> منتظر ارسال</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="text-center py-5 text-muted">فاکتوری برای ارسال وجود ندارد.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal تنظیمات کلید سامانه مودیان -->
+<div class="modal fade" id="moadianConfigModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white"><h5 class="modal-title"><i class="fa-solid fa-server text-warning"></i> پیکربندی اتصال به سامانه مودیان</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="alert alert-warning small fw-bold text-dark">
+                    <i class="fa-solid fa-circle-info"></i> در حال حاضر سیستم در حالت <b>شبیه‌ساز (Sandbox)</b> قرار دارد. برای ارسال واقعی فاکتورها به سرورهای سازمان امور مالیاتی، باید مقادیر زیر را برای دامداری خودتان از سایت <code>my.tax.gov.ir</code> دریافت کرده و در اینجا وارد کنید:
+                </div>
+                <div class="mb-3">
+                    <label class="fw-bold small text-muted">شناسه یکتای حافظه مالیاتی (6 کاراکتر)</label>
+                    <input type="text" class="form-control font-monospace" placeholder="مثال: A1B2C3" disabled>
+                </div>
+                <div class="mb-3">
+                    <label class="fw-bold small text-muted">کلید خصوصی (Private Key - فایل pem)</label>
+                    <textarea class="form-control font-monospace" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" disabled></textarea>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">متوجه شدم</button></div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    function toggleAll(source) { document.querySelectorAll('.tx-checkbox').forEach(cb => cb.checked = source.checked); }
+    
+    function submitToMoadian() {
+        let checked = document.querySelectorAll('.tx-checkbox:checked');
+        if(checked.length === 0) {
+            alert("لطفاً حداقل یک فاکتور را برای ارسال به سامانه مودیان انتخاب کنید.");
+            return;
+        }
+        if(confirm(`آیا از ارسال ${checked.length} فاکتور به کارپوشه مالیاتی (سامانه مودیان) اطمینان دارید؟ این عملیات غیرقابل برگشت است.`)) {
+            // شبیه سازی یک لودینگ زیبا
+            document.body.style.cursor = 'wait';
+            let btn = document.querySelector('.btn-warning');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> در حال امضای دیجیتال و ارسال...';
+            btn.classList.add('disabled');
+            document.getElementById('moadianForm').submit();
+        }
+    }
+</script>
+{% endblock %}

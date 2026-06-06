@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-hand-holding-dollar text-primary"></i> مدیریت تنخواه‌گردان کارگران</h2>
+    <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addPettyCashModal"><i class="fa-solid fa-plus"></i> شارژ / ثبت هزینه تنخواه</button>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}
+{% endwith %}
+
+<!-- نمایش موجودی تنخواه هر کارگر -->
+<div class="row g-3 mb-4">
+    {% for name, balance in worker_balances.items() %}
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 border-top {% if balance > 0 %}border-success{% elif balance < 0 %}border-danger{% else %}border-secondary{% endif %} border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-2"><i class="fa-solid fa-user"></i> {{ name }}</h6>
+                <h4 class="mb-0 fw-bold {% if balance > 0 %}text-success{% elif balance < 0 %}text-danger{% endif %}">{{ balance|currency }}</h4>
+                <small class="text-muted d-block mt-2">{% if balance > 0 %}موجودی باقیمانده{% elif balance < 0 %}کارگر طلبکار است{% else %}صفر{% endif %}</small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- جدول ریز تراکنش های تنخواه -->
+<div class="card shadow-sm border-0 mb-3 bg-white">
+    <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-list text-primary"></i> ریز تراکنش‌های تنخواه ({{ current_currency_unit }})</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-light"><tr><th>تاریخ (شمسی)</th><th>کارگر</th><th>نوع عملیات</th><th>مبلغ</th><th>شرح فاکتور/خرید</th></tr></thead>
+                <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td class="text-primary fw-bold">{{ r.record_date|jalali }}</td>
+                        <td class="fw-bold">{{ r.worker.name }}</td>
+                        <td>
+                            {% if r.action_type == 'شارژ تنخواه' %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="fa-solid fa-arrow-down"></i> واریز به کارگر</span>
+                            {% else %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger"><i class="fa-solid fa-arrow-up"></i> خرج شده (خرید)</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold fs-6">{{ r.amount|currency }}</td>
+                        <td class="text-muted small">{{ r.description }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-5 text-muted">هیچ سابقه‌ای برای تنخواه ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ثبت تنخواه -->
+<div class="modal fade" id="addPettyCashModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-wallet text-primary"></i> ثبت تراکنش تنخواه</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.add_petty_cash') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">انتخاب کارگر</label>
+                        <select name="worker_id" class="form-select" required>
+                            {% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">نوع عملیات</label>
+                        <select name="action_type" class="form-select fw-bold" required>
+                            <option value="شارژ تنخواه" class="text-success">شارژ تنخواه (واریز پول به کارگر)</option>
+                            <option value="هزینه تنخواه" class="text-danger">هزینه تنخواه (خریدهای انجام شده توسط کارگر)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">مبلغ ({{ current_currency_unit }})</label>
+                        <input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" onkeyup="formatCurrency(this, 'raw_petty_cash')" required>
+                        <input type="hidden" name="amount" id="raw_petty_cash" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-danger">تاریخ انجام (شمسی)</label>
+                        <input type="text" class="form-control jalali-datepicker" required>
+                        <input type="hidden" name="record_date" class="gregorian-hidden-field">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">توضیحات (بابت)</label>
+                        <input type="text" name="description" class="form-control" placeholder="مثلا: واریز نقدی، یا خرید نان و دارو..." required>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold fs-5">ثبت در سیستم</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+</script>
+{% endblock %}

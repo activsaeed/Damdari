@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>چاپ لیست فاکتورها</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; background-color: #fff; color: #000; padding: 20px; }
+        .table th { background-color: #f8f9fa !important; border-bottom: 2px solid #000 !important; }
+        .table td, .table th { border-color: #dee2e6; vertical-align: middle; }
+        @media print { .no-print { display: none !important; } body { padding: 0; } }
+    </style>
+</head>
+<body onload="window.print()">
+    <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+        <div><h3 class="fw-bold mb-1">گزارش تراکنش‌ها و فاکتورهای مالی</h3><span class="text-muted">تاریخ گزارش: {{ today_date|jalali }}</span></div>
+        <div class="text-end"><h5 class="fw-bold">سیستم مدیریت هوشمند دامداری</h5><small class="text-muted">واحد پول: {{ current_currency_unit }}</small></div>
+    </div>
+    <table class="table table-sm text-center">
+        <thead><tr><th>ردیف</th><th>تاریخ</th><th>شماره فاکتور</th><th>طرف حساب</th><th>نوع</th><th>دسته‌بندی</th><th>مبلغ</th><th>شرح</th></tr></thead>
+        <tbody>
+            {% set total_in = namespace(value=0) %}
+            {% set total_out = namespace(value=0) %}
+            {% for t in transactions %}
+                {% if t.t_type == 'درآمد' %}{% set total_in.value = total_in.value + t.amount %}
+                {% else %}{% set total_out.value = total_out.value + t.amount %}{% endif %}
+            <tr>
+                <td>{{ loop.index }}</td><td dir="ltr">{{ t.t_date|jalali }}</td><td dir="ltr">{{ t.invoice_number or '-' }}</td>
+                <td>{{ t.party_name or '-' }}</td><td>{{ t.t_type }}</td><td>{{ t.category }}</td>
+                <td class="fw-bold">{{ t.amount|currency }}</td><td class="small">{{ t.description or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="row mt-4 pt-3 border-top fw-bold">
+        <div class="col-4 text-success">جمع کل درآمدها: {{ total_in.value|currency }}</div>
+        <div class="col-4 text-danger">جمع کل هزینه‌ها: {{ total_out.value|currency }}</div>
+        <div class="col-4 text-primary text-end">تراز (سود/زیان): {{ (total_in.value - total_out.value)|currency }}</div>
+    </div>
+    <div class="text-center mt-5 no-print">
+        <button class="btn btn-primary px-4" onclick="window.print()">چاپ مجدد</button>
+        <button class="btn btn-secondary px-4 ms-2" onclick="window.close()">بستن</button>
+    </div>
+</body>
+</html>

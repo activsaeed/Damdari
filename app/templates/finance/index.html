@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-wallet text-success"></i> دفتر کل مالی (نقد و فاکتور)</h2>
+    <div>
+        <a href="{{ url_for('finance.print_tx', search=current_search, date_from=current_from, date_to=current_to, starred=current_starred, archived=(1 if show_archived else 0)) }}" target="_blank" class="btn btn-dark shadow-sm mx-1"><i class="fa-solid fa-print"></i> چاپ</a>
+        <a href="{{ url_for('finance.export_tx', search=current_search, date_from=current_from, date_to=current_to, archived=(1 if show_archived else 0)) }}" class="btn btn-outline-success shadow-sm"><i class="fa-solid fa-file-excel"></i> خروجی اکسل (فیلتر شده)</a>
+        <a href="{{ url_for('finance.add_transaction') }}" class="btn btn-success shadow-sm"><i class="fa-solid fa-plus"></i> ثبت فاکتور جدید</a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- کارت های آماری مالی -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card bg-success text-white border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-title opacity-75">مجموع درآمدهای فعال</h6>
+                <h3 class="mb-0 fw-bold">{{ total_income | currency }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-danger text-white border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-title opacity-75">مجموع هزینه‌های فعال</h6>
+                <h3 class="mb-0 fw-bold">{{ total_expense | currency }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card {% if net_profit >= 0 %}bg-primary{% else %}bg-warning text-dark{% endif %} text-white border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="card-title opacity-75">تراز خالص (سود / زیان)</h6>
+                <h3 class="mb-0 fw-bold">{{ net_profit | currency }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- کادر جستجو و فیلتر پیشرفته فاکتورها -->
+<!-- نوار ابزار جستجو و فیلتر آف‌کانواس برای فاکتورها -->
+<div class="card border-0 shadow-sm mb-4 bg-white">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <form method="GET" action="{{ url_for('finance.index') }}" id="txFilterForm" class="d-flex w-50">
+            <div class="input-group">
+                <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                <input type="hidden" name="archived" value="{{ '1' if show_archived else '0' }}">
+                <input type="text" name="search" id="searchInput" class="form-control" placeholder="جستجو شماره فاکتور، شخص..." value="{{ current_search }}">
+            </div>
+            <!-- دکمه مخفی برای سابمیت با اینتر -->
+            <button type="submit" class="d-none"></button>
+        </form>
+        <button class="btn btn-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#txFilterOffcanvas">
+            <i class="fa-solid fa-filter"></i> فیلتر پیشرفته
+        </button>
+    </div>
+</div>
+
+<!-- منوی کشویی فیلتر فاکتورها -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="txFilterOffcanvas">
+  <div class="offcanvas-header bg-light border-bottom">
+    <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-filter text-primary"></i> فیلتر پیشرفته فاکتورها</h5>
+    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form method="GET" action="{{ url_for('finance.index') }}">
+        <input type="hidden" name="search" value="{{ current_search }}">
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold">فیلتر نشان‌دار</label>
+            <select name="starred" class="form-select border-warning">
+                <option value="">همه فاکتورها</option>
+                <option value="1" {% if current_starred == '1' %}selected{% endif %}>فقط فاکتورهای ستاره‌دار <i class="fa-solid fa-star"></i></option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">وضعیت آرشیو</label>
+            <select name="archived" class="form-select border-primary">
+                <option value="0" {% if not show_archived %}selected{% endif %}>فاکتورهای جاری (فعال)</option>
+                <option value="1" {% if show_archived %}selected{% endif %}>فاکتورهای بایگانی شده</option>
+            </select>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold">از تاریخ (شمسی)</label>
+            <input type="text" class="form-control jalali-datepicker">
+            <input type="hidden" name="date_from" class="gregorian-hidden-field" value="{{ current_from or '' }}">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">تا تاریخ (شمسی)</label>
+            <input type="text" class="form-control jalali-datepicker">
+            <input type="hidden" name="date_to" class="gregorian-hidden-field" value="{{ current_to or '' }}">
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="fa-solid fa-check"></i> اعمال فیلتر</button>
+        <a href="{{ url_for('finance.index') }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
+    </form>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive" style="min-height: 300px;">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th><i class="fa-solid fa-star text-warning"></i></th>
+                        <th>تاریخ (شمسی)</th>
+                        <th>شماره فاکتور</th>
+                        <th>شرکت/شخص</th>
+                        <th>دسته‌بندی</th>
+                        <th>مبلغ ({{ current_currency_unit }})</th>
+                        <th>اسناد/فایل</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in transactions.items %}
+                    <tr class="{% if t.is_archived %}table-secondary text-muted{% endif %}">
+                        <!-- دکمه ستاره دار کردن -->
+                        <!-- دکمه ستاره دار کردن با AJAX -->
+                        <td>
+                            <a href="javascript:void(0)" onclick="toggleStarTx({{ t.id }}, this)" class="text-decoration-none">
+                                {% if t.is_starred %}
+                                <i class="fa-solid fa-star text-warning fs-5"></i>
+                                {% else %}
+                                <i class="fa-regular fa-star text-muted fs-5"></i>
+                                {% endif %}
+                            </a>
+                        </td>
+                        <td class="text-primary fw-bold">{{ t.t_date|jalali }}</td>
+                        <td class="fw-bold text-secondary">{{ t.invoice_number or '-' }}</td>
+                        <td class="fw-bold">{{ t.party_name or 'نامشخص' }}</td>
+                        <td>
+                            <span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %} mb-1">{{ t.t_type }}</span><br>
+                            <small class="text-muted">{{ t.category }}</small>
+                        </td>
+                                                <td class="{% if t.t_type == 'درآمد' %}text-success{% else %}text-danger{% endif %} fw-bold fs-6">
+                            {{ t.amount | currency }}
+                        </td>
+                        <td>
+                            {% if t.documents|length > 0 %}
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-info dropdown-toggle" data-bs-toggle="dropdown"><i class="fa-solid fa-images"></i> ({{ t.documents|length }})</button>
+                                <ul class="dropdown-menu">{% for doc in t.documents %}<li><a class="dropdown-item" href="{{ url_for('static', filename=doc.file_path) }}" target="_blank"><i class="fa-solid fa-file me-2"></i> فایل {{ loop.index }}</a></li>{% endfor %}</ul>
+                            </div>
+                            {% else %}<span class="text-muted small">-</span>{% endif %}
+                        </td>
+
+
+
+                        <td>
+                            <div class="btn-group">
+                                <a href="{{ url_for('finance.tx_profile', id=t.id) }}" class="btn btn-sm btn-outline-primary" title="پرونده فاکتور"><i class="fa-solid fa-address-card"></i> پرونده</a>   
+                                <a href="{{ url_for('finance.delete_tx', id=t.id) }}" class="btn btn-sm btn-outline-danger" title="حذف" onclick="return confirm('آیا از حذف مطمئن هستید؟')"><i class="fa-solid fa-trash"></i></a>
+                                <a href="{{ url_for('finance.archive_tx', id=t.id) }}" class="btn btn-sm btn-outline-warning" title="بایگانی فاکتور" onclick="return confirm('آیا فاکتور بایگانی شود؟ مبالغ آن دیگر در محاسبات لحاظ نخواهد شد.')"><i class="fa-solid fa-box-archive"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+
+
+                
+                    {% else %}
+                    <tr><td colspan="8" class="text-center py-5 text-muted">هیچ تراکنشی با این مشخصات یافت نشد.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- سیستم صفحه‌بندی برای دفتر کل -->
+<nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if transactions.has_prev %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('finance.index', page=transactions.prev_num, search=current_search, date_from=current_from, date_to=current_to, starred=current_starred, archived=(1 if show_archived else 0)) }}">قبلی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">قبلی</a></li>
+        {% endif %}
+        <li class="page-item active"><a class="page-link">صفحه {{ transactions.page }} از {{ transactions.pages }}</a></li>
+        {% if transactions.has_next %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('finance.index', page=transactions.next_num, search=current_search, date_from=current_from, date_to=current_to, starred=current_starred, archived=(1 if show_archived else 0)) }}">بعدی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">بعدی</a></li>
+        {% endif %}
+    </ul>
+    <div class="d-flex justify-content-center align-items-center gap-2 mt-2">
+        <form method="GET" action="{{ url_for('finance.index') }}" class="d-flex align-items-center gap-1">
+            <input type="hidden" name="search" value="{{ current_search or '' }}">
+            <input type="hidden" name="date_from" value="{{ current_from or '' }}">
+            <input type="hidden" name="date_to" value="{{ current_to or '' }}">
+            <input type="hidden" name="starred" value="{{ current_starred or '' }}">
+            <input type="hidden" name="archived" value="{{ '1' if show_archived else '0' }}">
+            <label class="small text-muted">برو به صفحه:</label>
+            <input type="number" name="page" class="form-control form-control-sm text-center shadow-sm" style="width: 70px;" min="1" max="{{ transactions.pages }}" value="{{ transactions.page }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary fw-bold">برو</button>
+        </form>
+    </div>
+</nav>
+
+<script>
+    // تابع تغییر آنی ستاره فاکتور بدون رفرش صفحه
+    function toggleStarTx(txId, element) {
+        fetch(`/finance/toggle_star_tx/${txId}`)
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    if(data.is_starred) {
+                        element.innerHTML = '<i class="fa-solid fa-star text-warning fs-5"></i>';
+                    } else {
+                        element.innerHTML = '<i class="fa-regular fa-star text-muted fs-5"></i>';
+                    }
+                }
+            });
+    }
+</script>
+
+{% endblock %}

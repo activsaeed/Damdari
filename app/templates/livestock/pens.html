@@ -1,0 +1,380 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-house-signal text-info"></i> مانیتورینگ هوشمند بهاربندها (IoT)</h2>
+</div>
+
+<div class="card border-0 shadow-sm mb-4 bg-white border-top border-info border-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('livestock.pen_dashboard') }}" class="d-flex align-items-center gap-3">
+            <label class="fw-bold text-muted text-nowrap"><i class="fa-solid fa-filter"></i> انتخاب سالن/بهاربند:</label>
+            <select name="pen_id" class="form-select form-select-lg fw-bold border-info" onchange="this.form.submit()">
+                {% for p in pens %}
+                <option value="{{ p.id }}" {% if selected_pen and selected_pen.id == p.id %}selected{% endif %}>{{ p.name }} ({{ p.pen_type }})</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+{% if selected_pen %}
+<!-- ردیف اول: سنسورهای محیطی (IoT) و تراکم -->
+<div class="row g-4 mb-4">
+    <!-- شاخص تراکم -->
+    <div class="col-lg col-md-6">
+        <div class="card shadow-sm border-0 h-100 bg-dark text-white">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="text-white-50 mb-3"><i class="fa-solid fa-users-viewfinder"></i> تراکم و ظرفیت سالن</h6>
+                <h2 class="fw-bold mb-2">{{ stats.total }} <small class="fs-6 text-white-50">از {{ stats.capacity }} رأس</small></h2>
+                <div class="progress mt-2" style="height: 10px; background-color: #555;">
+                    <div class="progress-bar {% if stats.fill_percentage > 90 %}bg-danger{% elif stats.fill_percentage > 70 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ stats.fill_percentage }}%;"></div>
+                </div>
+                <small class="mt-2 text-white-50">{{ "{:.0f}".format(stats.fill_percentage) }}% پُر شده</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- میانگین وزن گله -->
+    <div class="col-lg col-md-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-success border-4">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="text-muted mb-3"><i class="fa-solid fa-weight-hanging text-success"></i> میانگین وزن گله</h6>
+                <h1 class="fw-bold text-success mb-0" dir="ltr">{{ "{:.1f}".format(stats.avg_weight | default(0)) }} <small class="fs-4">kg</small></h1>
+                <small class="text-muted mt-2">بر اساس آخرین وزن‌کشی</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- سنسور دما -->
+    <div class="col-lg col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="text-muted mb-3"><i class="fa-solid fa-temperature-half text-danger"></i> دمای لحظه‌ای سالن</h6>
+                <h1 id="live-temp" class="fw-bold text-danger mb-0" dir="ltr">{{ sensor.temperature if sensor else '--' }} °C</h1>
+                <small class="text-muted mt-2">سنسور آنلاین</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- سنسور رطوبت -->
+    <div class="col-lg col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="text-muted mb-3"><i class="fa-solid fa-droplet text-primary"></i> رطوبت نسبی سالن</h6>
+                <h1 id="live-hum" class="fw-bold text-primary mb-0" dir="ltr">{{ sensor.humidity if sensor else '--' }} %</h1>
+                <small class="text-muted mt-2">سنسور آنلاین</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- شاخص THI -->
+    <div class="col-lg col-md-6">
+        <div id="live-thi-card" class="card shadow-sm border-0 h-100 border-start {% if thi < 72 %}border-success{% elif thi < 78 %}border-warning{% else %}border-danger{% endif %} border-5">
+            <div class="card-body text-center d-flex flex-column justify-content-center">
+                <h6 class="text-muted mb-2 fw-bold" data-bs-toggle="tooltip" title="شاخص تنش حرارتی (ترکیب دما و رطوبت). اعداد بالای 72 باعث استرس، کاهش شیردهی و خطر سقط می‌شوند.">شاخص استرس گرمایی (THI) <i class="fa-solid fa-circle-question small"></i></h6>
+                <h2 id="live-thi-value" class="fw-bold {% if thi < 72 %}text-success{% elif thi < 78 %}text-warning text-dark{% else %}text-danger{% endif %} mb-1" dir="ltr">{{ "{:.1f}".format(thi) }}</h2>
+                <span id="live-thi-status" class="badge {% if thi < 72 %}bg-success{% elif thi < 78 %}bg-warning text-dark{% else %}bg-danger pulse{% endif %} px-3 py-2 mt-2">{{ thi_status }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ردیف دوم: نمودارهای آماری ترکیب گله -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold text-primary py-3"><i class="fa-solid fa-venus-mars"></i> ترکیب جنسیتی سالن</div>
+            <div class="card-body d-flex justify-content-center"><canvas id="genderChart" style="max-height: 220px;"></canvas></div>
+            <div class="card-footer bg-light small text-center">
+                {% for k, v in stats.genders.items() %}<span class="me-2 fw-bold">{{ k }}: <span class="text-primary">{{ v }}</span></span>{% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold text-success py-3"><i class="fa-solid fa-heart-pulse"></i> ترکیب وضعیت سلامت</div>
+            <div class="card-body d-flex justify-content-center"><canvas id="statusChart" style="max-height: 220px;"></canvas></div>
+            <div class="card-footer bg-light small text-center">
+                {% for k, v in stats.statuses.items() %}<span class="me-2 fw-bold">{{ k }}: <span class="text-success">{{ v }}</span></span>{% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold text-warning text-dark py-3"><i class="fa-solid fa-dna"></i> ترکیب نژادی سالن</div>
+            <div class="card-body d-flex justify-content-center"><canvas id="breedChart" style="max-height: 220px;"></canvas></div>
+            <div class="card-footer bg-light small text-center">
+                {% for k, v in stats.breeds.items() %}<span class="me-2 fw-bold">{{ k }}: <span class="text-warning text-dark">{{ v }}</span></span>{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ردیف سوم: نوار ابزار، فیلترها و لیست دام‌های سالن -->
+<!-- ردیف سوم: نوار ابزار، فیلترها و لیست دام‌های سالن -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 mt-2">
+    <h5 class="fw-bold mb-0"><i class="fa-solid fa-list-check text-primary"></i> دام‌های حاضر در بهاربند ({{ selected_pen.name }})</h5>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('livestock.export_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" class="btn btn-outline-success shadow-sm"><i class="fa-solid fa-file-excel"></i> اکسل</a>
+        <a href="{{ url_for('livestock.print_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" target="_blank" class="btn btn-dark shadow-sm"><i class="fa-solid fa-print"></i> چاپ</a>
+        <!-- دکمه باز کردن منوی فیلترها -->
+        <button class="btn btn-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#penFilterOffcanvas">
+            <i class="fa-solid fa-filter"></i> فیلتر پیشرفته
+        </button>
+    </div>
+</div>
+
+<form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+    <!-- نوار عملیات گروهی (حفظ شد در بیرون) -->
+    <div class="d-flex align-items-center gap-2 mb-3 bg-light p-2 rounded border">
+        <span class="fw-bold text-muted small ms-1 text-nowrap"><i class="fa-solid fa-layer-group"></i> عملیات گروهی:</span>
+        <input type="hidden" name="bulk_action_type" value="change_pen">
+        <select name="new_pen_id" class="form-select form-select-sm w-auto" required>
+            <option value="">انتقال به سالن جدید...</option>
+            {% for p in pens %}{% if p.id != selected_pen.id %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-dark px-4" onclick="return confirm('دام‌های انتخاب شده منتقل شوند؟')">انتقال</button>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle text-center mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th><input type="checkbox" onclick="toggleAllPen(this)"></th>
+                            <th><i class="fa-solid fa-star text-warning"></i></th>
+                            <th>پلاک</th><th>جنسیت</th><th>نژاد</th><th>وزن</th><th>وضعیت</th><th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sheep in sheeps.items %}
+                        <tr>
+                            <td><input type="checkbox" name="sheep_ids" value="{{ sheep.id }}" class="pen-sheep-checkbox"></td>
+                            <td>
+                                <a href="javascript:void(0);" onclick="toggleStar(this, {{ sheep.id }})" class="text-decoration-none">
+                                    <i class="{% if sheep.is_starred %}fa-solid fa-star text-warning{% else %}fa-regular fa-star text-muted{% endif %} fs-5"></i>
+                                </a>
+                            </td>
+                            <td class="fw-bold"><a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="text-decoration-none text-dark">{{ sheep.ear_tag }}</a></td>
+                            <td>{{ sheep.gender }}</td>
+                            <td>{{ sheep.breed or '-' }}</td>
+                            <td>{{ sheep.weight }} kg</td>
+                            <td><span class="badge {% if sheep.status == 'بیمار' %}bg-danger{% elif sheep.status == 'قرنطینه' %}bg-warning text-dark{% elif sheep.status == 'آبستن' %}bg-info text-dark{% else %}bg-success{% endif %}">{{ sheep.status }}</span></td>
+                            <td>
+                                <div class="d-flex justify-content-center gap-1">
+                                    <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-sm btn-outline-info" title="پرونده"><i class="fa-solid fa-address-card"></i></a>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openTransferModal('{{ sheep.id }}', '{{ sheep.ear_tag }}')" title="انتقال"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="text-center py-5 text-muted">دام با این مشخصات یافت نشد.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- سیستم صفحه‌بندی -->
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        {% if sheeps.has_prev %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.prev_num, search=current_search, gender=current_gender, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">قبلی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">قبلی</a></li>
+        {% endif %}
+        <li class="page-item active"><a class="page-link">صفحه {{ sheeps.page }} از {{ sheeps.pages }}</a></li>
+        {% if sheeps.has_next %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.next_num, search=current_search, gender=current_gender, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">بعدی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">بعدی</a></li>
+        {% endif %}
+    </ul>
+    <!-- بخش جدید: پرش مستقیم به صفحه -->
+    <div class="d-flex justify-content-center align-items-center gap-2 mt-2">
+        <form method="GET" action="{{ url_for('livestock.pen_dashboard') }}" class="d-flex align-items-center gap-1">
+            <input type="hidden" name="pen_id" value="{{ selected_pen.id }}">
+            <input type="hidden" name="search" value="{{ current_search or '' }}">
+            <input type="hidden" name="gender" value="{{ current_gender or 'همه' }}">
+            <input type="hidden" name="status" value="{{ current_status or 'همه' }}">
+            <input type="hidden" name="starred" value="{{ current_starred or '' }}">
+            <input type="hidden" name="min_weight" value="{{ current_min_w or '' }}">
+            <input type="hidden" name="max_weight" value="{{ current_max_w or '' }}">
+            <label class="small text-muted">برو به صفحه:</label>
+            <input type="number" name="page" class="form-control form-control-sm text-center shadow-sm" style="width: 70px;" min="1" max="{{ sheeps.pages }}" value="{{ sheeps.page }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary fw-bold">برو</button>
+        </form>
+    </div>
+</nav>
+
+<!-- منوی کشویی فیلترها (Offcanvas) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="penFilterOffcanvas">
+  <div class="offcanvas-header bg-light border-bottom">
+    <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-filter text-primary"></i> فیلتر پیشرفته سالن</h5>
+    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form method="GET" action="{{ url_for('livestock.pen_dashboard') }}">
+        <input type="hidden" name="pen_id" value="{{ selected_pen.id }}">
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold">جستجوی پلاک</label>
+            <input type="text" name="search" class="form-control" placeholder="تایپ کنید..." value="{{ current_search }}">
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold">جنسیت</label>
+            <select name="gender" class="form-select">
+                <option value="همه">همه</option><option value="میش" {% if current_gender == 'میش' %}selected{% endif %}>میش</option><option value="قوچ" {% if current_gender == 'قوچ' %}selected{% endif %}>قوچ</option><option value="بره ماده" {% if current_gender == 'بره ماده' %}selected{% endif %}>بره ماده</option><option value="بره نر" {% if current_gender == 'بره نر' %}selected{% endif %}>بره نر</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">وضعیت</label>
+            <select name="status" class="form-select">
+                <option value="همه">همه وضعیت‌ها</option><option value="زنده و سالم" {% if current_status == 'زنده و سالم' %}selected{% endif %}>سالم</option><option value="بیمار" {% if current_status == 'بیمار' %}selected{% endif %}>بیمار</option><option value="قرنطینه" {% if current_status == 'قرنطینه' %}selected{% endif %}>قرنطینه</option><option value="آبستن" {% if current_status == 'آبستن' %}selected{% endif %}>آبستن</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">نشان‌شده‌ها (ستاره‌دار)</label>
+            <select name="starred" class="form-select border-warning">
+                <option value="">همه دام‌ها</option>
+                <option value="1" {% if current_starred == '1' %}selected{% endif %}>فقط ستاره‌دارها <i class="fa-solid fa-star"></i></option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">محدوده وزن (کیلوگرم)</label>
+            <div class="d-flex gap-2">
+                <input type="number" step="0.1" name="min_weight" class="form-control" placeholder="از وزن" value="{{ current_min_w or '' }}">
+                <input type="number" step="0.1" name="max_weight" class="form-control" placeholder="تا وزن" value="{{ current_max_w or '' }}">
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="fa-solid fa-check"></i> اعمال فیلتر</button>
+        <a href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id) }}" class="btn btn-outline-danger w-100 mt-2">حذف فیلترها</a>
+    </form>
+  </div>
+</div>
+
+<!-- Modal انتقال تکی -->
+<div class="modal fade" id="transferModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-truck-moving text-primary"></i> انتقال دام</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+                <div class="modal-body text-center">
+                    <input type="hidden" name="bulk_action_type" value="change_pen">
+                    <input type="hidden" name="sheep_ids" id="singleTransferSheepId">
+                    <h5 class="fw-bold text-primary mb-3" id="singleTransferEarTag"></h5>
+                    <label class="fw-bold mb-2">انتقال داده شود به:</label>
+                    <select name="new_pen_id" class="form-select form-select-lg mb-3" required>
+                        <option value="">انتخاب بهاربند...</option>
+                        {% for p in pens %}{% if p.id != selected_pen.id %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">تایید انتقال</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // سیستم به‌روزرسانی هوشمند سنسورها در پس‌زمینه (AJAX)
+    function updateLiveSensors() {
+        const penId = "{{ selected_pen.id if selected_pen else '' }}";
+        if (!penId) return;
+
+        fetch(`/livestock/api/pen/${penId}/sensor`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('live-temp').innerText = data.temperature + ' °C';
+                    document.getElementById('live-hum').innerText = data.humidity + ' %';
+                    
+                    const thiVal = document.getElementById('live-thi-value');
+                    const thiStatus = document.getElementById('live-thi-status');
+                    const thiCard = document.getElementById('live-thi-card');
+                    
+                    thiVal.innerText = data.thi;
+                    thiStatus.innerText = data.thi_status;
+                    
+                    // به‌روزرسانی داینامیک استایل‌ها بر اساس شاخص جدید
+                    if (data.thi < 72) {
+                        thiVal.className = 'fw-bold text-success mb-1';
+                        thiStatus.className = 'badge bg-success px-3 py-2 mt-2';
+                        thiCard.className = 'card shadow-sm border-0 h-100 border-start border-success border-5';
+                    } else if (data.thi < 78) {
+                        thiVal.className = 'fw-bold text-warning text-dark mb-1';
+                        thiStatus.className = 'badge bg-warning text-dark px-3 py-2 mt-2';
+                        thiCard.className = 'card shadow-sm border-0 h-100 border-start border-warning border-5';
+                    } else {
+                        thiVal.className = 'fw-bold text-danger mb-1';
+                        thiStatus.className = 'badge bg-danger pulse px-3 py-2 mt-2';
+                        thiCard.className = 'card shadow-sm border-0 h-100 border-start border-danger border-5';
+                    }
+                }
+            })
+            .catch(e => console.log("Live background update skipped..."));
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // شروع مانیتورینگ خودکار در پس‌زمینه بلافاصله پس از لود صفحه
+        {% if selected_pen %}
+        setInterval(updateLiveSensors, 15000); // هر ۱۵ ثانیه یکبار
+        {% endif %}
+
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl) });
+
+        const chartOptions = { responsive: true, plugins: { legend: { position: 'right', labels: {font: {family: 'Vazirmatn'}} } } };
+
+        {% if stats.genders %}
+        new Chart(document.getElementById('genderChart').getContext('2d'), { type: 'pie', data: { labels: {{ stats.genders.keys() | list | tojson }}, datasets: [{ data: {{ stats.genders.values() | list | tojson }}, backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#9b59b6'] }] }, options: chartOptions });
+        {% endif %}
+
+        {% if stats.statuses %}
+        new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: {{ stats.statuses.keys() | list | tojson }}, datasets: [{ data: {{ stats.statuses.values() | list | tojson }}, backgroundColor: ['#2ecc71', '#e74c3c', '#f39c12', '#34495e', '#1abc9c'] }] }, options: chartOptions });
+        {% endif %}
+
+        {% if stats.breeds %}
+        new Chart(document.getElementById('breedChart').getContext('2d'), { type: 'doughnut', data: { labels: {{ stats.breeds.keys() | list | tojson }}, datasets: [{ data: {{ stats.breeds.values() | list | tojson }}, backgroundColor: ['#34495e', '#7f8c8d', '#95a5a6', '#bdc3c7'] }] }, options: chartOptions });
+        {% endif %}
+    });
+
+    function toggleAllPen(source) {
+        document.querySelectorAll('.pen-sheep-checkbox').forEach(cb => cb.checked = source.checked);
+    }
+
+    function openTransferModal(id, tag) {
+        document.getElementById('singleTransferSheepId').value = id;
+        document.getElementById('singleTransferEarTag').innerText = "پلاک: " + tag;
+        new bootstrap.Modal(document.getElementById('transferModal')).show();
+    }
+
+    function toggleStar(el, id) {
+        fetch(`/livestock/toggle_star/${id}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const icon = el.querySelector('i');
+                if (data.is_starred) {
+                    icon.className = 'fa-solid fa-star text-warning fs-5';
+                } else {
+                    icon.className = 'fa-regular fa-star text-muted fs-5';
+                }
+            }
+        })
+        .catch(err => console.error('Error toggling star:', err));
+    }
+</script>
+<style>
+    .pulse { animation: pulse-animation 2s infinite; }
+    @keyframes pulse-animation { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
+</style>
+{% endif %}
+{% endblock %}

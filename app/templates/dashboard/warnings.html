@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-triangle-exclamation text-danger"></i> مرکز مدیریت هشدارهای سیستم</h2>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به داشبورد</a>
+</div>
+
+<div class="row g-4">
+    
+    <!-- هشدارهای کاهش وزن -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-danger border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-danger">
+                <i class="fa-solid fa-arrow-down-short-wide"></i> هشدارهای کاهش وزن ({{ weight_loss_sheep|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <ul class="list-group list-group-flush">
+                    {% for item in weight_loss_sheep %}
+                    <li class="list-group-item py-3 bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-danger">پلاک: {{ item.sheep.ear_tag }}</span>
+                            <small class="text-muted">{{ item.date.strftime('%Y-%m-%d') }}</small>
+                        </div>
+                        <p class="mb-2 small text-dark">این دام اخیراً <strong class="text-danger">{{ item.lost }} کیلوگرم</strong> کاهش وزن داشته است!</p>
+                        <a href="{{ url_for('livestock.profile', id=item.sheep.id) }}" class="btn btn-sm btn-outline-danger w-100">بررسی پرونده و نمودار رشد</a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">گزارش کاهش وزنی ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- هشدارهای سلامت (بیمار) -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-danger border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-danger">
+                <i class="fa-solid fa-notes-medical"></i> دام‌های نیازمند درمان ({{ sick_sheep|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <ul class="list-group list-group-flush">
+                    {% for sheep in sick_sheep %}
+                    <li class="list-group-item py-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-danger">پلاک: {{ sheep.ear_tag }}</span>
+                            <span class="badge bg-secondary">{{ sheep.pen.name if sheep.pen else 'نامشخص' }}</span>
+                        </div>
+                        <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-sm btn-outline-danger w-100">ثبت دارو و خروج از وضعیت بیمار</a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">دام بیماری در گله وجود ندارد.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% if current_user.role == 'مدیر' %}
+
+    <!-- هشدارهای انبار -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-warning border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-warning text-dark">
+                <i class="fa-solid fa-box-open"></i> هشدارهای کمبود انبار ({{ low_stock_items|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <ul class="list-group list-group-flush">
+                    {% for item in low_stock_items %}
+                    <li class="list-group-item py-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-dark">{{ item.name }}</span>
+                            <span class="badge bg-danger rounded-pill pulse">{{ item.quantity }} {{ item.unit }}</span>
+                        </div>
+                        <p class="mb-2 small text-muted">حداقل مجاز تعیین شده: {{ item.min_threshold }} {{ item.unit }}</p>
+                        <a href="{{ url_for('inventory.index') }}" class="btn btn-sm btn-outline-warning text-dark w-100">رفتن به انبار و شارژ کالا</a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">موجودی تمام کالاها در حد مجاز است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- هشدارهای کارگران (تسک ها) -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm border-top border-primary border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-primary">
+                <i class="fa-solid fa-list-check"></i> وظایف انجام‌نشده امروز ({{ pending_tasks|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <ul class="list-group list-group-flush">
+                    {% for task in pending_tasks %}
+                    <li class="list-group-item py-3">
+                        <p class="mb-2 fw-bold text-primary">{{ task.description }}</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted"><i class="fa-solid fa-user"></i> مسئول: {{ task.worker.name }}</small>
+                        </div>
+                        <a href="{{ url_for('hr.index') }}" class="btn btn-sm btn-outline-primary w-100">پیگیری در تسک‌برد</a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">تمام وظایف امروز انجام شده‌اند.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+
+</div>
+
+<style>
+    .pulse { animation: pulse-animation 2s infinite; }
+    @keyframes pulse-animation {
+        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
+</style>
+{% endblock %}

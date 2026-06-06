@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- لود کردن ApexCharts -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-hand-holding-dollar text-success"></i> گزارش و تحلیل تعاملی فروش دام</h2>
+</div>
+
+<!-- بخش نمودار اصلی با Range Selection -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-chart-line text-primary"></i> روند درآمد فروش (انتخاب بازه زمانی با کشیدن موس روی نمودار پایین)</div>
+    <div class="card-body">
+        <div id="chart-sales"></div>
+        <div id="chart-brush"></div> <!-- اسلایدر بازه زمانی -->
+    </div>
+</div>
+
+<!-- کارت های KPI داینامیک -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm bg-primary text-white h-100">
+            <div class="card-body text-center">
+                <h6 class="opacity-75">دام فروخته شده (تعداد / وزن)</h6>
+                <h4 class="fw-bold mb-0" id="kpi-count-weight">0 رأس / 0 kg</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm bg-success text-white h-100">
+            <div class="card-body text-center">
+                <h6 class="opacity-75">ارزش کل فروش (درآمد)</h6>
+                <h4 class="fw-bold mb-0" id="kpi-revenue">0 تومان</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm bg-info text-dark h-100">
+            <div class="card-body text-center">
+                <h6 class="opacity-75">سود خالص (درآمد - هزینه)</h6>
+                <h4 class="fw-bold mb-0" id="kpi-profit">0 تومان</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm bg-dark text-white h-100">
+            <div class="card-body text-center">
+                <h6 class="opacity-75">میانگین وزن / قیمت کیلو</h6>
+                <h4 class="fw-bold mb-0" id="kpi-avg">0 kg / 0 ت</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ویجت های تفکیک آماری داینامیک -->
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold py-3 text-warning text-dark"><i class="fa-solid fa-venus-mars"></i> تفکیک فروش بر اساس جنسیت</div>
+            <div class="card-body" id="gender-breakdown">
+                <!-- از طریق JS پر میشود -->
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold py-3 text-danger"><i class="fa-solid fa-dna"></i> تفکیک فروش بر اساس نژاد</div>
+            <div class="card-body" id="breed-breakdown">
+                <!-- از طریق JS پر میشود -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allSalesData = [];
+
+    // فرمت کردن پول
+    const formatMoney = (num) => Number(num.toFixed(0)).toLocaleString('en-US');
+
+    // دریافت داده ها از API با AJAX
+    fetch("{{ url_for('reports.api_sales_data') }}")
+        .then(response => response.json())
+        .then(data => {
+            allSalesData = data;
+            
+            // آماده سازی داده برای ApexCharts
+            let chartSeriesData = data.map(item => [item.timestamp, item.price]);
+
+            // تنظیمات نمودار اصلی (بسیار پیشرفته، نرم و شمسی)
+            var optionsMain = {
+                series: [{ name: 'مبلغ فروش', data: chartSeriesData }],
+                chart: { 
+                    id: 'chart2', 
+                    type: 'area', // تغییر به نمودار زیبای مساحتی
+                    height: 300, 
+                    fontFamily: 'Vazirmatn',
+                    toolbar: { autoSelected: 'pan', show: true } 
+                },
+                colors: ['#20c997'], // سبز زمردی
+                stroke: { curve: 'smooth', width: 3 }, // خطوط نرم
+                fill: { 
+                    type: 'gradient', 
+                    gradient: { shadeIntensity: 1, opacityFrom: 0.6, opacityTo: 0.05, stops: [0, 90, 100] } 
+                },
+                dataLabels: { enabled: false },
+                markers: { size: 5, colors: ['#fff'], strokeColors: '#20c997', strokeWidth: 2, hover: { size: 7 } },
+                xaxis: { 
+                    type: 'datetime',
+                    labels: {
+                        formatter: function(val) {
+                            // تبدیل جادویی تایم استمپ میلادی به تاریخ شمسی در محور X
+                            return new persianDate(val).format('YYYY/MM/DD');
+                        }
+                    }
+                },
+                yaxis: { labels: { formatter: (val) => formatMoney(val) } },
+                tooltip: { 
+                    theme: 'dark',
+                    x: {
+                        formatter: function(val) {
+                            // نمایش تاریخ کامل شمسی هنگام هاور کردن روی نمودار
+                            return new persianDate(val).format('dddd, DD MMMM YYYY');
+                        }
+                    },
+                    y: { formatter: (val) => formatMoney(val) + " تومان" } 
+                }
+            };
+
+            // تنظیمات نمودار پایینی (اسلایدر بازه زمانی)
+            var optionsBrush = {
+                series: [{ data: chartSeriesData }],
+                chart: {
+                    id: 'chart1', height: 130, type: 'area', brush:{ target: 'chart2', enabled: true },
+                    selection: { enabled: true, fill: { color: '#fff', opacity: 0.4 }, stroke: { color: '#0dcaf0' } },
+                    events: { selection: function (chartContext, { xaxis, yaxis }) { updateKPIs(xaxis.min, xaxis.max); } }
+                },
+                colors: ['#0dcaf0'], 
+                fill: { type: 'gradient', gradient: { opacityFrom: 0.8, opacityTo: 0.1 } },
+                xaxis: { 
+                    type: 'datetime',
+                    labels: {
+                        formatter: function(val) {
+                            // نمایش ماه و سال شمسی در اسلایدر
+                            return new persianDate(val).format('YYYY/MM');
+                        }
+                    },
+                    tooltip: { enabled: false } 
+                }, 
+                yaxis: { tickAmount: 2 }
+            };
+
+            // رسم نمودارها
+            var chartMain = new ApexCharts(document.querySelector("#chart-sales"), optionsMain);
+            var chartBrush = new ApexCharts(document.querySelector("#chart-brush"), optionsBrush);
+            chartMain.render();
+            chartBrush.render();
+
+            // در ابتدا آمار کل را نمایش بده
+            if(data.length > 0) {
+                updateKPIs(data[0].timestamp, data[data.length-1].timestamp);
+            }
+        });
+
+    // تابع بروزرسانی کارت ها و ویجت ها با جاوااسکریپت
+    function updateKPIs(minTime, maxTime) {
+        let filtered = allSalesData.filter(d => d.timestamp >= minTime && d.timestamp <= maxTime);
+        
+        let count = filtered.length;
+        let tWeight = 0; let tRevenue = 0; let tCost = 0;
+        let genders = {}; let breeds = {};
+
+        filtered.forEach(item => {
+            tWeight += item.weight;
+            tRevenue += item.price;
+            tCost += item.cost;
+            genders[item.gender] = (genders[item.gender] || 0) + 1;
+            breeds[item.breed] = (breeds[item.breed] || 0) + 1;
+        });
+
+        let tProfit = tRevenue - tCost;
+        let avgWeight = count > 0 ? (tWeight / count) : 0;
+        let avgPricePerKg = tWeight > 0 ? (tRevenue / tWeight) : 0;
+
+        // آپدیت کارتهای HTML
+        document.getElementById('kpi-count-weight').innerText = `${count} رأس / ${tWeight.toFixed(1)} kg`;
+        document.getElementById('kpi-revenue').innerText = `${formatMoney(tRevenue)} تومان`;
+        document.getElementById('kpi-profit').innerText = `${formatMoney(tProfit)} تومان`;
+        document.getElementById('kpi-avg').innerText = `${avgWeight.toFixed(1)}kg / ${formatMoney(avgPricePerKg)}`;
+
+        // آپدیت ویجت جنسیت
+        let genHTML = "";
+        for (const [key, value] of Object.entries(genders)) {
+            let percent = ((value / count) * 100).toFixed(0);
+            genHTML += `<div class="d-flex justify-content-between mb-2"><span>${key}</span><strong>${value} سر (${percent}%)</strong></div>`;
+        }
+        document.getElementById('gender-breakdown').innerHTML = genHTML || "<small class='text-muted'>فروشی در این بازه نیست</small>";
+
+        // آپدیت ویجت نژاد
+        let breedHTML = "";
+        for (const [key, value] of Object.entries(breeds)) {
+            let percent = ((value / count) * 100).toFixed(0);
+            breedHTML += `<div class="d-flex justify-content-between mb-2"><span>${key}</span><strong>${value} سر (${percent}%)</strong></div>`;
+        }
+        document.getElementById('breed-breakdown').innerHTML = breedHTML || "<small class='text-muted'>فروشی در این بازه نیست</small>";
+    }
+</script>
+
+
+
+{% endblock %}

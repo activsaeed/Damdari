@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ترازنامه رسمی - {{ system_settings.get('farm_name') }}</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; background-color: #fff; padding: 50px; color: #000; }
+        .report-header { border-bottom: 2px solid #000; margin-bottom: 30px; padding-bottom: 10px; }
+        .official-title { font-size: 24px; fw-bold; text-align: center; margin-bottom: 5px; }
+        .table-bordered { border: 1px solid #000 !important; }
+        .table-bordered th, .table-bordered td { border: 1px solid #000 !important; padding: 12px; }
+        .total-row { background-color: #f2f2f2; font-weight: bold; }
+        .signature-box { margin-top: 80px; }
+        .stamp-area { border: 1px dashed #ccc; width: 150px; height: 100px; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 0.8rem; }
+        @media print { .no-print { display: none !important; } body { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="report-header d-flex justify-content-between align-items-end">
+        <div style="width: 200px;">
+            {% if system_settings.get('farm_logo_path') %}
+                <img src="{{ url_for('static', filename=system_settings.get('farm_logo_path')) }}" style="height: 80px;">
+            {% endif %}
+        </div>
+        <div class="text-center">
+            <h1 class="official-title">ترازنامه (صورت وضعیت مالی)</h1>
+            <h5 class="fw-bold">{{ system_settings.get('farm_name', 'مجتمع دامپروری صنعتی') }}</h5>
+            <p class="mb-0 small">گزارش منتهی به تاریخ: {{ today|jalali }}</p>
+        </div>
+        <div style="width: 200px;" class="text-start small">
+            <p class="mb-1">شماره گزارش: {{ range(1000, 9999) | random }}</p>
+            <p class="mb-0">واحد پول: {{ current_currency_unit }}</p>
+        </div>
+    </div>
+
+    <div class="row g-0">
+        <!-- ستون دارایی ها (سمت راست در حسابداری ایران) -->
+        <div class="col-6">
+            <table class="table table-bordered mb-0">
+                <thead>
+                    <tr class="text-center">
+                        <th colspan="2">دارایی‌ها</th>
+                    </tr>
+                    <tr>
+                        <th>شرح حساب</th>
+                        <th>مبلغ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acc in asset_accounts %}
+                    <tr>
+                        <td>{{ acc.name }}</td>
+                        <td class="text-center fw-bold">{{ acc.balance|currency }}</td>
+                    </tr>
+                    {% endfor %}
+                    <!-- تکمیل ردیف های خالی برای بالانس بصری -->
+                    {% for i in range(10 - asset_accounts|length) %}<tr><td>&nbsp;</td><td>&nbsp;</td></tr>{% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td>جمع کل دارایی‌ها</td>
+                        <td class="text-center text-primary fs-5">{{ total_assets|currency }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- ستون بدهی ها و سرمایه (سمت چپ) -->
+        <div class="col-6">
+            <table class="table table-bordered mb-0 border-start-0">
+                <thead>
+                    <tr class="text-center">
+                        <th colspan="2">بدهی‌ها و حقوق صاحبان سهام</th>
+                    </tr>
+                    <tr>
+                        <th>شرح حساب</th>
+                        <th>مبلغ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acc in liability_equity_accounts %}
+                    <tr>
+                        <td>{{ acc.name }}</td>
+                        <td class="text-center fw-bold">{{ acc.balance|currency }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for i in range(10 - liability_equity_accounts|length) %}<tr><td>&nbsp;</td><td>&nbsp;</td></tr>{% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td>جمع کل بدهی و سرمایه</td>
+                        <td class="text-center text-danger fs-5">{{ total_liability_equity|currency }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="signature-box row text-center fw-bold">
+        <div class="col-4"><p>مدیر امور مالی</p><br>......................</div>
+        <div class="col-4 d-flex justify-content-center"><div class="stamp-area">محل مهر واحد</div></div>
+        <div class="col-4"><p>مدیریت عامل</p><br>......................</div>
+    </div>
+
+    <div class="text-center mt-5 no-print">
+        <button onclick="window.print()" class="btn btn-dark btn-lg px-5 shadow-sm"><i class="fa-solid fa-print"></i> چاپ نسخه رسمی</button>
+    </div>
+</body>
+</html>

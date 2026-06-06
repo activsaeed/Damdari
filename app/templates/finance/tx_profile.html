@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-file-invoice-dollar text-success"></i> پرونده فاکتور / تراکنش</h2>
+    <div>
+        <a href="javascript:history.back()" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به لیست</a>
+        <button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editTxModal"><i class="fa-solid fa-pen"></i> ویرایش فاکتور</button>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0 border-top {% if t.t_type == 'درآمد' %}border-success{% else %}border-danger{% endif %} border-4 mb-4">
+            <div class="card-body">
+                <h4 class="fw-bold mb-3 {% if t.t_type == 'درآمد' %}text-success{% else %}text-danger{% endif %}">{{ t.amount|currency }}</h4>
+                <div class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %} fs-6 mb-4">{{ t.t_type }} - {{ t.category }}</div>
+                
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">شماره فاکتور:</span><span class="fw-bold" dir="ltr">{{ t.invoice_number or '-' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">تاریخ (شمسی):</span><span class="fw-bold text-primary">{{ t.t_date|jalali }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted">شخص/شرکت:</span><span class="fw-bold">{{ t.party_name or 'نامشخص' }}</span></li>
+                    <li class="list-group-item d-flex flex-column mt-2"><span class="text-muted mb-1">توضیحات (شرح):</span><span class="fw-bold text-wrap text-start bg-light p-2 rounded">{{ t.description or '-' }}</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-images text-info"></i> اسناد ضمیمه شده</div>
+            <div class="card-body bg-light">
+                {% if t.documents|length > 0 %}
+                <div class="row g-2">
+                    {% for doc in t.documents %}
+                    <div class="col-md-6 text-center">
+                        <a href="{{ url_for('static', filename=doc.file_path) }}" target="_blank">
+                            <img src="{{ url_for('static', filename=doc.file_path) }}" class="img-fluid rounded shadow-sm border" style="max-height: 250px;">
+                        </a>
+                        <small class="d-block mt-1 text-muted">فایل ضمیمه {{ loop.index }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5"><i class="fa-solid fa-camera-retro fa-4x mb-3 opacity-25"></i><br>سند یا تصویری برای این فاکتور ثبت نشده است.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ویرایش فاکتور -->
+<!-- Modal ویرایش فاکتور -->
+<div class="modal fade text-start" id="editTxModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش فاکتور</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.edit_tx', id=t.id) }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6"><label class="form-label">نوع</label><select name="t_type" class="form-select"><option value="درآمد" {% if t.t_type=='درآمد' %}selected{% endif %}>درآمد</option><option value="هزینه" {% if t.t_type=='هزینه' %}selected{% endif %}>هزینه</option></select></div>
+                        <div class="col-md-6">
+                            <label class="form-label text-danger">مبلغ ({{ current_currency_unit }})</label>
+                            <input type="text" class="form-control text-center fw-bold" dir="ltr" value="{{ t.amount }}" onkeyup="formatCurrency(this, 'raw_tx_edit')" required>
+                            <input type="hidden" name="amount" id="raw_tx_edit" value="{{ t.amount }}">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6"><label class="form-label">دسته‌بندی (امکان تایپ آزاد)</label><input type="text" name="category" class="form-control" value="{{ t.category }}" required></div>
+                        <div class="col-md-6"><label class="form-label">شخص / شرکت</label><input type="text" name="party_name" class="form-control" value="{{ t.party_name or '' }}"></div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6"><label class="form-label">شماره فاکتور</label><input type="text" name="invoice_number" class="form-control" dir="ltr" value="{{ t.invoice_number or '' }}"></div>
+                        <div class="col-md-6">
+                            <label class="form-label">تاریخ (شمسی)</label>
+                            <input type="text" class="form-control jalali-datepicker">
+                            <input type="hidden" name="t_date" class="gregorian-hidden-field" value="{{ t.t_date.strftime('%Y-%m-%d') }}">
+                        </div>
+                    </div>
+                    <div class="mb-3"><label class="form-label">شرح</label><textarea name="description" class="form-control" rows="2">{{ t.description or '' }}</textarea></div>
+                    <div class="mb-3 p-3 bg-light border rounded">
+                        <label class="form-label fw-bold"><i class="fa-solid fa-camera"></i> افزودن عکس جدید به فاکتور</label>
+                        <input type="file" name="documents" class="form-control mt-1" accept="image/*,.pdf" multiple>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">ذخیره تغییرات</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+    // تبدیل قیمت اولیه به فرمت کاما دار هنگام لود صفحه
+    document.addEventListener("DOMContentLoaded", function() {
+        let moneyInputs = document.querySelectorAll('input[onkeyup*="formatCurrency"]');
+        moneyInputs.forEach(inp => { if(inp.value) inp.value = Number(inp.value).toLocaleString('en-US'); });
+    });
+</script>
+{% endblock %}

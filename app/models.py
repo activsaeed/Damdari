@@ -1,0 +1,469 @@
+from app import db
+from datetime import datetime
+from flask_login import UserMixin
+
+# این کلاس User را جایگزین کلاس قبلی کنید
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(20), default='کارگر') # مدیر، دامپزشک، حسابدار، کارگر
+    
+    # فیلدهای جدید برای دسترسی داینامیک (تیک زدن در تنظیمات)
+    can_view_livestock = db.Column(db.Boolean, default=False)
+    can_view_finance = db.Column(db.Boolean, default=False)
+    can_view_inventory = db.Column(db.Boolean, default=False)
+    can_view_hr = db.Column(db.Boolean, default=False)
+    can_view_reports = db.Column(db.Boolean, default=False)
+    can_view_settings = db.Column(db.Boolean, default=False)
+
+class Medicine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    medicine_category_id = db.Column(db.Integer, db.ForeignKey('medicine_category.id'), nullable=True)
+    category = db.relationship('MedicineCategory', backref='medicines')
+
+class FeedRation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    daily_cost = db.Column(db.Float, default=0.0)
+    description = db.Column(db.String(255), nullable=True)
+    schedules = db.relationship('FeedingSchedule', backref='ration', lazy=True, cascade="all, delete-orphan")
+
+class FeedingSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id'), nullable=False)
+    time_of_day = db.Column(db.String(50), nullable=False)
+    feed_type = db.Column(db.String(100), nullable=False)
+    amount_kg = db.Column(db.Float, nullable=False)
+
+class Pen(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    capacity = db.Column(db.Integer, default=50)
+    pen_type = db.Column(db.String(50), nullable=False)
+    sheep_list = db.relationship('Sheep', backref='pen', lazy=True)
+
+class BreedCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+class PurposeCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+class StatusCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    type = db.Column(db.String(50), default='عادی')
+
+class TreatmentTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    medicines = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+
+class Sheep(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ear_tag = db.Column(db.String(50), unique=True, nullable=False)
+    breed = db.Column(db.String(50), nullable=True)
+    gender = db.Column(db.String(20), nullable=False)
+    birth_date = db.Column(db.Date, nullable=True)
+    entry_date = db.Column(db.DateTime, default=datetime.utcnow)
+    weight = db.Column(db.Float, nullable=True)
+    purchase_price = db.Column(db.Float, default=0.0) 
+    last_heat_date = db.Column(db.Date, nullable=True) 
+    target_weight = db.Column(db.Float, nullable=True) 
+    sale_price = db.Column(db.Float, default=0.0) 
+    sale_date = db.Column(db.Date, nullable=True)
+    buyer_category_id = db.Column(db.Integer, db.ForeignKey('buyer_category.id'), nullable=True)
+    buyer_category = db.relationship('BuyerCategory', backref='sold_sheeps')
+    status = db.Column(db.String(50), default='زنده و سالم')
+    purpose = db.Column(db.String(50), nullable=True)
+    qr_code_path = db.Column(db.String(200), nullable=True)
+    death_reason = db.Column(db.String(200), nullable=True)
+     # ---> این فیلد را اضافه کنید <---
+    is_starred = db.Column(db.Boolean, default=False) 
+    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
+    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
+    feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id'), nullable=True)
+    pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=True)
+    
+    ration = db.relationship('FeedRation', backref='sheep_list')
+    weight_records = db.relationship('WeightRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
+    medical_records = db.relationship('MedicalRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
+    birth_records = db.relationship('BirthRecord', foreign_keys='BirthRecord.mother_id', backref='mother', lazy=True)
+    lactation_records = db.relationship('LactationRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
+
+class LactationRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    record_date = db.Column(db.Date, default=datetime.utcnow)
+    milk_yield = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.String(200), nullable=True)
+
+class BirthRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
+    birth_date = db.Column(db.Date, default=datetime.utcnow)
+    lambs_count = db.Column(db.Integer, default=1)
+    status = db.Column(db.String(50), default='موفق')
+    notes = db.Column(db.String(200), nullable=True)
+
+class WeightRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    weight = db.Column(db.Float, nullable=False)
+    record_date = db.Column(db.Date, default=datetime.utcnow)
+    bcs = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.String(200), nullable=True)
+
+class MedicalRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    action_type = db.Column(db.String(50), nullable=False)
+    medicine_name = db.Column(db.String(100), nullable=False)
+    record_date = db.Column(db.Date, default=datetime.utcnow)
+    next_date = db.Column(db.Date, nullable=True)
+    withdrawal_end_date = db.Column(db.Date, nullable=True)
+    operator = db.Column(db.String(100), nullable=True)
+    notes = db.Column(db.String(200), nullable=True)
+    photos = db.relationship('MedicalPhoto', backref='medical_record', lazy=True, cascade="all, delete-orphan")
+
+class MedicalPhoto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    medical_record_id = db.Column(db.Integer, db.ForeignKey('medical_record.id'), nullable=False)
+    image_path = db.Column(db.String(255), nullable=False)
+
+
+# ==========================================
+# هسته حسابداری دوطرفه (Double-Entry Accounting)
+# ==========================================
+
+class AccountType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False) # دارایی، بدهی، سرمایه، درآمد، هزینه
+    nature = db.Column(db.String(20), nullable=False) # ماهیت: بدهکار یا بستانکار
+
+class Account(db.Model):
+    """کدینگ حسابداری (دفتر کل و معین)"""
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), unique=True, nullable=False) # مثلا: 1101 (موجودی نقد)
+    name = db.Column(db.String(100), nullable=False)
+    account_type_id = db.Column(db.Integer, db.ForeignKey('account_type.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=True) # برای حساب های زیرمجموعه
+    
+    type = db.relationship('AccountType', backref='accounts')
+    children = db.relationship('Account', backref=db.backref('parent', remote_side=[id]))
+
+class JournalEntry(db.Model):
+    """سند حسابداری (Sanad)"""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_number = db.Column(db.String(50), unique=True, nullable=False) # شماره سند
+    date = db.Column(db.Date, default=datetime.utcnow)
+    description = db.Column(db.String(255), nullable=False) # شرح سند
+    is_auto_generated = db.Column(db.Boolean, default=True) # آیا سیستم خودش ساخته؟
+    status = db.Column(db.String(20), default='تایید شده') # موقت، تایید شده
+    
+    # ارتباط با فاکتور یا چک (برای پیگیری)
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=True)
+    
+    lines = db.relationship('JournalEntryLine', backref='journal_entry', lazy=True, cascade="all, delete-orphan")
+
+class JournalEntryLine(db.Model):
+    """آرتیکل‌های سند (بدهکار/بستانکار)"""
+    id = db.Column(db.Integer, primary_key=True)
+    journal_entry_id = db.Column(db.Integer, db.ForeignKey('journal_entry.id'), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True) # حساب تفصیلی اشخاص
+    
+    debit = db.Column(db.Float, default=0.0)  # بدهکار
+    credit = db.Column(db.Float, default=0.0) # بستانکار
+    description = db.Column(db.String(255), nullable=True)
+
+
+class TransactionCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    t_type = db.Column(db.String(20), nullable=False)
+
+
+class Transaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    t_type = db.Column(db.String(20), nullable=False) 
+    category = db.Column(db.String(50), nullable=False) 
+    amount = db.Column(db.Float, nullable=False) 
+    t_date = db.Column(db.Date, default=datetime.utcnow) 
+    description = db.Column(db.String(255), nullable=True)
+    invoice_number = db.Column(db.String(100), nullable=True)
+    
+    # ---> فیلدهای جدید فاکتور <---
+    party_name = db.Column(db.String(150), nullable=True) # نام شرکت/شخص/فروشگاه
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
+    is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن فاکتور
+    is_archived = db.Column(db.Boolean, default=False) # وضعیت بایگانی
+    follow_up_note = db.Column(db.Text, nullable=True) # یادداشت پیگیری (جدید)
+    
+    documents = db.relationship('TransactionDocument', backref='transaction', lazy=True, cascade="all, delete-orphan")
+
+class TransactionDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=False)
+    file_path = db.Column(db.String(255), nullable=False)
+
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    task_date = db.Column(db.Date, default=datetime.utcnow)
+    is_done = db.Column(db.Boolean, default=False)
+    livestock_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
+
+# ---> آپدیت سیستم انبار برای قیمت گذاری داینامیک خوراک <---
+class InventoryItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=True)
+    category = db.relationship('InventoryCategory', backref='items')
+    quantity = db.Column(db.Float, default=0.0)
+    unit_id = db.Column(db.Integer, db.ForeignKey('unit.id'), nullable=False)
+    unit = db.relationship('Unit', backref='inventory_items')
+    min_threshold = db.Column(db.Float, default=10.0)
+    
+    # فیلد جدید: محاسبه میانگین قیمت تمام شده کالا (Moving Average)
+    unit_price = db.Column(db.Float, default=0.0) 
+    expiry_date = db.Column(db.Date, nullable=True)
+    description = db.Column(db.String(255), nullable=True)
+    logs = db.relationship('InventoryLog', backref='item', lazy=True, cascade="all, delete-orphan")
+
+class InventoryLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
+    action_type = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    
+    # فیلد جدید برای لاگ: قیمت در زمان ورود/خروج
+    transaction_price = db.Column(db.Float, default=0.0)
+    
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+    notes = db.Column(db.String(200), nullable=True)
+
+# ---> جدول جدید: مدیریت چک و اسناد دریافتنی/پرداختنی <---
+
+class Cheque(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cheque_type = db.Column(db.String(50), nullable=False) 
+    cheque_number = db.Column(db.String(50), nullable=False) 
+    amount = db.Column(db.Float, nullable=False) 
+    due_date = db.Column(db.Date, nullable=False) 
+    bank_name = db.Column(db.String(100), nullable=True) 
+    issuer_name = db.Column(db.String(100), nullable=True) 
+    issuer_national_id = db.Column(db.String(20), nullable=True) 
+    registered_to = db.Column(db.String(100), nullable=True) 
+    registrar_national_id = db.Column(db.String(20), nullable=True) 
+    reason = db.Column(db.String(200), nullable=True) 
+    notes = db.Column(db.String(255), nullable=True) 
+    image_path = db.Column(db.String(255), nullable=True) 
+    status = db.Column(db.String(50), default='در جریان')
+    
+    # ---> فیلد جدید چک <---
+    is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن چک
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ==========================================
+# سیستم پیشرفته منابع انسانی (HR) و پرسنل بر اساس قانون کار
+# ==========================================
+class Worker(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_code = db.Column(db.String(50), unique=True, nullable=False) 
+    name = db.Column(db.String(100), nullable=False)
+    national_id = db.Column(db.String(20), nullable=True) 
+    phone = db.Column(db.String(20), nullable=True)
+    role = db.Column(db.String(50), default='کارگر ساده') 
+    start_date = db.Column(db.Date, default=datetime.utcnow) 
+    
+    # اطلاعات تکمیلی و هویتی
+    education = db.Column(db.String(100), nullable=True) # مدرک تحصیلی
+    address = db.Column(db.String(255), nullable=True) # آدرس
+    bank_account = db.Column(db.String(50), nullable=True) # شماره کارت/شبا
+    
+    # حقوق و مزایای ثابت ماهانه (قانون کار)
+    salary = db.Column(db.Float, default=0.0) # پایه حقوق
+    housing_allowance = db.Column(db.Float, default=0.0) # حق مسکن
+    food_allowance = db.Column(db.Float, default=0.0) # حق بن و خواربار
+    family_allowance = db.Column(db.Float, default=0.0) # حق عائله‌مندی (اولاد)
+    
+    insurance_status = db.Column(db.String(50), default='بدون بیمه')
+    status = db.Column(db.String(50), default='فعال') 
+    assigned_pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=True) 
+    
+    tasks = db.relationship('Task', backref='worker', lazy=True, cascade="all, delete-orphan")
+    events = db.relationship('WorkerEvent', backref='worker', lazy=True, cascade="all, delete-orphan") 
+    loans = db.relationship('WorkerLoan', backref='worker', lazy=True, cascade="all, delete-orphan") 
+    petty_cash_records = db.relationship('PettyCash', backref='worker', lazy=True, cascade="all, delete-orphan")
+    documents = db.relationship('WorkerDocument', backref='worker', lazy=True, cascade="all, delete-orphan") # گالری مدارک پرسنلی
+
+# خط خدمت پرسنل (تایم لاین)
+class WorkerEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    event_type = db.Column(db.String(50), nullable=False) 
+    event_date = db.Column(db.Date, default=datetime.utcnow)
+    description = db.Column(db.String(255), nullable=True)
+
+# وام و مساعده
+class WorkerLoan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    loan_type = db.Column(db.String(50), nullable=False) 
+    amount = db.Column(db.Float, nullable=False)
+    issue_date = db.Column(db.Date, default=datetime.utcnow)
+    installment_amount = db.Column(db.Float, nullable=True) 
+    status = db.Column(db.String(50), default='در حال پرداخت') 
+    document_image = db.Column(db.String(255), nullable=True) 
+    description = db.Column(db.String(255), nullable=True)
+
+class PettyCash(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False) 
+    action_type = db.Column(db.String(20), nullable=False) 
+    record_date = db.Column(db.Date, default=datetime.utcnow)
+    description = db.Column(db.String(255), nullable=True)
+
+    # ==========================================
+# جداول سیستم هوشمند (IoT، حسابرسی و استهلاک)
+# ==========================================
+
+# 1. جدول مچ‌گیری و حسابرسی (Audit Trail)
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_name = db.Column(db.String(100), nullable=False) # چه کسی؟
+    action = db.Column(db.String(255), nullable=False) # چه کاری کرد؟ (مثلا: ویرایش وزن پلاک 1024)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow) # چه زمانی؟
+    ip_address = db.Column(db.String(50), nullable=True)
+
+# 2. جدول تجهیزات برای استهلاک
+class Equipment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    purchase_price = db.Column(db.Float, nullable=False)
+    purchase_date = db.Column(db.Date, default=datetime.utcnow)
+    lifespan_years = db.Column(db.Integer, nullable=False) # عمر مفید (سال)
+
+# 3. جدول اینترنت اشیا (سنسورهای دما و رطوبت بهاربندها)
+class SensorData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=False)
+    temperature = db.Column(db.Float, nullable=False)
+    humidity = db.Column(db.Float, nullable=False)
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+    # ==========================================
+# سیستم دفتر کل اشخاص (نسیه، طلب، بدهی)
+# ==========================================
+class Contact(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False) # نام شخص، قصابی یا کارخانه
+    phone = db.Column(db.String(20), nullable=True)
+    contact_type = db.Column(db.String(50), default='عمومی') # مشتری، تامین‌کننده خوراک
+    
+    # فیلدهای جدید (کد اقتصادی و بانکی)
+    economic_code = db.Column(db.String(50), nullable=True)
+    bank_card = db.Column(db.String(30), nullable=True)
+
+    # فرمول تراز: اگر مثبت باشد یعنی ما از او طلبکاریم، اگر منفی باشد یعنی ما به او بدهکاریم
+    balance = db.Column(db.Float, default=0.0) 
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    transactions = db.relationship('Transaction', backref='contact', lazy=True)
+    cheques = db.relationship('Cheque', backref='contact', lazy=True)
+    documents = db.relationship('ContactDocument', backref='contact', lazy=True, cascade="all, delete-orphan")
+
+# ==========================================
+# سیستم حقوق و دستمزد اتوماتیک (فیش حقوقی)
+# ==========================================
+# ارتقای جدول فیش حقوقی برای ثبت متغیرهای متغیر ماهانه
+class Payslip(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    month_name = db.Column(db.String(50), nullable=False) 
+    issue_date = db.Column(db.Date, default=datetime.utcnow)
+    
+    # دریافتی ها
+    base_salary = db.Column(db.Float, default=0.0) 
+    housing_allowance = db.Column(db.Float, default=0.0) 
+    food_allowance = db.Column(db.Float, default=0.0) 
+    family_allowance = db.Column(db.Float, default=0.0) 
+    
+    overtime_pay = db.Column(db.Float, default=0.0) # مبلغ اضافه کاری
+    night_shift_pay = db.Column(db.Float, default=0.0) # مبلغ شیفت شب
+    transportation_pay = db.Column(db.Float, default=0.0) # ایاب ذهاب
+    kpi_bonus = db.Column(db.Float, default=0.0) # پاداش
+    eydi_sanavat = db.Column(db.Float, default=0.0) # عیدی و سنوات
+    
+    # کسورات
+    loan_deduction = db.Column(db.Float, default=0.0) 
+    fines = db.Column(db.Float, default=0.0) 
+    
+    gross_pay = db.Column(db.Float, default=0.0) # ناخالص دریافتی
+    net_pay = db.Column(db.Float, default=0.0) # خالص پرداختی
+    is_paid = db.Column(db.Boolean, default=False) 
+    
+    worker = db.relationship('Worker', backref='payslips')
+
+
+# جدول جدید برای گالری مدارک پرسنل (کارت ملی، سفته، مدرک، قرارداد)
+class WorkerDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    doc_title = db.Column(db.String(100), nullable=False) # عنوان مدرک (مثلا: کپی کارت ملی)
+    file_path = db.Column(db.String(255), nullable=False)
+    upload_date = db.Column(db.Date, default=datetime.utcnow)
+
+class ContactDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=False)
+    doc_title = db.Column(db.String(100), nullable=False)
+    file_path = db.Column(db.String(255), nullable=False)
+    upload_date = db.Column(db.Date, default=datetime.utcnow)
+
+class SystemSetting(db.Model):
+    """ذخیره تنظیمات و متغیرهای کلیدی سیستم"""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    value = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+
+class Unit(db.Model):
+    """جدول برای مدیریت واحدهای اندازه گیری (کیلوگرم، سر، ویال و...)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+
+class MedicineCategory(db.Model):
+    """دسته‌بندی داروها (آنتی‌بیوتیک، واکسن، مکمل و...)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+class InventoryCategory(db.Model):
+    """دسته‌بندی اقلام انبار (خوراک، دارو، تجهیزات و...)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+class BuyerCategory(db.Model):
+    """انواع خریداران (قصاب، دلال، دامدار، شخصی)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+class TelegramBot(db.Model):
+    """ذخیره چندین ربات تلگرام برای ارسال بک‌آپ"""
+    id = db.Column(db.Integer, primary_key=True)
+    bot_name = db.Column(db.String(100), nullable=False)
+    bot_token = db.Column(db.String(255), nullable=False)
+    chat_id = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)

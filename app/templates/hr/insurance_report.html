@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-shield-heart text-danger"></i> گزارش حق بیمه سازمان (۳۰٪)</h2>
+    <div>
+        <button class="btn btn-primary shadow-sm fw-bold me-2" data-bs-toggle="modal" data-bs-target="#payInsuranceModal"><i class="fa-solid fa-money-bill-transfer"></i> ثبت واریز بیمه</button>
+        <a href="{{ url_for('hr.export_insurance_excel', year=current_year, month=current_month) }}" class="btn btn-outline-success shadow-sm fw-bold me-2"><i class="fa-solid fa-file-excel"></i> خروجی اکسل</a>
+        <button onclick="window.print()" class="btn btn-dark shadow-sm fw-bold"><i class="fa-solid fa-print"></i> چاپ لیست</button>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('hr.insurance_report') }}" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">سال شمسی</label>
+                <select name="year" class="form-select">
+                    {% for y in range(1402, 1406) %}
+                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">ماه</label>
+                <select name="month" class="form-select">
+                    <option value="">همه ماه‌ها (کل سال)</option>
+                    {% set months_list = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"] %}
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ months_list[m-1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fa-solid fa-filter"></i> اعمال فیلتر</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4 bg-primary text-white">
+    <div class="card-body p-4 d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-1 opacity-75">جمع کل تعهدات بیمه جاری:</h5>
+            <h2 class="fw-bold mb-0">{{ "{:,.0f}".format(total_insurance) }} تومان</h2>
+        </div>
+        <i class="fa-solid fa-building-columns fa-3x opacity-50"></i>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle text-center mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>تاریخ سند</th>
+                    <th>شرح (نام پرسنل)</th>
+                    <th>مبلغ حق بیمه (۳۰٪)</th>
+                    <th>سهم کارگر (۷٪)</th>
+                    <th>سهم کارفرما (۲۳٪)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr>
+                    <td class="fw-bold">{{ line.date|jalali }}</td>
+                    <td class="text-start">{{ line.description.replace('بیمه پرداختنی سازمان (30%) - ', '') }}</td>
+                    <td class="fw-bold text-danger">{{ "{:,.0f}".format(line.credit) }}</td>
+                    <td class="text-muted">{{ "{:,.0f}".format(line.credit * 7 / 30) }}</td>
+                    <td class="text-muted">{{ "{:,.0f}".format(line.credit * 23 / 30) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="py-5 text-muted">سند حقوق و بیمه‌ای در سیستم یافت نشد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal ثبت واریز بیمه -->
+<div class="modal fade" id="payInsuranceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white"><h5 class="modal-title">ثبت فیش واریز بیمه</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.pay_insurance') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label fw-bold">مبلغ واریزی (تومان)</label><input type="text" class="form-control form-control-lg text-center fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_pay_amt')" required><input type="hidden" name="amount" id="raw_pay_amt"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">تاریخ واریز (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="pay_date" class="gregorian-hidden-field"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">بابت (توضیحات)</label><input type="text" name="description" class="form-control" placeholder="مثلاً: حق بیمه مرداد ماه 1403" required></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ثبت سند و کاهش بدهی</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+</script>
+{% endblock %}

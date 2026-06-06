@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-horse-head text-primary"></i> مدیریت دام (گله)</h2>
+    <div>
+        {% if current_user.role == 'مدیر' %}
+        <!-- دکمه چاپ و اکسل -->
+        <a href="{{ url_for('livestock.export_sheep', search=current_search, gender=current_gender, breed=current_breed, status=current_status, min_weight=current_min_w, max_weight=current_max_w, starred=current_starred or '') }}" class="btn btn-outline-success shadow-sm"><i class="fa-solid fa-file-excel"></i> اکسل</a>
+        <a href="{{ url_for('livestock.print_sheep', search=current_search, gender=current_gender, breed=current_breed, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" target="_blank" class="btn btn-dark shadow-sm"><i class="fa-solid fa-print"></i> چاپ لیست</a> 
+        <a href="{{ url_for('livestock.add_sheep') }}" class="btn btn-success shadow-sm"><i class="fa-solid fa-plus"></i> ثبت دام جدید</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6"><div class="card bg-primary text-white text-center py-2 shadow-sm border-0"><div class="fw-bold fs-3">{{ total_sheep }}</div><small>کل (رأس)</small></div></div>
+    <div class="col-md-3 col-6"><div class="card bg-danger text-white text-center py-2 shadow-sm border-0"><div class="fw-bold fs-3">{{ sick_count }}</div><small>بیمار</small></div></div>
+    <div class="col-md-3 col-6"><div class="card bg-info text-dark text-center py-2 shadow-sm border-0"><div class="fw-bold fs-3">{{ pregnant_count }}</div><small>آبستن</small></div></div>
+    <div class="col-md-3 col-6"><div class="card bg-success text-white text-center py-2 shadow-sm border-0"><div class="fw-bold fs-3">{{ "{:,.0f}".format(total_live_weight) }}</div><small>وزن زنده (کیلو)</small></div></div>
+</div>
+
+<!-- نوار ابزار اصلی (سرچ و دکمه فیلتر پیشرفته) -->
+<div class="card border-0 shadow-sm mb-4 bg-white">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div class="input-group" style="max-width: 400px;">
+            <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-camera"></i></button>
+            <input type="text" id="searchInput" form="filterForm" name="search" class="form-control" placeholder="اسکن یا تایپ پلاک (سپس Enter)..." value="{{ current_search }}" onkeyup="checkRFID(event)">
+        </div>
+        
+        <div class="d-flex gap-2">
+            <!-- دکمه باز کردن منوی کشویی فیلترها -->
+            <button class="btn btn-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterOffcanvas">
+                <i class="fa-solid fa-filter"></i> فیلترهای پیشرفته
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- منوی کشویی کناری (Offcanvas) برای فیلترهای پیشرفته -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="filterOffcanvas">
+  <div class="offcanvas-header bg-light border-bottom">
+    <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-sliders text-primary"></i> فیلتر پیشرفته دام‌ها</h5>
+    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form method="GET" action="{{ url_for('livestock.index') }}" id="filterForm">
+        <!-- سرچ مخفی برای همگام سازی با کادر بیرون -->
+        <input type="hidden" name="search" id="hiddenSearch" value="{{ current_search }}">
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold">وضعیت و بایگانی</label>
+            <select name="status" class="form-select">
+                <option value="فعال" {% if current_status == 'فعال' %}selected{% endif %}>دام‌های موجود (فعال)</option>
+                <option value="همه" {% if current_status == 'همه' %}selected{% endif %}>همه وضعیت‌ها (نمایش کل)</option>
+                <option value="بایگانی" {% if current_status == 'بایگانی' %}selected{% endif %}>بایگانی (تلفات و فروش رفته)</option>
+                <optgroup label="وضعیت دقیق">
+                    {% for s in statuses %}<option value="{{ s.name }}" {% if current_status == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">نشان‌شده‌ها (ستاره‌دار)</label>
+            <select name="starred" class="form-select border-warning">
+                <option value="">همه دام‌ها</option>
+                <option value="1" {% if current_starred == '1' %}selected{% endif %}>فقط ستاره‌دارها <i class="fa-solid fa-star"></i></option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">جنسیت</label>
+            <select name="gender" class="form-select">
+                <option value="همه">همه جنسیت‌ها</option><option value="میش" {% if current_gender == 'میش' %}selected{% endif %}>میش</option><option value="قوچ" {% if current_gender == 'قوچ' %}selected{% endif %}>قوچ</option><option value="بره ماده" {% if current_gender == 'بره ماده' %}selected{% endif %}>بره ماده</option><option value="بره نر" {% if current_gender == 'بره نر' %}selected{% endif %}>بره نر</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">نژاد</label>
+            <select name="breed" class="form-select">
+                <option value="همه">همه نژادها</option>
+                {% for b in breeds %}<option value="{{ b.name }}" {% if current_breed == b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">محدوده وزن (کیلوگرم)</label>
+            <div class="d-flex gap-2">
+                <input type="number" name="min_weight" class="form-control" placeholder="از وزن" value="{{ current_min_w or '' }}">
+                <input type="number" name="max_weight" class="form-control" placeholder="تا وزن" value="{{ current_max_w or '' }}">
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="fa-solid fa-check"></i> اعمال فیلتر</button>
+        <a href="{{ url_for('livestock.index') }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
+    </form>
+  </div>
+</div>
+
+<form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-2 bg-light p-2 rounded border">
+        <span class="fw-bold text-muted small"><i class="fa-solid fa-layer-group"></i> عملیات روی انتخاب شده‌ها:</span>
+        <select name="bulk_action_type" class="form-select form-select-sm w-auto" onchange="toggleBulkSaleFields()">
+            <option value="">نوع عملیات...</option><option value="change_status">تغییر وضعیت</option><option value="change_ration">تغییر جیره غذایی</option><option value="change_pen">انتقال بهاربند</option>
+        </select>
+        <select name="new_status" class="form-select form-select-sm w-auto" onchange="toggleBulkSaleFields()">
+            <option value="">وضعیت جدید...</option>{% for s in statuses %}<option value="{{ s.name }}">{{ s.name }}</option>{% endfor %}
+        </select>
+        <select name="new_ration_id" class="form-select form-select-sm w-auto"><option value="">انتخاب جیره...</option>{% for r in rations %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}</select>
+        <select name="new_pen_id" class="form-select form-select-sm w-auto"><option value="">انتخاب بهاربند...</option>{% for p in pens %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
+        <input type="number" name="bulk_sale_price" class="form-control form-control-sm w-auto" id="bulkSalePrice" placeholder="قیمت فروش (ریال)" style="display: none;" step="0.01">
+        <input type="date" name="bulk_sale_date" class="form-control form-control-sm w-auto" id="bulkSaleDate" style="display: none;">
+        <button type="submit" class="btn btn-sm btn-dark" onclick="return confirm('تغییرات اعمال شود؟')">اعمال گروهی</button>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <!-- رفع کندی لود: ستون QR Code از جدول پاک شد -->
+                <table class="table table-hover align-middle text-center mb-0" id="sheepTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)"></th>
+                            <th><i class="fa-solid fa-star text-warning"></i></th>
+                            <th>پلاک</th><th>جنسیت</th><th>نژاد</th><th>وزن</th><th>وضعیت</th><th>بهاربند</th><th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sheep in sheeps.items %}
+                        <tr>
+                            <td><input type="checkbox" name="sheep_ids" value="{{ sheep.id }}" class="sheep-checkbox"></td>
+                            <!-- دکمه ستاره -->
+                            <td>
+                                <a href="javascript:void(0);" onclick="toggleStar(this, {{ sheep.id }})" class="text-decoration-none">
+                                    <i class="{% if sheep.is_starred %}fa-solid fa-star text-warning{% else %}fa-regular fa-star text-muted{% endif %} fs-5"></i>
+                                </a>
+                            </td>
+                            <td class="fw-bold tag-col"><a href="{{ url_for('livestock.profile', id=sheep.id) }}" id="link-{{ sheep.ear_tag }}" class="text-decoration-none text-dark">{{ sheep.ear_tag }}</a></td>
+                            <td class="gender-col">{{ sheep.gender }}</td>
+                            <td class="breed-col">{{ sheep.breed or '-' }}</td>
+                            <td class="weight-col">{{ sheep.weight }}</td>
+                            <td class="status-col">
+                                <span class="badge {% if sheep.status == 'زنده و سالم' %}bg-success{% elif sheep.status == 'بیمار' %}bg-danger{% elif sheep.status == 'قرنطینه' %}bg-warning text-dark{% elif sheep.status == 'آبستن' %}bg-info text-dark{% elif sheep.status == 'تلف شده' or sheep.status == 'مرده' %}bg-dark{% else %}bg-secondary{% endif %}">{{ sheep.status }}</span>
+                            </td>
+                            <td>{{ sheep.pen.name if sheep.pen else '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-sm btn-outline-info" title="پرونده دام"><i class="fa-solid fa-address-card"></i> پرونده</a>
+                                {% if current_user.role == 'مدیر' %}
+                                <a href="{{ url_for('livestock.delete_sheep', id=sheep.id) }}" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('آیا از حذف کامل این دام مطمئن هستید؟')"><i class="fa-solid fa-trash"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="9" class="text-center py-5 text-muted">هیچ دامی یافت نشد.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</form>
+
+<nav aria-label="Page navigation" class="mt-3">
+    <ul class="pagination justify-content-center">
+        {% if sheeps.has_prev %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.index', page=sheeps.prev_num, search=current_search, gender=current_gender, breed=current_breed, status=current_status, min_weight=current_min_w, max_weight=current_max_w, starred=current_starred) }}">قبلی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">قبلی</a></li>
+        {% endif %}
+        <li class="page-item active"><a class="page-link">صفحه {{ sheeps.page }} از {{ sheeps.pages }}</a></li>
+        {% if sheeps.has_next %}
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.index', page=sheeps.next_num, search=current_search, gender=current_gender, breed=current_breed, status=current_status, min_weight=current_min_w, max_weight=current_max_w, starred=current_starred) }}">بعدی</a></li>
+        {% else %}
+        <li class="page-item disabled"><a class="page-link">بعدی</a></li>
+        {% endif %}
+    </ul>
+    <!-- بخش جدید: پرش مستقیم به صفحه -->
+    <div class="d-flex justify-content-center align-items-center gap-2 mt-2">
+        <form method="GET" action="{{ url_for('livestock.index') }}" class="d-flex align-items-center gap-1">
+            <input type="hidden" name="search" value="{{ current_search or '' }}">
+            <input type="hidden" name="gender" value="{{ current_gender or 'همه' }}">
+            <input type="hidden" name="breed" value="{{ current_breed or 'همه' }}">
+            <input type="hidden" name="status" value="{{ current_status or 'فعال' }}">
+            <input type="hidden" name="min_weight" value="{{ current_min_w or '' }}">
+            <input type="hidden" name="max_weight" value="{{ current_max_w or '' }}">
+            <input type="hidden" name="starred" value="{{ current_starred or '' }}">
+            <label class="small text-muted">برو به صفحه:</label>
+            <input type="number" name="page" class="form-control form-control-sm text-center shadow-sm" style="width: 70px;" min="1" max="{{ sheeps.pages }}" value="{{ sheeps.page }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary fw-bold">برو</button>
+        </form>
+    </div>
+</nav>
+
+<div class="modal fade" id="qrScannerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">اسکن دوربین</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><div id="reader"></div></div></div></div></div>
+<div class="modal fade" id="quickWeightModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-bolt text-warning"></i> ثبت سریع وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('livestock.quick_weight') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3"><label>شماره پلاک دقیق</label><input type="text" name="ear_tag" class="form-control form-control-lg text-center fw-bold" required></div>
+                    <div class="mb-3"><label>وزن جدید (کیلوگرم)</label><input type="number" step="0.1" name="weight" class="form-control form-control-lg text-center text-success fw-bold" required></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ثبت</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function checkRFID(e) { 
+        if(e.key === 'Enter') { 
+            document.getElementById('hiddenSearch').value = document.getElementById('searchInput').value;
+            e.target.form.submit(); 
+        } 
+    }
+    function toggleAll(source) { document.querySelectorAll('.sheep-checkbox').forEach(cb => cb.checked = source.checked); }
+
+    document.getElementById('qrScannerModal').addEventListener('shown.bs.modal', function () {
+        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+        html5QrcodeScanner.render(function(decodedText) {
+            let match = decodedText.match(/پلاک:\s*([^\n]+)/);
+            if(match) {
+                document.getElementById('searchInput').value = match[1];
+                document.getElementById('searchInput').form.submit();
+            }
+        });
+    });
+
+    function toggleStar(el, id) {
+        fetch(`/livestock/toggle_star/${id}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const icon = el.querySelector('i');
+                if (data.is_starred) {
+                    icon.className = 'fa-solid fa-star text-warning fs-5';
+                } else {
+                    icon.className = 'fa-regular fa-star text-muted fs-5';
+                }
+            }
+        })
+        .catch(err => console.error('Error toggling star:', err));
+    }
+
+    function toggleBulkSaleFields() {
+        const actionType = document.querySelector('select[name="bulk_action_type"]').value;
+        const newStatus = document.querySelector('select[name="new_status"]').value;
+        const priceField = document.getElementById('bulkSalePrice');
+        const dateField = document.getElementById('bulkSaleDate');
+        
+        // اگر تغییر وضعیت است و وضعیت جدید "فروخته شده" است، فیلدهای قیمت و تاریخ نمایش داده شود
+        if (actionType === 'change_status' && newStatus === 'فروخته شده') {
+            priceField.style.display = 'block';
+            dateField.style.display = 'block';
+            priceField.required = true;
+            dateField.required = true;
+            // تاریخ امروز را به صورت پیش‌فرض قرار بده
+            if (!dateField.value) {
+                const today = new Date();
+                dateField.value = today.toISOString().split('T')[0];
+            }
+        } else {
+            priceField.style.display = 'none';
+            dateField.style.display = 'none';
+            priceField.required = false;
+            dateField.required = false;
+        }
+    }
+</script>
+{% endblock %}

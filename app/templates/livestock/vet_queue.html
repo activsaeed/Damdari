@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-user-doctor text-danger"></i> صف معاینه روزانه دامپزشک</h2>
+    <span class="badge bg-dark fs-6">{{ today.strftime('%Y-%m-%d') }}</span>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row g-4">
+    <!-- اورژانس -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm border-top border-danger border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-danger"><i class="fa-solid fa-truck-medical"></i> اورژانس (دام‌های بیمار)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for sheep in sick_sheep %}
+                    <li class="list-group-item py-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold fs-5">{{ sheep.ear_tag }}</span>
+                            <span class="badge bg-danger">{{ sheep.pen.name if sheep.pen else 'بهاربند نامشخص' }}</span>
+                        </div>
+                        <div class="d-flex gap-1 mt-2">
+                            <button class="btn btn-sm btn-danger w-50" data-bs-toggle="modal" data-bs-target="#protocolModal{{ sheep.id }}">پروتکل درمانی</button>
+                            <a href="{{ url_for('livestock.mark_healthy', id=sheep.id) }}" class="btn btn-sm btn-success w-50" onclick="return confirm('دام به عنوان سالم ترخیص شود؟')"><i class="fa-solid fa-check"></i> ترخیص</a>
+                        </div>
+                    </li>
+                    
+                    <div class="modal fade" id="protocolModal{{ sheep.id }}" tabindex="-1">
+                        <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger">اعمال پروتکل - پلاک {{ sheep.ear_tag }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                <form action="{{ url_for('livestock.apply_protocol', id=sheep.id) }}" method="POST">
+                                    <div class="modal-body">
+                                        <select name="template_id" class="form-select" required>
+                                            <option value="">انتخاب پروتکل درمانی...</option>
+                                            {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="modal-footer"><button type="submit" class="btn btn-danger w-100">اجرا و خروج از صف</button></div>
+                                </form>
+                            </div></div></div>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">مورد اورژانسی وجود ندارد.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- سررسید داروها -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm border-top border-warning border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-warning text-dark"><i class="fa-solid fa-clock"></i> سررسید واکسن/تکرار دارو</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for med in due_meds %}
+                    <li class="list-group-item py-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold">{{ med.medicine_name }}</span>
+                            <span class="badge bg-secondary">پلاک {{ med.sheep.ear_tag }}</span>
+                        </div>
+                        <a href="{{ url_for('livestock.mark_med_done', med_id=med.id) }}" class="btn btn-sm btn-warning text-dark w-100 fw-bold">ثبت انجام شد <i class="fa-solid fa-check"></i></a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">نوبت دارویی عقب افتاده‌ای نیست.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- چکاپ نوزادان -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm border-top border-info border-3 h-100">
+            <div class="card-header bg-white fw-bold py-3 text-info text-dark"><i class="fa-solid fa-baby"></i> چکاپ نوزادان (زیر ۷ روز)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for sheep in newborns %}
+                    <li class="list-group-item py-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold d-block">پلاک: {{ sheep.ear_tag }}</span>
+                            <small class="text-muted">مادر: {{ sheep.mother.ear_tag if sheep.mother else 'نامشخص' }}</small>
+                        </div>
+                        <a href="{{ url_for('livestock.mark_newborn_checked', id=sheep.id) }}" class="btn btn-sm btn-info text-dark fw-bold">ثبت چکاپ <i class="fa-solid fa-check"></i></a>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center py-4 text-muted">همه نوزادان چکاپ شده‌اند.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

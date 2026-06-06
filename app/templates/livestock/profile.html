@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-address-card text-primary"></i> پرونده دام - {{ sheep.ear_tag }}</h2>
+    <div>
+        <a href="javascript:history.back()" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به لیست</a>
+        <button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editModal"><i class="fa-solid fa-pen"></i> ویرایش اطلاعات</button>
+        <a href="{{ url_for('livestock.public_passport', ear_tag=sheep.ear_tag) }}" target="_blank" class="btn btn-info shadow-sm mx-1 text-dark fw-bold"><i class="fa-solid fa-passport"></i> پاسپورت دیجیتال</a>
+        <a href="{{ url_for('livestock.delete_sheep', id=sheep.id) }}" class="btn btn-danger shadow-sm" onclick="return confirm('آیا از حذف کامل این پرونده از دیتابیس مطمئن هستید؟')"><i class="fa-solid fa-trash"></i> حذف</a>
+    </div>
+</div>
+
+{% if smart_alerts %}
+<div class="alert alert-danger shadow-sm border-0 mb-4">
+    <h6 class="fw-bold"><i class="fa-solid fa-triangle-exclamation"></i> هشدارهای سیستم:</h6>
+    <ul class="mb-0 ps-3">{% for alert in smart_alerts %}<li>{{ alert }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- سایدبار راست -->
+    <div class="col-lg-4">
+        <!-- شناسنامه -->
+        <div class="card shadow-sm border-0 mb-3 border-top border-primary border-3">
+            <div class="card-body text-center">
+                {% if sheep.qr_code_path %}<img src="{{ url_for('static', filename=sheep.qr_code_path) }}" alt="QR" class="img-fluid mb-2 border rounded p-1" style="max-width: 150px;">{% endif %}
+                <h4 class="fw-bold">{{ sheep.ear_tag }} <span class="badge bg-secondary fs-6">{{ sheep.breed or 'نامشخص' }}</span></h4>
+                <div class="badge {% if sheep.status == 'بیمار' %}bg-danger{% elif sheep.status == 'آبستن' %}bg-info text-dark{% elif sheep.status == 'قرنطینه' %}bg-warning text-dark{% else %}bg-success{% endif %} fs-6 mb-3">{{ sheep.status }}</div>
+                
+                <ul class="list-group list-group-flush text-start small">
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-venus-mars w-15px"></i> جنسیت:</span><span class="fw-bold">{{ sheep.gender }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-weight-scale w-15px"></i> وزن فعلی:</span><span class="fw-bold text-success">{{ sheep.weight }} کیلو</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-calendar-day w-15px"></i> تاریخ تولد:</span><span class="fw-bold text-info text-dark">{{ sheep.birth_date|jalali if sheep.birth_date else 'نامشخص' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-hourglass-half w-15px"></i> سن دام:</span><span class="fw-bold text-danger">{% if age_in_months >= 12 %}{{ age_in_months // 12 }} سال و {{ age_in_months % 12 }} ماه{% else %}{{ age_in_months }} ماه{% endif %}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-building w-15px"></i> بهاربند:</span><span class="fw-bold">{{ sheep.pen.name if sheep.pen else 'مشخص نشده' }}</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span class="text-muted"><i class="fa-solid fa-wheat-awn w-15px"></i> جیره فعلی:</span><span class="badge border border-dark text-dark">{{ sheep.ration.name if sheep.ration else 'بدون جیره' }}</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- تحلیل عملکرد -->
+        <!-- کارت تحلیل عملکرد (FCR و سیگنال فروش) -->
+        <div class="card shadow-sm border-0 mb-3 bg-light">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-muted mb-3 border-bottom pb-2"><i class="fa-solid fa-bolt text-success"></i> تحلیل عملکرد و اقتصاد دام</h6>
+                <div class="d-flex justify-content-between mb-2"><span class="small">رشد روزانه (ADG):</span><strong class="{% if adg > 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:.0f}".format(adg) }} گرم/روز</strong></div>
+                <div class="d-flex justify-content-between mb-2"><span class="small" title="هزینه خوراک برای تولید یک کیلوگرم گوشت">بهای هر کیلو رشد (FCR):</span><strong class="text-dark">{{ "{:,.0f}".format(fcr_cost) }} تومان</strong></div>
+                <div class="d-flex justify-content-between mb-2"><span class="small">هزینه کل خوراک:</span><strong class="text-danger">{{ "{:,.0f}".format(estimated_feed_cost) }} تومان</strong></div>
+
+                {% if days_to_target %}
+                <div class="d-flex justify-content-between mb-2"><span class="small">زمان تا هدف ({{ sheep.target_weight }}kg):</span><strong class="text-primary">حدود {{ days_to_target }} روز دیگر</strong></div>
+                {% endif %}
+                
+                {% if next_heat_date %}
+                <div class="d-flex justify-content-between mb-2"><span class="small text-danger">فحلی بعدی (شمسی):</span><strong class="text-danger">{{ next_heat_date|jalali }}</strong></div>
+                {% endif %}
+                
+                {% if sheep.gender == 'میش' %}
+                <hr class="my-2 text-secondary">
+                <h6 class="text-muted fw-bold small"><i class="fa-solid fa-baby-carriage text-info"></i> آمار زایش و چندقلوزایی</h6>
+                <div class="d-flex justify-content-between mb-1"><span class="small">تعداد کل بره‌های متولد شده:</span><strong>{{ total_lambs }} سر</strong></div>
+                <div class="d-flex justify-content-between mb-1"><span class="small">بره‌های زنده (موفق):</span><strong class="text-success">{{ successful_lambs }} سر</strong></div>
+                <div class="d-flex justify-content-between mb-1"><span class="small">مرده‌زایی / سقط:</span><strong class="text-danger">{{ dead_lambs }} سر</strong></div>
+                <div class="d-flex justify-content-between"><span class="small">سوابق چندقلوزایی:</span><strong class="text-primary">{{ twins_count }} بار</strong></div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- شجره نامه -->
+        <div class="card shadow-sm border-0 bg-white border-top border-warning border-3">
+            <div class="card-body p-3 text-center">
+                <h6 class="text-muted mb-2"><i class="fa-solid fa-sitemap text-warning"></i> شجره‌نامه</h6>
+                <div class="d-flex justify-content-around mt-3">
+                    <div><small class="d-block text-muted mb-1">پدر</small>{% if father %}<a href="{{ url_for('livestock.profile', id=father.id) }}" class="badge bg-primary fs-6">{{ father.ear_tag }}</a>{% else %}<span class="badge bg-secondary p-2">نامشخص</span>{% endif %}</div>
+                    <div><small class="d-block text-muted mb-1">مادر</small>{% if mother %}<a href="{{ url_for('livestock.profile', id=mother.id) }}" class="badge bg-danger fs-6">{{ mother.ear_tag }}</a>{% else %}<span class="badge bg-secondary p-2">نامشخص</span>{% endif %}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- تب ها -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                <ul class="nav nav-tabs" id="myTab">
+                    <li class="nav-item"><button class="nav-link active fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#timeline"><i class="fa-solid fa-stream text-primary me-1"></i> خط زندگی</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#growth"><i class="fa-solid fa-scale-unbalanced me-1"></i> وزن</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#health"><i class="fa-solid fa-suitcase-medical me-1"></i> پزشکی (گالری)</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-info text-dark" data-bs-toggle="tab" data-bs-target="#breed"><i class="fa-solid fa-baby me-1"></i> زایش‌ها</button></li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    
+                    <div class="tab-pane fade show active p-3" id="timeline">
+                        <div class="position-relative ms-3 border-start border-2 border-secondary pb-4">
+                            {% for event in timeline_events %}
+                            <div class="mb-4 position-relative ps-4">
+                                <div class="position-absolute bg-{{ event.color }} text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 32px; height: 32px; left: -17px; top: 0;"><i class="fa-solid {{ event.icon }} small"></i></div>
+                                <div class="bg-light p-3 rounded border">
+                                    <div class="d-flex justify-content-between align-items-center mb-1"><h6 class="fw-bold mb-0 text-{{ event.color }}">{{ event.title }}</h6><small class="text-muted fw-bold">{{ event.date|jalali }}</small></div>
+                                    <p class="mb-0 small text-dark">{{ event.desc }}</p>
+                                    
+                                    {% if event.img %}
+                                        <div class="mt-2 d-flex flex-wrap gap-2">
+                                        {% for img in event.img %}
+                                            <a href="{{ url_for('static', filename=img.image_path) }}" target="_blank"><img src="{{ url_for('static', filename=img.image_path) }}" class="img-thumbnail" style="max-height: 80px;"></a>
+                                        {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}<p class="text-muted ms-4">رویدادی ثبت نشده است.</p>{% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade p-3" id="growth">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="text-muted"><i class="fa-solid fa-chart-line text-success"></i> نمودار تغییرات وزن</h5>
+                            <button class="btn btn-sm btn-outline-success fw-bold" data-bs-toggle="modal" data-bs-target="#weightModal"><i class="fa-solid fa-plus"></i> ثبت وزن جدید</button>
+                        </div>
+                        {% if chart_data|length > 0 %}<canvas id="weightChart" height="100"></canvas>{% endif %}
+                    </div>
+                    
+                    <div class="tab-pane fade p-3" id="health">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="text-muted"><i class="fa-solid fa-notes-medical text-danger"></i> سوابق درمان و گالری جراحات</h5>
+                            <button class="btn btn-sm btn-outline-danger fw-bold" data-bs-toggle="modal" data-bs-target="#medicalModal"><i class="fa-solid fa-camera"></i> ثبت درمان و عکس</button>
+                        </div>
+                        {% if medical_history %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center align-middle">
+                                <thead class="table-light"><tr><th>تاریخ (شمسی)</th><th>دارو/اقدام</th><th>توضیحات</th><th>نوبت بعدی</th><th>گالری عکس‌ها</th></tr></thead>
+                                <tbody>
+                                    {% for med in medical_history %}
+                                    <tr>
+                                        <td class="fw-bold text-primary">{{ med.record_date|jalali }}</td><td class="fw-bold">{{ med.medicine_name }}</td>
+                                        <td class="small">{{ med.notes or '-' }}</td>
+                                        <td class="text-danger">{{ med.next_date|jalali if med.next_date else '-' }}</td>
+                                        <td>
+                                            {% if med.photos|length > 0 %}
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-info text-white dropdown-toggle" data-bs-toggle="dropdown"><i class="fa-solid fa-images"></i> ({{ med.photos|length }}) عکس</button>
+                                                <ul class="dropdown-menu">{% for p in med.photos %}<li><a class="dropdown-item" href="{{ url_for('static', filename=p.image_path) }}" target="_blank"><i class="fa-solid fa-image"></i> مشاهده عکس {{ loop.index }}</a></li>{% endfor %}</ul>
+                                            </div>
+                                            {% else %}<span class="text-muted">-</span>{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}<div class="alert alert-light border border-danger text-center">سابقه پزشکی ثبت نشده است.</div>{% endif %}
+                    </div>
+                    
+                    <div class="tab-pane fade p-3" id="breed">
+                        {% if sheep.gender == 'میش' %}
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="text-muted"><i class="fa-solid fa-baby-carriage"></i> آمار و سوابق زایش</h5>
+                            <button class="btn btn-sm btn-outline-info text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#birthModal"><i class="fa-solid fa-plus"></i> ثبت زایش جدید</button>
+                        </div>
+                        
+                        <div class="row g-4">
+                            <!-- بخش نمودار دایره ای چندقلوزایی -->
+                            <div class="col-md-5">
+                                <div class="bg-light p-3 rounded border text-center h-100">
+                                    <h6 class="fw-bold mb-3">نمودار چندقلوزایی</h6>
+                                    {% if birth_history %}
+                                    <canvas id="birthPieChart" style="max-height: 200px;"></canvas>
+                                    {% else %}
+                                    <div class="text-muted py-4">زایشی ثبت نشده است.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- بخش لیست فرزندان -->
+                            <div class="col-md-7">
+                                <div class="bg-light p-3 rounded border h-100">
+                                    <h6 class="fw-bold mb-3 border-bottom pb-2">لیست بره‌های متولد شده (فرزندان)</h6>
+                                    {% if offsprings %}
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for child in offsprings %}
+                                        <a href="{{ url_for('livestock.profile', id=child.id) }}" class="btn btn-sm btn-outline-primary shadow-sm rounded-pill px-3">
+                                            <i class="fa-solid fa-sheep"></i> {{ child.ear_tag }}
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted py-3">هنوز بره‌ای از این میش در گله موجود نیست.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- جدول سوابق -->
+                        <h6 class="fw-bold mt-4 mb-2">تاریخچه ثبت زایش‌ها</h6>
+                        {% if birth_history %}
+                        <table class="table table-bordered table-sm text-center align-middle bg-white">
+                            <thead class="table-light"><tr><th>تاریخ (شمسی)</th><th>تعداد</th><th>وضعیت</th><th>توضیحات</th></tr></thead>
+                            <tbody>{% for b in birth_history %}<tr><td class="fw-bold text-primary">{{ b.birth_date|jalali }}</td><td class="fw-bold text-success">{{ b.lambs_count }} بره</td><td><span class="badge {% if b.status == 'موفق' %}bg-success{% else %}bg-danger{% endif %}">{{ b.status }}</span></td><td class="small">{{ b.notes or '-' }}</td></tr>{% endfor %}</tbody>
+                        </table>
+                        {% endif %}
+                        
+                        {% else %}
+                        <div class="alert alert-warning text-center mt-4">بخش زایش فقط برای "میش" (ماده بالغ) فعال است.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ویرایش اطلاعات (متصل به تنظیمات داینامیک) -->
+<!-- Modal ویرایش اطلاعات کامل -->
+<!-- Modal ویرایش اطلاعات (هوشمند با تضمین کادرهای فروش و مرگ) -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش پروفایل</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('livestock.edit_sheep', id=sheep.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-2"><label>پلاک</label><input type="text" name="ear_tag" class="form-control fw-bold" value="{{ sheep.ear_tag }}" required></div>
+                    <div class="mb-2"><label>نژاد</label><select name="breed" class="form-select"><option value="">نامشخص</option>{% for b in breeds %}<option value="{{ b.name }}" {% if sheep.breed==b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
+                    <div class="mb-2"><label>جنسیت</label><select name="gender" class="form-select"><option value="میش" {% if sheep.gender=='میش' %}selected{% endif %}>میش</option><option value="قوچ" {% if sheep.gender=='قوچ' %}selected{% endif %}>قوچ</option><option value="بره ماده" {% if sheep.gender=='بره ماده' %}selected{% endif %}>بره ماده</option><option value="بره نر" {% if sheep.gender=='بره نر' %}selected{% endif %}>بره نر</option></select></div>
+                    
+                    <div class="mb-2">
+                        <label class="fw-bold text-primary">وضعیت دام</label>
+                        <select name="status" id="statusSelect" class="form-select border-primary" onchange="toggleDynamicFields()">
+                            <!-- وضعیت های داینامیک از تنظیمات -->
+                            {% for s in statuses %}
+                                {% if s.name not in ['فروخته شده', 'تلف شده'] %}
+                                <option value="{{ s.name }}" {% if sheep.status==s.name %}selected{% endif %}>{{ s.name }}</option>
+                                {% endif %}
+                            {% endfor %}
+                            <!-- وضعیت های ثابت سیستمی که هرگز پاک نمیشوند -->
+                            <option value="فروخته شده" {% if sheep.status=='فروخته شده' %}selected{% endif %} class="text-success fw-bold">فروخته شده (انتقال به بایگانی)</option>
+                            <option value="تلف شده" {% if sheep.status=='تلف شده' %}selected{% endif %} class="text-danger fw-bold">تلف شده (انتقال به بایگانی)</option>
+                        </select>
+                    </div>
+
+                    <!-- بخش پنهان شونده (وقتی دام فروخته شود یا بمیرد مخفی میشوند) -->
+                    <div id="livingFieldsDiv">
+                        <div class="mb-2"><label>هدف پرورش</label><select name="purpose" class="form-select"><option value="">نامشخص</option>{% for p in purposes %}<option value="{{ p.name }}" {% if sheep.purpose==p.name %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+                        <div class="mb-2"><label class="text-primary">تعیین وزن هدف (پرواری)</label><input type="number" step="0.1" name="target_weight" class="form-control" value="{{ sheep.target_weight or '' }}"></div>
+                        {% if sheep.gender == 'میش' %}
+                        <div class="mb-2"><label class="text-danger">تاریخ آخرین فحلی (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="last_heat_date" class="gregorian-hidden-field" value="{{ sheep.last_heat_date.strftime('%Y-%m-%d') if sheep.last_heat_date else '' }}"></div>
+                        {% endif %}
+                        <div class="mb-2"><label>تغییر جیره غذایی</label><select name="feed_ration_id" class="form-select"><option value="">بدون جیره تخصصی</option>{% for r in rations %}<option value="{{ r.id }}" {% if sheep.feed_ration_id == r.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+                        <div class="mb-2"><label>تغییر بهاربند</label><select name="pen_id" class="form-select"><option value="">مشخص نشده</option>{% for p in pens %}<option value="{{ p.id }}" {% if sheep.pen_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+                    </div>
+
+                    <!-- فیلدهای مخصوص مرگ -->
+                    <div class="mb-2 p-3 bg-danger bg-opacity-10 border border-danger rounded" id="deathReasonDiv" style="display: none;">
+                        <label class="text-danger fw-bold">علت تلفات</label>
+                        <input type="text" name="death_reason" class="form-control" value="{{ sheep.death_reason or '' }}" placeholder="مثلا: آنتروتوکسمی">
+                    </div>
+
+                    <!-- فیلدهای مخصوص فروش (با قابلیت جداکننده کاما) -->
+                    <div id="saleFieldsDiv" class="p-3 bg-success bg-opacity-10 border border-success rounded mb-2" style="display: none;">
+                        <h6 class="text-success fw-bold"><i class="fa-solid fa-hand-holding-dollar"></i> اطلاعات فروش دام</h6>
+                        <div class="mb-2">
+                            <label>قیمت فروش کل (تومان)</label>
+                            <input type="text" class="form-control" dir="ltr" value="{{ sheep.sale_price or '' }}" onkeyup="formatCurrency(this, 'raw_sale_price')">
+                            <input type="hidden" name="sale_price" id="raw_sale_price" value="{{ sheep.sale_price or '' }}">
+                        </div>
+                        <div class="mb-2"><label>تاریخ فروش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="sale_date" class="gregorian-hidden-field" value="{{ sheep.sale_date.strftime('%Y-%m-%d') if sheep.sale_date else today_str }}"></div>
+                        <div class="mb-2"><label>وزن زمان فروش (کیلو)</label><input type="number" step="0.1" name="sale_weight" class="form-control" value="{{ sheep.weight }}"></div>
+                        <div class="mb-2"><label>نوع خریدار</label>
+                            <select name="buyer_category_id" class="form-select">
+                                {% for bc in buyer_categories %}<option value="{{ bc.id }}" {% if sheep.buyer_category_id==bc.id %}selected{% endif %}>{{ bc.name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">ذخیره تغییرات</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal پزشکی (اتصال به دیتابیس داروها و عکس) -->
+<!-- Modal پزشکی با تقویم شمسی -->
+<div class="modal fade" id="medicalModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-syringe text-danger"></i> ثبت درمان و گالری عکس</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('livestock.add_medical', id=sheep.id) }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="fw-bold">نوع اقدام</label>
+                        <select name="action_type" class="form-select" required><option value="واکسن">واکسن</option><option value="دارو/درمان">دارو/درمان</option><option value="ویزیت">ویزیت</option></select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="fw-bold">نام دارو / اقدام (از لیست تنظیمات)</label>
+                        <input list="medsList" name="medicine_name" class="form-control" required autocomplete="off" placeholder="انتخاب یا تایپ داروی جدید">
+                        <datalist id="medsList">{% for med in medicines %}<option value="{{ med.name }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <label class="fw-bold">تاریخ اقدام (شمسی)</label>
+                            <input type="text" class="form-control jalali-datepicker" placeholder="انتخاب تاریخ">
+                            <input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="text-danger fw-bold">نوبت بعدی (شمسی)</label>
+                            <input type="text" class="form-control jalali-datepicker" placeholder="تکرار نوبت">
+                            <input type="hidden" name="next_date" class="gregorian-hidden-field">
+                        </div>
+                    </div>
+                    <div class="mb-2"><label class="fw-bold">توضیحات تکمیلی</label><input type="text" name="notes" class="form-control" placeholder="دوز، روش تزریق و..."></div>
+                    <div class="mb-2 p-2 bg-light border rounded">
+                        <label class="fw-bold"><i class="fa-solid fa-camera text-secondary"></i> آپلود عکس‌ها (چندین عکس مجاز است)</label>
+                        <input type="file" name="photos" class="form-control mt-1" accept="image/*" multiple>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-danger w-100 fw-bold">ثبت درمان</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ثبت وزن با تقویم شمسی -->
+<!-- Modal ثبت وزن با تقویم شمسی و نمره بدنی (BCS) -->
+<div class="modal fade" id="weightModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-scale-unbalanced text-success"></i> ثبت وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('livestock.add_weight', id=sheep.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="fw-bold">تاریخ وزن‌کشی (شمسی)</label>
+                        <input type="text" class="form-control jalali-datepicker" placeholder="انتخاب تاریخ">
+                        <input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="fw-bold text-success">وزن جدید (کیلوگرم)</label>
+                        <input type="number" step="0.1" name="weight" class="form-control fw-bold text-success text-center fs-4" required>
+                    </div>
+                    <!-- فیلد جدید نمره وضعیت بدنی -->
+                    <div class="mb-3 p-3 bg-light border rounded">
+                        <label class="fw-bold text-primary"><i class="fa-solid fa-hand-pointer"></i> نمره وضعیت بدنی (BCS)</label>
+                        <div class="d-flex justify-content-between text-muted small mt-1"><span>۱ (بسیار لاغر)</span><span>۳ (نرمال)</span><span>۵ (بسیار چاق)</span></div>
+                        <input type="range" class="form-range" name="bcs" min="1" max="5" step="0.5" id="bcsRange" oninput="document.getElementById('bcsVal').innerText=this.value">
+                        <div class="text-center mt-2 fw-bold text-primary">نمره انتخاب شده: <span id="bcsVal" class="fs-5">3</span></div>
+                    </div>
+                    <div class="mb-3"><label class="fw-bold">توضیحات</label><input type="text" name="notes" class="form-control"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ذخیره وزن</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="birthModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-baby text-info"></i> ثبت زایش</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_birth', id=sheep.id) }}" method="POST"><div class="modal-body"><div class="mb-3"><label>تاریخ زایش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}"></div><div class="mb-3"><label>تعداد بره</label><input type="number" name="lambs_count" class="form-control text-center fw-bold" value="1"></div><div class="mb-3"><label>وضعیت</label><select name="status" class="form-select"><option value="موفق">موفق</option><option value="مرده‌زایی">مرده‌زایی</option></select></div><div class="mb-3"><label>توضیحات</label><input type="text" name="notes" class="form-control" placeholder="شرایط زایمان و..."></div></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark w-100 fw-bold">ثبت زایش</button></div></form></div></div></div>
+
+<script>
+    function toggleDynamicFields() {
+        let status = document.getElementById('statusSelect').value;
+        let isDead = (status === 'تلف شده' || status === 'مرده');
+        let isSold = (status === 'فروخته شده');
+        
+        document.getElementById('deathReasonDiv').style.display = isDead ? 'block' : 'none';
+        document.getElementById('saleFieldsDiv').style.display = isSold ? 'block' : 'none';
+        // وقتی مرد یا فروخته شد، هدف و جیره و بهاربند مخفی میشوند!
+        document.getElementById('livingFieldsDiv').style.display = (isDead || isSold) ? 'none' : 'block';
+    }
+    // یک ثانیه تاخیر میدهیم تا مطمئن شویم تقویم شمسی جی کوئری لود شده است
+    setTimeout(toggleDynamicFields, 500); 
+    
+    // کدهای نمودار وزن سر جای خود بماند...
+</script>
+
+<script>
+    // ... سایر کدها
+
+    // نمودار چندقلوزایی
+    {% if sheep.gender == 'میش' and birth_history %}
+    document.addEventListener("DOMContentLoaded", function() {
+        const birthCtx = document.getElementById('birthPieChart');
+        if (birthCtx) {
+            new Chart(birthCtx.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: ['تک‌قلو', 'دوقلو', 'سه‌قلو و بیشتر', 'مرده‌زایی/سقط'],
+                    datasets: [{
+                        data: [{{ birth_stats['تک‌قلو'] }}, {{ birth_stats['دوقلو'] }}, {{ birth_stats['سه‌قلو و بیشتر'] }}, {{ birth_stats['مرده‌زایی/سقط'] }}],
+                        backgroundColor: ['#3498db', '#2ecc71', '#9b59b6', '#e74c3c']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+    });
+    {% endif %}
+</script>
+
+{% if chart_data|length > 0 %}<script>const ctx=document.getElementById('weightChart').getContext('2d');new Chart(ctx,{type:'line',data:{labels:{{ chart_labels | tojson }},datasets:[{label:'وزن',data:{{ chart_data | tojson }},borderColor:'#0d6efd',backgroundColor:'rgba(13,110,253,0.1)',fill:true,borderWidth:3}]},options:{responsive:true,plugins:{legend:{display:false}}}});</script>{% endif %}
+{% endblock %}

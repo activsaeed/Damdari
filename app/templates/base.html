@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت دامداری | Dam2</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* استایل برای منوی فعال */
+        .active-sidebar-link {
+            background-color: rgba(255, 255, 255, 0.15) !important;
+            color: #fff !important;
+            font-weight: bold !important;
+            border-right: 3px solid #f1c40f !important;
+        }
+        /* استایل متمایز برای بخش حسابداری و مالی */
+        .finance-menu-item {
+            background-color: rgba(52, 152, 219, 0.1) !important; /* آبی ملایم */
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .finance-menu-item:hover {
+            background-color: rgba(52, 152, 219, 0.2) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="d-flex" id="wrapper">
+        <div class="sidebar-bg d-flex flex-column" id="sidebar-wrapper">
+            <div class="d-lg-none text-start p-2"><button class="btn btn-sm btn-outline-light border-0" id="close-sidebar"><i class="fa-solid fa-xmark fs-4"></i></button></div>
+            
+            <div class="sidebar-heading text-center pt-3 pb-2 text-white">
+                {% if system_settings.get('farm_logo_path') %}
+                    <img src="{{ url_for('static', filename=system_settings.get('farm_logo_path')) }}" class="mb-2 rounded-circle border border-2 border-light" style="height: 60px; width: 60px; object-fit: cover;">
+                {% else %}
+                    <i class="fa-solid fa-sheep fs-2 mb-2"></i>
+                {% endif %}
+                <div class="fs-5 fw-bold">{{ system_settings.get('farm_name', 'دامداری من') }}</div>
+            </div>
+            
+            <div class="text-center text-warning small mb-2 px-3">
+                <i class="fa-solid fa-calendar-day me-1"></i> <span id="jalali-sidebar-date"></span>
+            </div>
+
+            <!-- سوئیچ واحد پول -->
+            <div class="px-3 mb-2">
+                <a href="{{ url_for('dashboard.toggle_currency') }}" class="btn btn-sm btn-outline-warning w-100 fw-bold shadow-sm">
+                    <i class="fa-solid fa-coins me-1"></i> واحد: {{ current_currency_unit }} (تغییر)
+                </a>
+            </div>
+
+            <div class="text-center text-white-50 mb-3 pb-3 border-bottom border-secondary mx-3">
+                <small><i class="fa-solid fa-circle-user"></i> {% if current_user.is_authenticated %}{{ current_user.name }} ({{ current_user.role }}){% endif %}</small>
+            </div>
+            <div class="list-group list-group-flush my-1" id="sidebar-accordion" style="overflow-y: auto;">
+                
+                <!-- داشبورد اصلی (همه میبینند اما اطلاعات آن در داخل فایل محدود میشود) -->
+                <a href="{{ url_for('dashboard.index') }}" class="list-group-item list-group-item-action bg-transparent text-white {% if request.endpoint == 'dashboard.index' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-gauge me-2"></i> داشبورد</a>
+                
+                <!-- کنترل دسترسی داینامیک -->
+                {% if current_user.is_authenticated %}
+                
+                    {% if current_user.can_view_livestock or current_user.role == 'مدیر' %}
+                    <a href="#livestockSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}active-sidebar-link{% endif %}" {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}aria-expanded="true"{% endif %}><i class="fa-solid fa-horse-head me-2"></i> مدیریت دام</a>
+                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}show{% endif %}" id="livestockSubmenu" data-bs-parent="#sidebar-accordion">
+                        <a href="{{ url_for('livestock.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> مشاهده گله</a>
+                        <a href="{{ url_for('livestock.pen_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.pen_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-house-signal"></i> مانیتورینگ بهاربند (IoT)</a>
+                    </div>
+
+                    <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.genetics'] %}active-sidebar-link{% endif %}"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
+                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.genetics'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
+                        <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه روزانه</a>
+                        <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
+                        <a href="{{ url_for('livestock.genetics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.genetics') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-dna"></i> پیشنهاد جفت‌گیری (AI)</a>
+                    </div>
+                    {% endif %}
+
+                    {% if current_user.can_view_finance or current_user.role == 'مدیر' %}
+                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-wallet me-2"></i> حسابداری و مالی</a>
+                    <div class="collapse ps-3 {% if request.blueprint == 'finance' %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
+                        <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل (نقد/فاکتور)</a>
+                        <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar"></i> مدیریت چک‌ها (اسناد)</a>
+                        <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> تنخواه‌گردان کارگران</a>
+                        <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book"></i> دفتر حساب اشخاص (نسیه)</a>
+                        <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه و سود و زیان</a>
+                        <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات و سامانه مودیان</a>
+                    </div>
+                    {% endif %}
+
+                    {% if current_user.can_view_inventory or current_user.role == 'مدیر' %}
+                    
+                    <a href="#inventorySubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'inventory' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-warehouse me-2"></i> انبار و علوفه</a>
+                    <div class="collapse ps-3 {% if request.blueprint == 'inventory' %}show{% endif %}" id="inventorySubmenu" data-bs-parent="#sidebar-accordion">
+                       <a href="{{ url_for('inventory.smart_ration') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.smart_ration') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calculator"></i> جیره‌نویس هوشمند</a>
+                       <a href="{{ url_for('inventory.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-boxes-stacked"></i> مدیریت موجودی</a>
+                       <a href="{{ url_for('dashboard.feeding_schedule') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('dashboard.feeding_schedule') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-clock"></i> برنامه تغذیه روزانه</a>
+                    </div>
+                    {% endif %}
+
+                    {% if current_user.can_view_hr or current_user.role == 'مدیر' %}
+                    <a href="#hrSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'hr' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-users me-2"></i> منابع انسانی و پرسنل</a>
+                    <div class="collapse ps-3 {% if request.blueprint == 'hr' %}show{% endif %}" id="hrSubmenu" data-bs-parent="#sidebar-accordion">
+                    <a href="{{ url_for('hr.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> پنل وظایف و پروفایل</a>
+                    <a href="{{ url_for('hr.payslips') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.payslips') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice"></i> فیش حقوقی و دستمزد</a>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.can_view_reports or current_user.role == 'مدیر' %}
+                    <a href="#biSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'reports' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-pie me-2"></i> هوش تجاری (BI)</a>
+                    <div class="collapse ps-3 {% if request.blueprint == 'reports' %}show{% endif %}" id="biSubmenu" data-bs-parent="#sidebar-accordion">
+                        <a href="{{ url_for('reports.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-simple"></i> داشبورد تحلیلی کل</a>
+                        <a href="{{ url_for('reports.sales_report') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.sales_report') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> گزارش و تحلیل فروش</a>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.role != 'کارگر' %}
+                    <a href="{{ url_for('dashboard.warnings') }}" class="list-group-item list-group-item-action bg-transparent text-white">
+                    <i class="fa-solid fa-bell me-2"></i> هشدارها 
+                    {% if global_warnings_count and global_warnings_count > 0 %}<span class="badge bg-danger rounded-pill float-end">{{ global_warnings_count }}</span>{% endif %}
+                    </a>
+                    {% endif %}
+                    
+                    {% if current_user.can_view_settings or current_user.role == 'مدیر' %}
+                    <a href="{{ url_for('dashboard.settings') }}" class="list-group-item list-group-item-action bg-transparent text-white"><i class="fa-solid fa-gear me-2"></i> تنظیمات</a>
+                    {% endif %}
+                    <a href="{{ url_for('dashboard.audit_logs') }}" class="list-group-item list-group-item-action bg-transparent text-white"><i class="fa-solid fa-user-secret me-2"></i> لاگ امنیت </a>
+                    {% endif %}
+            </div>
+            
+            <div class="mt-auto p-3 w-100">
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger w-100 shadow-sm"><i class="fa-solid fa-right-from-bracket"></i> خروج</a>
+            </div>
+        </div>
+
+        <div id="page-content-wrapper" class="w-100 bg-light" style="overflow-x: hidden;">
+            <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom d-lg-none px-3">
+                <button class="btn btn-primary" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+                <span class="ms-auto fw-bold text-primary"><i class="fa-solid fa-sheep"></i> دامداری من</span>
+            </nav>
+            <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+        </div>
+        <div id="sidebar-overlay" class="d-none"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- اسکریپت تقویم شمسی -->
+    <script>
+        $(document).ready(function() {
+            $('.jalali-datepicker').each(function() {
+                var $this = $(this);
+                var $hiddenField = $this.parent().find('.gregorian-hidden-field');
+
+                $this.persianDatepicker({
+                    format: 'YYYY-MM-DD',
+                    initialValue: false,
+                    autoClose: true,
+                    toolbox: { calendarSwitch: { enabled: false } },
+                    onSelect: function(unix) {
+                        // تبدیل تاریخ انتخاب شده به میلادی برای ذخیره صحیح در دیتابیس
+                        var gregorianDate = new persianDate(unix).toCalendar('gregorian').format('YYYY-MM-DD');
+                        $hiddenField.val(gregorianDate);
+                    }
+                });
+            });
+            // نمایش تاریخ امروز در سایدبار
+            $('#jalali-sidebar-date').text(new persianDate().format('dddd DD MMMM YYYY'));
+        });
+
+        const persianToEnglishNumbers = str => str.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function() {
+                this.querySelectorAll('input[type="text"], input[type="hidden"]').forEach(input => {
+                    input.value = persianToEnglishNumbers(input.value);
+                });
+            });
+        });
+    </script>
+
+    <script>
+    // فعال سازی تمام Tooltip های راهنما
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    </script>
+
+
+    
+    <!-- ========================================== -->
+    <!-- سیستم دستیار هوشمند هوش مصنوعی (Chatbot UI) -->
+    <!-- ========================================== -->
+    {% if current_user.is_authenticated and current_user.role in ['مدیر', 'دامپزشک'] %}
+    
+    <!-- دکمه شناور پایین صفحه -->
+    <button id="chatbot-btn" class="btn btn-primary rounded-circle shadow-lg d-flex justify-content-center align-items-center" style="position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px; z-index: 1050; transition: transform 0.3s;">
+        <i class="fa-solid fa-robot fa-2x"></i>
+    </button>
+
+    <!-- پنجره چت (مخفی به صورت پیش فرض) -->
+    <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; left: 20px; width: 350px; max-width: 90vw; height: 450px; z-index: 1050; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;">
+        <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center py-3">
+            <span><i class="fa-solid fa-robot"></i> دستیار هوشمند دامداری</span>
+            <button id="chatbot-close" class="btn-close btn-close-white"></button>
+        </div>
+        
+        <div id="chatbot-messages" class="card-body bg-light" style="overflow-y: auto; flex-grow: 1; padding: 15px;">
+            <!-- پیام خوشامدگویی پیش فرض -->
+            <div class="d-flex mb-3">
+                <div class="bg-white p-2 rounded-3 shadow-sm border" style="max-width: 85%; font-size: 0.9rem;">
+                    سلام! من هوش مصنوعی سیستم هستم. چطور می‌تونم کمکت کنم؟ 🐑
+                </div>
+            </div>
+        </div>
+
+        <div class="card-footer bg-white p-2 border-top">
+            <form id="chatbot-form" class="input-group">
+                <input type="text" id="chatbot-input" class="form-control border-0 bg-light" placeholder="سوال خود را بپرسید..." required autocomplete="off" style="box-shadow: none;">
+                <button type="submit" class="btn btn-primary rounded-circle ms-1" style="width: 40px; height: 40px; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const chatBtn = document.getElementById('chatbot-btn');
+        const chatWindow = document.getElementById('chatbot-window');
+        const chatClose = document.getElementById('chatbot-close');
+        const chatForm = document.getElementById('chatbot-form');
+        const chatInput = document.getElementById('chatbot-input');
+        const chatMessages = document.getElementById('chatbot-messages');
+
+        // باز و بسته کردن پنجره چت
+        chatBtn.addEventListener('click', () => {
+            chatWindow.classList.toggle('d-none');
+            if(!chatWindow.classList.contains('d-none')) chatInput.focus();
+        });
+        chatClose.addEventListener('click', () => chatWindow.classList.add('d-none'));
+
+        // ارسال پیام به سرور
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            // نمایش پیام کاربر
+            appendMessage(message, 'user');
+            chatInput.value = '';
+
+            // نمایش تایپینگ ربات
+            const typingId = 'typing-' + Date.now();
+            appendMessage('<i class="fa-solid fa-ellipsis fa-fade"></i> در حال تایپ...', 'bot', typingId);
+
+            // درخواست AJAX
+            fetch("{{ url_for('dashboard.chatbot_api') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('خطای سرور');
+                return res.json();
+            })
+            .then(data => {
+                const typingElem = document.getElementById(typingId);
+                if (typingElem) typingElem.remove();
+
+                if (!data || !data.reply) {
+                    appendMessage('متاسفانه در حال حاضر پاسخی دریافت نکردم. لطفا دوباره امتحان کنید.', 'bot text-warning');
+                    return;
+                }
+                appendMessage(data.reply, 'bot');
+            })
+            .catch(err => {
+                document.getElementById(typingId).remove();
+                appendMessage('خطا در ارتباط با سرور!', 'bot text-danger');
+            });
+        });
+
+        // تابع ساخت حباب پیام در HTML
+        function appendMessage(text, sender, id='') {
+            const div = document.createElement('div');
+            div.className = sender === 'user' ? 'd-flex justify-content-end mb-3' : 'd-flex mb-3';
+            if(id) div.id = id;
+            
+            const bubble = document.createElement('div');
+            bubble.className = sender === 'user' ? 'bg-primary text-white p-2 rounded-3 shadow-sm' : 'bg-white text-dark p-2 rounded-3 shadow-sm border';
+            bubble.style.maxWidth = '85%';
+            bubble.style.fontSize = '0.9rem';
+            bubble.innerHTML = text;
+            
+            div.appendChild(bubble);
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // اسکرول خودکار به پایین
+        }
+    </script>
+    {% endif %}
+
+
+</body>
+</html>

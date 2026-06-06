@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-user-secret text-dark"></i> سیستم حسابرسی و لاگ امنیت (Audit Trail)</h2>
+    <a href="{{ url_for('dashboard.settings') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به تنظیمات</a>
+</div>
+
+<div class="alert alert-dark border-0 shadow-sm mb-4 border-end border-dark border-5">
+    <h6 class="fw-bold"><i class="fa-solid fa-shield-halved"></i> سیستم نظارت نامرئی:</h6>
+    <p class="mb-0 small">این سیستم تمامی تغییرات، ویرایش‌ها و حذف‌هایی که توسط پرسنل (حتی مدیران) در سیستم انجام می‌شود را به همراه تاریخ و آدرس IP ثبت می‌کند. این اطلاعات غیرقابل حذف هستند.</p>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark" style="position: sticky; top: 0; z-index: 1;">
+                    <tr>
+                        <th>ردیف</th>
+                        <th>کاربر انجام‌دهنده</th>
+                        <th>شرح عملیات / تغییرات</th>
+                        <th>تاریخ و زمان (سیستم)</th>
+                        <th>آدرس IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td class="fw-bold text-primary"><i class="fa-solid fa-user-tie"></i> {{ log.user_name }}</td>
+                        <td class="text-start">{{ log.action }}</td>
+                        <td dir="ltr" class="text-muted small fw-bold">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td dir="ltr" class="small">{{ log.ip_address or 'Localhost' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-5 text-muted">هنوز هیچ لاگ امنیتی در سیستم ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

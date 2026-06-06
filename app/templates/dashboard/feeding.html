@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-wheat-awn text-warning"></i> برنامه‌ریزی و زمانبندی تغذیه روزانه</h2>
+    <button class="btn btn-warning shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addScheduleModal"><i class="fa-solid fa-plus"></i> ثبت برنامه جدید</button>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row g-4">
+    {% for ration in rations %}
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-success border-3">
+            <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <span class="text-success"><i class="fa-solid fa-clipboard-list"></i> جیره: {{ ration.name }}</span>
+                <span class="badge bg-light text-dark border">{{ "{:,.0f}".format(ration.daily_cost) }} تومان/روز</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center mb-0">
+                        <thead class="table-light"><tr><th>زمان وعده</th><th>نوع خوراک</th><th>مقدار (کیلوگرم)</th><th>حذف</th></tr></thead>
+                        <tbody>
+                            {% for schedule in ration.schedules %}
+                            <tr>
+                                <td class="fw-bold 
+                                    {% if schedule.time_of_day == 'صبح' %}text-primary
+                                    {% elif schedule.time_of_day == 'ظهر' %}text-warning text-dark
+                                    {% else %}text-secondary{% endif %}">
+                                    <i class="fa-solid fa-clock"></i> {{ schedule.time_of_day }}
+                                </td>
+                                <td class="fw-bold">{{ schedule.feed_type }}</td>
+                                <td class="text-success fw-bold">{{ schedule.amount_kg }} kg</td>
+                                <td><a href="{{ url_for('dashboard.delete_setting', type='schedule', id=schedule.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-muted py-4">برنامه تغذیه‌ای برای این جیره ثبت نشده است.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12"><div class="alert alert-warning text-center">ابتدا باید در بخش تنظیمات، یک جیره غذایی تعریف کنید.</div></div>
+    {% endfor %}
+</div>
+
+<!-- Modal ثبت زمانبندی جدید -->
+<div class="modal fade" id="addScheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-clock text-warning"></i> تعریف برنامه تغذیه</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('dashboard.settings') }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="add_schedule">
+                    <div class="mb-3">
+                        <label class="form-label">انتخاب جیره</label>
+                        <select name="feed_ration_id" class="form-select" required>
+                            {% for r in rations %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">وعده غذایی</label>
+                        <select name="time_of_day" class="form-select" required>
+                            <option value="صبح">صبح</option><option value="ظهر">ظهر</option><option value="عصر/شب">عصر / شب</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">نوع خوراک (یونجه، جو، کنسانتره...)</label>
+                        <input type="text" name="feed_type" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-success fw-bold">مقدار مصرف در این وعده (کیلوگرم)</label>
+                        <input type="number" step="0.1" name="amount_kg" class="form-control text-center fs-5" required>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">ذخیره برنامه</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

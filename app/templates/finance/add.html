@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>ثبت تراکنش مالی جدید</h2>
+    <a href="{{ url_for('finance.index') }}" class="btn btn-secondary shadow-sm">
+        <i class="fa-solid fa-arrow-right"></i> بازگشت به دفتر کل
+    </a>
+</div>
+
+<div class="card shadow-sm border-0 col-lg-8 mx-auto bg-white">
+    <div class="card-body p-4">
+        <form action="{{ url_for('finance.add_transaction') }}" method="POST" enctype="multipart/form-data">
+            
+            <div class="row g-4 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-primary">نوع تراکنش</label>
+                    <div class="d-flex gap-3 mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="t_type" id="typeIncome" value="درآمد" checked onchange="updateCategories()">
+                            <label class="form-check-label text-success fw-bold" for="typeIncome">درآمد (ورود پول)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="t_type" id="typeExpense" value="هزینه" onchange="updateCategories()">
+                            <label class="form-check-label text-danger fw-bold" for="typeExpense">هزینه (خروج پول)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">مبلغ کل ({{ current_currency_unit }})</label>
+                    <input type="text" class="form-control form-control-lg text-start fw-bold text-primary" dir="ltr" placeholder="مثال: 5,000,000" onkeyup="formatCurrency(this)" required>
+                    <input type="hidden" id="raw_amount" name="amount" required>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">دسته‌بندی (امکان تایپ جدید)</label>
+                    <input list="categoryList" name="category" id="categoryInput" class="form-control" autocomplete="off" placeholder="انتخاب یا تایپ دسته..." required>
+                    <datalist id="categoryList"></datalist>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-dark">طرف حساب (انتخاب از دفتر یا تایپ جدید)</label>
+                    <select name="contact_id" class="form-select mb-2">
+                        <option value="">-- شخص متفرقه (بدون ثبت در دفتر) --</option>
+                        {% for c in contacts %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" name="party_name" class="form-control" placeholder="یا نام شخص جدید را اینجا بنویسید...">
+                </div>
+            </div>
+            
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">شماره فاکتور / رسید</label>
+                    <input type="text" name="invoice_number" class="form-control" placeholder="مثال: 1024, 1025">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">تاریخ (شمسی)</label>
+                    <input type="text" class="form-control jalali-datepicker">
+                    <input type="hidden" name="t_date" class="gregorian-hidden-field" value="{{ today_str }}">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-bold">توضیحات (شرح تراکنش)</label>
+                <textarea name="description" class="form-control" rows="2" placeholder="جزئیات این تراکنش را اینجا بنویسید..."></textarea>
+            </div>
+            
+            <div class="mb-4 p-3 bg-light border rounded">
+                <label class="form-label fw-bold"><i class="fa-solid fa-images text-secondary"></i> ضمیمه کردن اسناد و فاکتورها</label>
+                <input type="file" name="documents" class="form-control mt-2" accept="image/*,.pdf" multiple>
+                <small class="text-muted mt-2 d-block">می‌توانید چندین عکس یا فایل PDF را همزمان انتخاب و آپلود کنید.</small>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg shadow-sm fw-bold"><i class="fa-solid fa-save"></i> ثبت در سیستم حسابداری</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const incCats = [{% for c in income_cats %}"{{ c.name }}",{% endfor %}];
+    const expCats = [{% for c in expense_cats %}"{{ c.name }}",{% endfor %}];
+
+    function updateCategories() {
+        const datalist = document.getElementById("categoryList");
+        const input = document.getElementById("categoryInput");
+        const isIncome = document.getElementById("typeIncome").checked;
+        const categories = isIncome ? incCats : expCats;
+        datalist.innerHTML = ""; input.value = "";
+        categories.forEach(cat => {
+            const option = document.createElement("option");
+            option.value = cat;
+            datalist.appendChild(option);
+        });
+    }
+
+    function formatCurrency(input) {
+        let value = input.value.replace(/\D/g, "");
+        document.getElementById('raw_amount').value = value;
+        if (value) input.value = Number(value).toLocaleString('en-US');
+        else input.value = "";
+    }
+    window.onload = updateCategories;
+</script>
+{% endblock %}

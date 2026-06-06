@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold"><i class="fa-solid fa-address-book text-info"></i> مدیریت حساب اشخاص</h2>
+    <button class="btn btn-info fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#addContactModal"><i class="fa-solid fa-plus"></i> ثبت شخص جدید</button>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6"><div class="card bg-danger text-white border-0 shadow-sm"><div class="card-body"><h6>مجموع بدهی ما به بازار:</h6><h3 class="fw-bold">{{ total_debt|abs|currency }}</h3></div></div></div>
+    <div class="col-md-6"><div class="card bg-success text-white border-0 shadow-sm"><div class="card-body"><h6>مجموع طلب ما از بازار:</h6><h3 class="fw-bold">{{ total_credit|currency }}</h3></div></div></div>
+</div>
+
+<!-- نوار فیلتر و جستجو -->
+<div class="card border-0 shadow-sm mb-4 bg-white">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('finance.contacts') }}" class="row g-2">
+            <div class="col-md-7">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" name="search" class="form-control border-0 bg-light" placeholder="جستجو نام، تلفن یا کد اقتصادی..." value="{{ current_search }}">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select name="type" class="form-select border-0 bg-light">
+                    <option value="همه">همه دسته‌ها</option>
+                    <option value="عمومی" {% if current_type == 'عمومی' %}selected{% endif %}>عمومی</option>
+                    <option value="مشتری (خریدار دام/شیر)" {% if current_type == 'مشتری (خریدار دام/شیر)' %}selected{% endif %}>مشتریان</option>
+                    <option value="تامین‌کننده (خوراک/دارو)" {% if current_type == 'تامین‌کننده (خوراک/دارو)' %}selected{% endif %}>تامین‌کنندگان</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-dark w-100 fw-bold">فیلتر</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle text-center mb-0">
+            <thead class="table-light"><tr><th>نام شخص / شرکت</th><th>تماس</th><th>نوع</th><th>تراز مالی (مانده)</th><th>کد اقتصادی</th><th>عملیات</th></tr></thead>
+            <tbody>
+                {% for c in contacts %}
+                <tr>
+                    <td class="fw-bold">{{ c.name }}</td>
+                    <td dir="ltr">
+                        {{ c.phone or '-' }}
+                        {% if c.phone %}
+                        <a href="https://wa.me/98{{ c.phone[1:] }}" target="_blank" class="text-success ms-1" title="ارسال پیام واتس‌اپ"><i class="fa-brands fa-whatsapp"></i></a>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ c.contact_type }}</span></td>
+                    <td class="fw-bold {% if c.balance > 0 %}text-success{% elif c.balance < 0 %}text-danger{% else %}text-muted{% endif %}" dir="ltr">
+                        {% if c.balance > 0 %}{{ c.balance|currency }} (بدهکار به ما)
+                        {% elif c.balance < 0 %}{{ c.balance|abs|currency }} (طلبکار از ما)
+                        {% else %}تسویه صفر{% endif %}
+                    </td>
+                    <td><code class="small text-muted">{{ c.economic_code or '-' }}</code></td>
+                    <td>
+                        <div class="btn-group">
+                            <a href="{{ url_for('finance.contact_profile', id=c.id) }}" class="btn btn-sm btn-outline-info fw-bold">ریزحساب</a>
+                            <a href="{{ url_for('finance.contact_profile', id=c.id, _anchor='actions') }}" class="btn btn-sm btn-info text-dark fw-bold">واریز/دریافت</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="py-5 text-muted">شخصی با این مشخصات یافت نشد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="addContactModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت شخص جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('finance.add_contact') }}" method="POST"><div class="modal-body"><input type="text" name="name" class="form-control mb-2" required placeholder="نام شخص یا شرکت"><input type="text" name="phone" class="form-control mb-2" placeholder="شماره تماس"><select name="contact_type" class="form-select mb-2"><option value="عمومی">عمومی</option><option value="مشتری (خریدار دام/شیر)">مشتری</option><option value="تامین‌کننده (خوراک/دارو)">تامین‌کننده</option></select><hr><label class="form-label text-muted small">مانده حساب اولیه (اگر از قبل حسابی دارید):</label><input type="number" name="balance" class="form-control mb-2" placeholder="مبلغ به تومان"><select name="balance_type" class="form-select"><option value="طلبکاریم">ما از ایشان طلبکاریم (+)</option><option value="بدهکاریم">ما به ایشان بدهکاریم (-)</option></select></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark w-100 fw-bold">ذخیره</button></div></form></div></div></div>
+{% endblock %}

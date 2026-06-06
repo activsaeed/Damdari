@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>ثبت گوسفند جدید</h2>
+    <a href="{{ url_for('livestock.index') }}" class="btn btn-secondary shadow-sm">
+        <i class="fa-solid fa-arrow-right"></i> بازگشت به لیست
+    </a>
+</div>
+
+<div class="card shadow-sm border-0 col-lg-8 mx-auto">
+    <div class="card-body p-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} shadow-sm fw-bold my-3"><i class="fa-solid fa-circle-exclamation"></i> {{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <form action="{{ url_for('livestock.add_sheep') }}" method="POST">
+            
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">شماره گوش (پلاک)</label>
+                    <input type="text" name="ear_tag" class="form-control" required placeholder="مثال: 1403-1024">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">نژاد <small class="text-muted">(از منوی تنظیمات)</small></label>
+                    <select name="breed" class="form-select">
+                        {% for b in breeds %}
+                        <option value="{{ b.name }}">{{ b.name }}</option>
+                        {% else %}
+                        <option value="">ابتدا در تنظیمات نژاد تعریف کنید</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">جنسیت</label>
+                    <select name="gender" class="form-select">
+                        <option value="میش">میش (ماده بالغ)</option>
+                        <option value="قوچ">قوچ (نر بالغ)</option>
+                        <option value="بره ماده">بره ماده</option>
+                        <option value="بره نر">بره نر</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">وزن فعلی (کیلوگرم)</label>
+                    <input type="number" step="0.1" name="weight" class="form-control" placeholder="مثال: 45.5">
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">تاریخ تولد / ورود (میلادی)</label>
+                    <input type="text" class="form-control jalali-datepicker" placeholder="انتخاب تاریخ">
+                    <input type="hidden" name="birth_date" class="gregorian-hidden-field">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">هدف از نگهداری</label>
+                    <select name="purpose" class="form-select">
+                        {% for p in purposes %}
+                        <option value="{{ p.name }}">{{ p.name }}</option>
+                        {% else %}
+                        <option value="">ابتدا در تنظیمات هدف تعریف کنید</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">وضعیت فعلی</label>
+                    <select name="status" class="form-select">
+                        {% for s in statuses %}
+                        <option value="{{ s.name }}">{{ s.name }}</option>
+                        {% else %}
+                        <option value="زنده و سالم">زنده و سالم</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4 border-top pt-3 mt-1">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold text-success">قیمت خرید (تومان)</label>
+                    <input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_purchase_price')" placeholder="مثال: 5,000,000">
+                    <input type="hidden" name="purchase_price" id="raw_purchase_price">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold text-warning text-dark">بهاربند / سالن</label>
+                    <select name="pen_id" class="form-select">
+                        <option value="">مشخص نشده</option>
+                        {% for p in pens %}
+                        <option value="{{ p.id }}">{{ p.name }} (ظرفیت: {{ p.capacity }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold text-info text-dark">تخصیص جیره غذایی</label>
+                    <select name="feed_ration_id" class="form-select">
+                        <option value="">بدون جیره تخصصی</option>
+                        {% for r in rations %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success btn-lg shadow-sm">
+                    <i class="fa-solid fa-save"></i> ذخیره اطلاعات و صدور شناسنامه
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(input, hiddenFieldId) { 
+        let value = input.value.replace(/\D/g, ""); 
+        document.getElementById(hiddenFieldId).value = value; 
+        if (value) input.value = Number(value).toLocaleString('en-US'); 
+        else input.value = ""; 
+    }
+</script>
+
+{% endblock %}

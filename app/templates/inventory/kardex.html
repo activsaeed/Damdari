@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-rectangle-list text-info"></i> کاردکس انبار: {{ item.name }}</h2>
+    <a href="{{ url_for('inventory.index') }}" class="btn btn-secondary shadow-sm">بازگشت به انبار</a>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card bg-dark text-white border-0 shadow-sm p-3 text-center">
+            <small class="opacity-75">موجودی فعلی سیستم</small>
+            <h3 class="fw-bold mb-0">{{ "{:,.1f}".format(item.quantity) }} {{ item.unit.name if item.unit else '' }}</h3>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-info text-white border-0 shadow-sm p-3 text-center">
+            <small class="opacity-75">میانگین قیمت خرید (موزون)</small>
+            <h3 class="fw-bold mb-0">{{ "{:,.0f}".format(item.unit_price) }} تومان</h3>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-success text-white border-0 shadow-sm p-3 text-center">
+            <small class="opacity-75">ارزش دفتری کل موجودی</small>
+            <h3 class="fw-bold mb-0">{{ "{:,.0f}".format(item.quantity * item.unit_price) }} تومان</h3>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover text-center align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>تاریخ و زمان</th>
+                    <th>نوع عملیات</th>
+                    <th>مقدار ورودی / خروجی</th>
+                    <th>قیمت واحد تراکنش</th>
+                    <th>مانده در انبار</th>
+                    <th>توضیحات / یادداشت</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in kardex %}
+                <tr>
+                    <td class="small fw-bold text-muted">{{ row.log.date|jalali }}</td>
+                    <td><span class="badge {% if row.log.action_type == 'ورود' %}bg-success{% else %}bg-danger{% endif %}">{{ row.log.action_type }}</span></td>
+                    <td class="fw-bold">{{ row.log.amount }}</td>
+                    <td class="text-success">{{ "{:,.0f}".format(row.log.transaction_price) }}</td>
+                    <td class="bg-light fw-bold text-primary">{{ row.balance }}</td>
+                    <td class="small text-muted text-start">{{ row.log.notes or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

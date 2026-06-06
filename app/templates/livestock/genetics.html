@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-dna text-danger"></i> هوش مصنوعی ژنتیک و پیشنهاد جفت‌گیری</h2>
+    <a href="{{ url_for('livestock.index') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت</a>
+</div>
+
+<div class="alert alert-info border-0 shadow-sm mb-4 border-end border-info border-5">
+    <h6 class="fw-bold"><i class="fa-solid fa-robot"></i> الگوریتم Mating Suggestions:</h6>
+    <p class="mb-0 small">این الگوریتم با بررسی دقیق شجره‌نامه‌ها، سوابق چندقلوزایی قوچ‌ها و زایش‌های موفق میش‌ها، برترین ژن‌های گله شما را استخراج می‌کند. برای دستیابی به <b>گله‌ای با دوقلوزایی بالا و رشد سریع (Super Breed)</b>، سیستم پیشنهاد می‌کند این قوچ‌ها را با این میش‌ها جفت‌گیری کنید.</p>
+</div>
+
+<div class="row g-4">
+    <!-- برترین قوچ ها (Super Rams) -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-success border-4">
+            <div class="card-header bg-white fw-bold py-3 text-success"><i class="fa-solid fa-mars"></i> ۵ قوچ برتر گله (نرخ چندقلوزایی بالا)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for item in top_rams %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ item.ram.ear_tag }} <span class="badge bg-dark fs-6 ms-2">{{ item.ram.breed or 'نامشخص' }}</span></h5>
+                            <small class="text-muted"><i class="fa-solid fa-baby"></i> تعداد کل فرزندان: {{ item.offsprings }} سر</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-success rounded-pill px-3 py-2 mb-1">تولید دوقلو: {{ item.twins }} بار</span><br>
+                            <a href="{{ url_for('livestock.profile', id=item.ram.id) }}" class="btn btn-sm btn-outline-success w-100">بررسی ژنتیک</a>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted py-5">هنوز دیتای کافی برای تحلیل ژنتیک قوچ‌ها ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- برترین میش ها (Super Ewes) -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-primary border-4">
+            <div class="card-header bg-white fw-bold py-3 text-primary"><i class="fa-solid fa-venus"></i> ۵ میش برتر گله (بالاترین زایش موفق)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for item in top_ewes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ item.ewe.ear_tag }} <span class="badge bg-dark fs-6 ms-2">{{ item.ewe.breed or 'نامشخص' }}</span></h5>
+                            <small class="text-muted"><i class="fa-solid fa-check-circle text-success"></i> زایش‌های موفق: {{ item.successful_births }} بار</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-info text-dark rounded-pill px-3 py-2 mb-1">سن: {{ ((today_str|default(''))[:4]) }}</span><br>
+                            <a href="{{ url_for('livestock.profile', id=item.ewe.id) }}" class="btn btn-sm btn-outline-primary w-100">بررسی پرونده</a>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted py-5">هنوز دیتای کافی برای تحلیل میش‌ها ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
