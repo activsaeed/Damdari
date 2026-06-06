@@ -176,7 +176,7 @@ def index():
         }
 
     # 6. بهای تمام شده پیشرفته - استفاده از SQL
-    dep_acc_ids = db.session.query(Account.id).filter(Account.code.in_(['5102', '5101'])).all()
+    dep_acc_ids = db.session.query(Account.id).filter(Account.code.in_(['5010'])).all()
     dep_acc_ids = [a[0] for a in dep_acc_ids] if dep_acc_ids else []
     total_depreciation = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
@@ -222,10 +222,10 @@ def index():
 
     # 6.2. دیتای نمودار دایره‌ای سود (عملیاتی vs ارزیابی)
     valuation_gain = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
-        Account.code == '4101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
+        Account.code == '4010', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
     ).scalar() or 0.0
     valuation_loss = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
-        Account.code == '5101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
+        Account.code == '5010', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
     ).scalar() or 0.0
     
     total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0.0
@@ -237,17 +237,22 @@ def index():
 
     # 6.3. روند تغییر ارزش منصفانه گله (۶ ماه اخیر)
     trend_labels, trend_values = [], []
+    livestock_acc = Account.query.filter_by(code='1200').first()
+
     for i in range(5, -1, -1):
         m_date = today - timedelta(days=i*30)
         j_month = jdatetime.date.fromgregorian(date=m_date).strftime('%B')
         trend_labels.append(j_month)
         
-        # استخراج ارزش گله در انتهای هر ماه از حساب ۱۲۰۲
-        v_debits = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
-            JournalEntryLine.account_id == Account.query.filter_by(code='1202').first().id, JournalEntry.date <= m_date).scalar() or 0
-        v_credits = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).filter(
-            JournalEntryLine.account_id == Account.query.filter_by(code='1202').first().id, JournalEntry.date <= m_date).scalar() or 0
-        trend_values.append(v_debits - v_credits)
+        if livestock_acc:
+            # استخراج ارزش گله در انتهای هر ماه از حساب ۱۲۰۰
+            v_debits = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
+                JournalEntryLine.account_id == livestock_acc.id, JournalEntry.date <= m_date).scalar() or 0
+            v_credits = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).filter(
+                JournalEntryLine.account_id == livestock_acc.id, JournalEntry.date <= m_date).scalar() or 0
+            trend_values.append(v_debits - v_credits)
+        else:
+            trend_values.append(0)
 
     # 6.4. گزارش سود و زیان مقایسه‌ای ماهانه (۶ ماه اخیر)
     monthly_pnl_labels, monthly_pnl_rev, monthly_pnl_exp = [], [], []
@@ -315,7 +320,7 @@ def index():
     ins_trend_labels, ins_trend_values = [], []
 
     # دریافت ID حساب بیمه پرداختنی
-    insurance_account = Account.query.filter_by(code='2101').first()
+    insurance_account = Account.query.filter_by(code='2010').first()
     insurance_account_id = insurance_account.id if insurance_account else None
 
     if insurance_account_id:
@@ -452,7 +457,7 @@ def index():
     pen_risks_stats = db.session.query(
         Pen.name,
         func.count(Sheep.id).label('total_in_pen'),
-        func.sum(cast(case([(Sheep.status == 'بیمار', 1)], else_=0), db.Integer)).label('sick_count')
+        func.sum(cast(case((Sheep.status == 'بیمار', 1), else_=0), db.Integer)).label('sick_count')
     ).outerjoin(Sheep, Pen.id == Sheep.pen_id).group_by(Pen.id, Pen.name).all()
 
     pen_risks = []
