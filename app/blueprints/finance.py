@@ -63,6 +63,7 @@ def parse_smart_date(date_str, default_val=None):
 # دفتر کل (فاکتورها)
 # ==========================================
 @finance_bp.route('/')
+@login_required
 def index():
     page = request.args.get('page', 1, type=int)
     
@@ -83,25 +84,26 @@ def index():
         )
     
     if date_from_q:
-        date_obj = datetime.strptime(date_from_q, '%Y-%m-%d').date()
-        query = query.filter(Transaction.t_date >= date_obj)
+        try:
+            date_obj = datetime.strptime(date_from_q, '%Y-%m-%d').date()
+            query = query.filter(Transaction.t_date >= date_obj)
+        except ValueError:
+            pass
         
     if date_to_q:
-        date_obj = datetime.strptime(date_to_q, '%Y-%m-%d').date()
-        query = query.filter(Transaction.t_date <= date_obj)
+        try:
+            date_obj = datetime.strptime(date_to_q, '%Y-%m-%d').date()
+            query = query.filter(Transaction.t_date <= date_obj)
+        except ValueError:
+            pass
         
     if starred_q == '1':
         query = query.filter(Transaction.is_starred == True)
 
     # بهینه‌سازی آمار: استفاده از ساب‌کوئری برای سرعت بیشتر در دیتای حجیم
-    stats_query = db.session.query(
-        func.sum(case((Transaction.t_type == 'درآمد', Transaction.amount), else_=0)).label('income'),
-        func.sum(case((Transaction.t_type == 'هزینه', Transaction.amount), else_=0)).label('expense')
-    ).filter(Transaction.id.in_(query.with_entities(Transaction.id)))
-    
-    stats = stats_query.first()
-    total_income = stats.income or 0
-    total_expense = stats.expense or 0
+    tx_ids = query.with_entities(Transaction.id).subquery()
+    total_income = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar() or 0
+    total_expense = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar() or 0
     net_profit = total_income - total_expense
     
     # صفحه‌بندی بر اساس تنظیمات مدیر
@@ -116,10 +118,18 @@ def index():
                            show_archived=show_archived)
 
 @finance_bp.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_transaction():
     if request.method == 'POST':
         t_type = request.form.get('t_type')
-        category_name = request.form.get('category').strip()
+        if t_type not in ['درآمد', 'هزینه']:
+            flash('نوع تراکنش نامعتبر است.', 'danger')
+            return redirect(request.referrer)
+        category_name = request.form.get('category')
+        if not category_name or not category_name.strip():
+            flash('دسته‌بندی تراکنش الزامی است.', 'danger')
+            return redirect(request.referrer)
+        category_name = category_name.strip()
         raw_amount = request.form.get('amount', '0')
         invoice_number = request.form.get('invoice_number')
         description = request.form.get('description')
@@ -149,12 +159,12 @@ def add_transaction():
                 db.session.add(linked_contact)
                 db.session.flush() # دریافت ID
 
-        # به‌روزرسانی تراز مالی شخص
+        # به‌روزرسانی تراز مالی شخص (atomic update)
         if linked_contact:
             if t_type == 'درآمد':
-                linked_contact.balance += amount_val # طلب ما از شخص زیاد شد
+                db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance + amount_val})
             else:
-                linked_contact.balance -= amount_val # بدهی ما به شخص زیاد شد
+                db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance - amount_val})
 
         new_transaction = Transaction(
             t_type=t_type, category=category_name, amount=amount_val,
@@ -163,8 +173,6 @@ def add_transaction():
             contact_id=linked_contact.id if linked_contact else None
         )
         db.session.add(new_transaction)
-        db.session.commit()
-
         try:
             if t_type == 'درآمد':
                 AccountingEngine.record_sale(new_transaction, include_vat=True)
@@ -172,7 +180,9 @@ def add_transaction():
                 AccountingEngine.record_expense(new_transaction, include_vat=True)
             db.session.commit()
         except Exception as e:
-            print("خطا در صدور سند حسابداری:", e)
+            db.session.rollback()
+            flash(f'خطا در صدور سند حسابداری: {str(e)}', 'danger')
+            return redirect(url_for('finance.index'))
         
         documents = request.files.getlist('documents')
         upload_folder = os.path.join('app', 'static', 'uploads', 'documents')
@@ -193,14 +203,16 @@ def add_transaction():
     today_str = datetime.now(UTC).strftime('%Y-%m-%d')
     return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, contacts=all_contacts, today_str=today_str)
 
-@finance_bp.route('/toggle_star_tx/<int:id>')
+@finance_bp.route('/toggle_star_tx/<int:id>', methods=['POST'])
+@login_required
 def toggle_star_tx(id):
     tx = Transaction.query.get_or_404(id)
     tx.is_starred = not tx.is_starred
     db.session.commit()
     return jsonify({'success': True, 'is_starred': tx.is_starred})
 
-@finance_bp.route('/archive_tx/<int:id>')
+@finance_bp.route('/archive_tx/<int:id>', methods=['POST'])
+@login_required
 def archive_tx(id):
     tx = Transaction.query.get_or_404(id)
     tx.is_archived = True
@@ -208,7 +220,8 @@ def archive_tx(id):
     flash('فاکتور بایگانی شد و دیگر در محاسبات روزمره لحاظ نمی‌شود.', 'warning')
     return redirect(request.referrer)
 
-@finance_bp.route('/delete_tx/<int:id>')
+@finance_bp.route('/delete_tx/<int:id>', methods=['POST'])
+@login_required
 def delete_tx(id):
     tx = Transaction.query.get_or_404(id)
     db.session.delete(tx)
@@ -217,6 +230,7 @@ def delete_tx(id):
     return redirect(request.referrer)
 
 @finance_bp.route('/export_tx')
+@login_required
 def export_tx():
     search_q = request.args.get('search', '')
     date_from_q = request.args.get('date_from')
@@ -244,6 +258,7 @@ def export_tx():
     return response
 
 @finance_bp.route('/export_cheques')
+@login_required
 def export_cheques():
     search_q = request.args.get('search', '').strip()
     type_q = request.args.get('type', 'همه')
@@ -251,7 +266,7 @@ def export_cheques():
     starred_q = request.args.get('starred')
     
     query = Cheque.query
-    if search_q: query = query.filter((Cheque.cheque_number.endswith(search_q)) | (Cheque.issuer_national_id == search_q))
+    if search_q: query = query.filter((Cheque.cheque_number.contains(search_q)) | (Cheque.issuer_national_id.contains(search_q)) | (Cheque.issuer_name.contains(search_q)))
     if type_q != 'همه': query = query.filter(Cheque.cheque_type == type_q)
     if status_q != 'همه': query = query.filter(Cheque.status == status_q)
     if starred_q == '1': query = query.filter(Cheque.is_starred == True)
@@ -271,6 +286,7 @@ def export_cheques():
     return response
 
 @finance_bp.route('/print_tx')
+@login_required
 def print_tx():
     search_q = request.args.get('search', '')
     date_from_q = request.args.get('date_from')
@@ -290,6 +306,7 @@ def print_tx():
     return render_template('finance/print_tx.html', transactions=transactions, today_date=today_date)
 
 @finance_bp.route('/print_cheques')
+@login_required
 def print_cheques():
     search_q = request.args.get('search', '').strip()
     type_q = request.args.get('type', 'همه')
@@ -297,7 +314,7 @@ def print_cheques():
     starred_q = request.args.get('starred')
     
     query = Cheque.query
-    if search_q: query = query.filter((Cheque.cheque_number.endswith(search_q)) | (Cheque.issuer_national_id == search_q))
+    if search_q: query = query.filter((Cheque.cheque_number.contains(search_q)) | (Cheque.issuer_national_id.contains(search_q)) | (Cheque.issuer_name.contains(search_q)))
     if type_q != 'همه': query = query.filter(Cheque.cheque_type == type_q)
     if status_q != 'همه': query = query.filter(Cheque.status == status_q)
     if starred_q == '1': query = query.filter(Cheque.is_starred == True)
@@ -312,6 +329,7 @@ def print_cheques():
 # مدیریت چک ها
 # ==========================================
 @finance_bp.route('/cheques')
+@login_required
 def cheques():
     page = request.args.get('page', 1, type=int)
     search_q = request.args.get('search', '').strip()
@@ -320,7 +338,7 @@ def cheques():
     starred_q = request.args.get('starred')
     
     query = Cheque.query
-    if search_q: query = query.filter((Cheque.cheque_number.endswith(search_q)) | (Cheque.issuer_national_id == search_q))
+    if search_q: query = query.filter((Cheque.cheque_number.contains(search_q)) | (Cheque.issuer_national_id.contains(search_q)) | (Cheque.issuer_name.contains(search_q)))
     if type_q != 'همه': query = query.filter(Cheque.cheque_type == type_q)
     if status_q != 'همه': query = query.filter(Cheque.status == status_q)
     if starred_q == '1': query = query.filter(Cheque.is_starred == True)
@@ -350,6 +368,7 @@ def cheques():
 
 # تابع جدید برای ویرایش چک
 @finance_bp.route('/edit_cheque/<int:id>', methods=['POST'])
+@login_required
 def edit_cheque(id):
     c = Cheque.query.get_or_404(id)
     c.cheque_type = request.form.get('cheque_type')
@@ -368,8 +387,11 @@ def edit_cheque(id):
     return redirect(url_for('finance.cheques'))
 
 
-@finance_bp.route('/add_cheque', methods=['POST'])
+@finance_bp.route('/add_cheque', methods=['GET', 'POST'])
+@login_required
 def add_cheque():
+    if request.method == 'GET':
+        return redirect(url_for('finance.cheques'))
     due_date = parse_smart_date(request.form.get('due_date')) # رفع خطای تاریخ
     
     image_path = None    
@@ -393,7 +415,8 @@ def add_cheque():
     flash('چک جدید با موفقیت ثبت شد.', 'success')
     return redirect(url_for('finance.cheques'))
 
-@finance_bp.route('/toggle_star_cheque/<int:id>')
+@finance_bp.route('/toggle_star_cheque/<int:id>', methods=['POST'])
+@login_required
 def toggle_star_cheque(id):
     c = Cheque.query.get_or_404(id)
     c.is_starred = not c.is_starred
@@ -401,6 +424,7 @@ def toggle_star_cheque(id):
     return jsonify({'success': True, 'is_starred': c.is_starred})
 
 @finance_bp.route('/update_cheque_status/<int:id>', methods=['POST'])
+@login_required
 def update_cheque_status(id):
     cheque = Cheque.query.get_or_404(id)
     new_status = request.form.get('status')
@@ -408,10 +432,7 @@ def update_cheque_status(id):
     
     if new_status == 'پاس شده':
         try:
-            # صدور سند حسابداری تسویه چک (جابجایی وجه از اسناد دریافتنی/پرداختنی به بانک)
             AccountingEngine.record_cheque_clearing(cheque)
-
-            # ثبت یک تراکنش متناظر در لیست فاکتورها جهت رهگیری در سیستم
             t_type = 'هزینه' if cheque.cheque_type == 'پرداختی (خودم)' else 'درآمد'
             cat_name = f"تسویه چک {cheque.reason}"
             if not TransactionCategory.query.filter_by(name=cat_name, t_type=t_type).first():
@@ -421,6 +442,7 @@ def update_cheque_status(id):
                 t_date=datetime.now(UTC).date(), invoice_number=cheque.cheque_number,
                 description=f"تسویه چک {cheque.cheque_number} بابت {cheque.reason}", party_name=cheque.issuer_name
             ))
+            db.session.commit()
             flash(f"چک با موفقیت پاس شد و سند حسابداری جابجایی وجه در دفتر کل صادر گردید.", "success")
         except Exception as e:
             db.session.rollback()
@@ -428,10 +450,10 @@ def update_cheque_status(id):
     else:
         flash(f"وضعیت چک به {new_status} تغییر یافت.", "warning")
         
-    db.session.commit()
     return redirect(request.referrer)
 
-@finance_bp.route('/delete_cheque/<int:id>')
+@finance_bp.route('/delete_cheque/<int:id>', methods=['POST'])
+@login_required
 def delete_cheque(id):
     cheque = Cheque.query.get_or_404(id)
     db.session.delete(cheque)
@@ -444,6 +466,7 @@ def delete_cheque(id):
 # سیستم تنخواه گردان (Petty Cash)
 # ==========================================
 @finance_bp.route('/petty_cash')
+@login_required
 def petty_cash():
     from app.models import PettyCash, Worker
     workers = Worker.query.all()
@@ -459,6 +482,7 @@ def petty_cash():
     return render_template('finance/petty_cash.html', records=records, workers=workers, worker_balances=worker_balances)
 
 @finance_bp.route('/add_petty_cash', methods=['POST'])
+@login_required
 def add_petty_cash():
     from app.models import PettyCash, Transaction
     worker_id = request.form.get('worker_id')
@@ -489,17 +513,20 @@ def add_petty_cash():
     return redirect(url_for('finance.petty_cash'))
 
 @finance_bp.route('/cheque_profile/<int:id>')
+@login_required
 def cheque_profile(id):
     cheque = Cheque.query.get_or_404(id)
     return render_template('finance/cheque_profile.html', c=cheque)
 
 # ---> پروفایل و ویرایش فاکتورها <---
 @finance_bp.route('/tx_profile/<int:id>')
+@login_required
 def tx_profile(id):
     tx = Transaction.query.get_or_404(id)
     return render_template('finance/tx_profile.html', t=tx)
 
 @finance_bp.route('/edit_tx/<int:id>', methods=['POST'])
+@login_required
 def edit_tx(id):
     from werkzeug.utils import secure_filename
     import time
@@ -532,6 +559,7 @@ def edit_tx(id):
 # سیستم دفتر کل اشخاص (نسیه، طلب و بدهی)
 # ==========================================
 @finance_bp.route('/contacts')
+@login_required
 def contacts():
     from app.models import Contact
     search_q = request.args.get('search', '').strip()
@@ -558,6 +586,7 @@ def contacts():
                            current_search=search_q, current_type=type_q)
 
 @finance_bp.route('/add_contact', methods=['POST'])
+@login_required
 def add_contact():
     from app.models import Contact
     init_balance = float(request.form.get('balance') or 0)
@@ -613,6 +642,7 @@ def edit_contact(id):
     return redirect(url_for('finance.contact_profile', id=c.id))
 
 @finance_bp.route('/contact/<int:id>')
+@login_required
 def contact_profile(id):
     c = Contact.query.get_or_404(id)
     
@@ -668,6 +698,7 @@ def contact_profile(id):
                            show_archived=show_archived, moadian_only=moadian_only, starred_only=starred_only)
 
 @finance_bp.route('/contact_add_tx/<int:id>', methods=['POST'])
+@login_required
 def contact_add_tx(id):
     from app.models import Contact, Transaction, TransactionCategory, TransactionDocument
     c = Contact.query.get_or_404(id)
@@ -721,6 +752,7 @@ def contact_add_tx(id):
 # صورت های مالی (ترازنامه و سود و زیان استاندارد)
 # ==========================================
 @finance_bp.route('/statements')
+@login_required
 def statements():
     from app.models import Account, JournalEntryLine, JournalEntry
     from sqlalchemy import func
@@ -1288,7 +1320,7 @@ def contact_bulk_action():
     
     return redirect(url_for('finance.contact_profile', id=contact_id, _anchor='ledger'))
 
-@finance_bp.route('/contact/delete_doc/<int:doc_id>')
+@finance_bp.route('/contact/delete_doc/<int:doc_id>', methods=['POST'])
 @login_required
 def delete_contact_doc(doc_id):
     """حذف مدرک پیوست شخص"""

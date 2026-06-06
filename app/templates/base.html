@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>مدیریت دامداری | Dam2</title>
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
@@ -145,7 +146,7 @@
         <div id="page-content-wrapper" class="w-100 bg-light" style="overflow-x: hidden;">
             <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom d-lg-none px-3">
                 <button class="btn btn-primary" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
-                <span class="ms-auto fw-bold text-primary"><i class="fa-solid fa-sheep"></i> دامداری من</span>
+                <span class="ms-auto fw-bold text-primary"><i class="fa-solid fa-sheep"></i> {{ system_settings.get('farm_name', 'دامداری من') }}</span>
             </nav>
             <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
         </div>
@@ -176,6 +177,18 @@
             });
             // نمایش تاریخ امروز در سایدبار
             $('#jalali-sidebar-date').text(new persianDate().format('dddd DD MMMM YYYY'));
+        });
+
+        // تزریق خودکار توکن CSRF به تمام فرم‌ها
+        var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        document.querySelectorAll('form').forEach(function(form) {
+            if (form.method.toUpperCase() === 'POST') {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'csrf_token';
+                input.value = csrfToken;
+                form.appendChild(input);
+            }
         });
 
         const persianToEnglishNumbers = str => str.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
@@ -209,7 +222,7 @@
     </button>
 
     <!-- پنجره چت (مخفی به صورت پیش فرض) -->
-    <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; left: 20px; width: 350px; max-width: 90vw; height: 450px; z-index: 1050; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;">
+    <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; left: 20px; width: 350px; max-width: 90vw; height: 450px; z-index: 1050; border-radius: 15px; overflow: hidden;">
         <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center py-3">
             <span><i class="fa-solid fa-robot"></i> دستیار هوشمند دامداری</span>
             <button id="chatbot-close" class="btn-close btn-close-white"></button>
@@ -253,18 +266,18 @@
             const message = chatInput.value.trim();
             if (!message) return;
 
-            // نمایش پیام کاربر
             appendMessage(message, 'user');
             chatInput.value = '';
 
-            // نمایش تایپینگ ربات
             const typingId = 'typing-' + Date.now();
             appendMessage('<i class="fa-solid fa-ellipsis fa-fade"></i> در حال تایپ...', 'bot', typingId);
 
-            // درخواست AJAX
+            var submitBtn = chatForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+
             fetch("{{ url_for('dashboard.chatbot_api') }}", {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify({ message: message })
             })
             .then(res => {
@@ -272,7 +285,7 @@
                 return res.json();
             })
             .then(data => {
-                const typingElem = document.getElementById(typingId);
+                var typingElem = document.getElementById(typingId);
                 if (typingElem) typingElem.remove();
 
                 if (!data || !data.reply) {
@@ -281,27 +294,32 @@
                 }
                 appendMessage(data.reply, 'bot');
             })
-            .catch(err => {
-                document.getElementById(typingId).remove();
+            .catch(function() {
+                var typingElem = document.getElementById(typingId);
+                if (typingElem) typingElem.remove();
                 appendMessage('خطا در ارتباط با سرور!', 'bot text-danger');
-            });
+            })
+            .finally(function() { submitBtn.disabled = false; });
         });
 
-        // تابع ساخت حباب پیام در HTML
-        function appendMessage(text, sender, id='') {
-            const div = document.createElement('div');
+        function appendMessage(text, sender, id) {
+            var div = document.createElement('div');
             div.className = sender === 'user' ? 'd-flex justify-content-end mb-3' : 'd-flex mb-3';
-            if(id) div.id = id;
+            if (id) div.id = id;
             
-            const bubble = document.createElement('div');
+            var bubble = document.createElement('div');
             bubble.className = sender === 'user' ? 'bg-primary text-white p-2 rounded-3 shadow-sm' : 'bg-white text-dark p-2 rounded-3 shadow-sm border';
             bubble.style.maxWidth = '85%';
             bubble.style.fontSize = '0.9rem';
-            bubble.innerHTML = text;
+            if (sender !== 'user' && text.indexOf('<i ') !== 0) {
+                bubble.textContent = text;
+            } else {
+                bubble.innerHTML = text;
+            }
             
             div.appendChild(bubble);
             chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight; // اسکرول خودکار به پایین
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
     </script>
     {% endif %}

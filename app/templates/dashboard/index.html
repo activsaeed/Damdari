@@ -1,9 +1,6 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- لود کردن کتابخانه نمودار -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 {% if financial_alert %}
 <div class="alert alert-danger border-0 shadow-sm mb-4 border-end border-danger border-5 shadow-sm">
     <div class="d-flex align-items-center">
@@ -82,7 +79,7 @@
                     <h4 class="mb-0 fw-bold">{% if feed_days_left > 100 %}کافی{% else %}{{ feed_days_left }} روز{% endif %}</h4>
                     <small class="small">تا اتمام موجودی</small>
                 </div>
-                <i class="fa-solid fa- hourglass-half fs-2 opacity-50"></i>
+                <i class="fa-solid fa-hourglass-half fs-2 opacity-50"></i>
             </div>
         </div>
     </div>

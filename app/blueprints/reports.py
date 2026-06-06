@@ -7,7 +7,7 @@ from app.models import (
     FeedRation, Unit, InventoryCategory, Pen
 )
 from datetime import datetime, timedelta
-from sqlalchemy import or_, func, cast
+from sqlalchemy import or_, func, cast, case
 from app.blueprints.dashboard import get_setting
 import jdatetime
 
@@ -452,7 +452,7 @@ def index():
     pen_risks_stats = db.session.query(
         Pen.name,
         func.count(Sheep.id).label('total_in_pen'),
-        func.sum(func.cast(func.case([(Sheep.status == 'بیمار', 1)], else_=0), db.Integer)).label('sick_count')
+        func.sum(cast(case([(Sheep.status == 'بیمار', 1)], else_=0), db.Integer)).label('sick_count')
     ).outerjoin(Sheep, Pen.id == Sheep.pen_id).group_by(Pen.id, Pen.name).all()
 
     pen_risks = []

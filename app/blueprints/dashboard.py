@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, UTC
 from app import db
-from sqlalchemy import text, func
+from sqlalchemy import text, func, case
 import jdatetime
 from app.models import InventoryLog, InventoryCategory, TelegramBot
 from app.accounting_engine import AccountingEngine
@@ -71,7 +71,7 @@ def index():
 
     weight_ranges_data = db.session.query(
         func.count(Sheep.id).label('cnt'),
-        func.case(
+        case(
             (Sheep.weight < 20, '10-20'),
             (Sheep.weight < 30, '20-30'),
             (Sheep.weight < 40, '30-40'),
@@ -97,19 +97,23 @@ def index():
         Sheep.weight.isnot(None)
     ).scalar() or 0
 
-    weight_above_counts = db.session.query(
-        func.count(Sheep.id)
-    ).filter(
-        Sheep.weight >= func.bindparam('threshold'),
-        Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-    ).all()
-
     weight_above = {'بالای 50':0, 'بالای 60':0, 'بالای 70':0, 'بالای 80':0, 'بالای 90':0, 'بالای 100':0, 'بالای 110':0}
-    for threshold_label, threshold_val in [(k, int(k.split()[1])) for k in weight_above.keys()]:
-        weight_above[threshold_label] = db.session.query(func.count(Sheep.id)).filter(
-            Sheep.weight >= threshold_val,
-            Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-        ).scalar() or 0
+    
+    # بهینه‌سازی: محاسبه تمام آمارهای وزنی در یک کوئری واحد جهت افزایش سرعت
+    above_data = db.session.query(
+        func.sum(case((Sheep.weight >= 50, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 60, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 70, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 80, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 90, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 100, 1), else_=0)),
+        func.sum(case((Sheep.weight >= 110, 1), else_=0))
+    ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).first()
+
+    if above_data:
+        keys = ['بالای 50', 'بالای 60', 'بالای 70', 'بالای 80', 'بالای 90', 'بالای 100', 'بالای 110']
+        for i, key in enumerate(keys):
+            weight_above[key] = above_data[i] or 0
 
     inventory_items = InventoryItem.query.all()
     transactions = Transaction.query.order_by(Transaction.t_date.desc()).limit(5).all()

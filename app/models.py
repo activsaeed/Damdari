@@ -85,28 +85,28 @@ class Sheep(db.Model):
     death_reason = db.Column(db.String(200), nullable=True)
      # ---> این فیلد را اضافه کنید <---
     is_starred = db.Column(db.Boolean, default=False) 
-    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
-    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
-    feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id'), nullable=True)
-    pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=True)
+    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
+    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
+    feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id', ondelete='SET NULL'), nullable=True, index=True)
+    pen_id = db.Column(db.Integer, db.ForeignKey('pen.id', ondelete='SET NULL'), nullable=True, index=True)
     
     ration = db.relationship('FeedRation', backref='sheep_list')
     weight_records = db.relationship('WeightRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
     medical_records = db.relationship('MedicalRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
-    birth_records = db.relationship('BirthRecord', foreign_keys='BirthRecord.mother_id', backref='mother', lazy=True)
+    birth_records = db.relationship('BirthRecord', foreign_keys='BirthRecord.mother_id', backref='mother', lazy=True, cascade="all, delete-orphan")
     lactation_records = db.relationship('LactationRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
 
 class LactationRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
     record_date = db.Column(db.Date, default=datetime.utcnow)
     milk_yield = db.Column(db.Float, nullable=False)
     notes = db.Column(db.String(200), nullable=True)
 
 class BirthRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
-    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=True)
+    mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
+    father_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
     birth_date = db.Column(db.Date, default=datetime.utcnow)
     lambs_count = db.Column(db.Integer, default=1)
     status = db.Column(db.String(50), default='موفق')

@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import login_required
 from app import db
 from app.models import InventoryItem, InventoryLog, Transaction, Unit, InventoryCategory
 from datetime import datetime, timedelta, UTC
@@ -6,6 +7,7 @@ from datetime import datetime, timedelta, UTC
 inventory_bp = Blueprint('inventory', __name__)
 
 @inventory_bp.route('/')
+@login_required
 def index():
     # مرتب‌سازی بر اساس شناسه (نزولی) برای نمایش جدیدترین‌ها در ابتدا
     items = InventoryItem.query.order_by(InventoryItem.id.desc()).all()
@@ -28,6 +30,7 @@ def index():
                            expiring_items=expiring_items, today=today)
 
 @inventory_bp.route('/add_item', methods=['POST'])
+@login_required
 def add_item():
     name = request.form.get('name', '').strip()
     cat_name = request.form.get('category', 'عمومی').strip()
@@ -62,6 +65,7 @@ def add_item():
     return redirect(url_for('inventory.index'))
 
 @inventory_bp.route('/edit_item/<int:id>', methods=['POST'])
+@login_required
 def edit_item(id):
     item = InventoryItem.query.get_or_404(id)
     unit_id = request.form.get('unit_id')
@@ -87,7 +91,8 @@ def edit_item(id):
     flash('مشخصات کالا با موفقیت ویرایش شد.', 'info')
     return redirect(url_for('inventory.index'))
 
-@inventory_bp.route('/delete_item/<int:id>')
+@inventory_bp.route('/delete_item/<int:id>', methods=['POST'])
+@login_required
 def delete_item(id):
     item = InventoryItem.query.get_or_404(id)
     db.session.delete(item)
@@ -95,6 +100,7 @@ def delete_item(id):
     return redirect(url_for('inventory.index'))
 
 @inventory_bp.route('/transaction', methods=['POST'])
+@login_required
 def transaction():
     item_id = request.form.get('item_id')
     action_type = request.form.get('action_type')

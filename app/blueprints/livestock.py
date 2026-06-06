@@ -532,7 +532,8 @@ def add_birth(id):
         db.session.commit()
     return redirect(url_for('livestock.profile', id=id))
 
-@livestock_bp.route('/delete/<int:id>')
+@livestock_bp.route('/delete/<int:id>', methods=['POST'])
+@login_required
 def delete_sheep(id):
     sheep = Sheep.query.get_or_404(id)
     db.session.delete(sheep)
@@ -593,7 +594,8 @@ def mark_newborn_checked(id):
     flash("چکاپ نوزاد ثبت شد و از صف حذف گردید.", "success")
     return redirect(request.referrer)
 
-@livestock_bp.route('/toggle_star/<int:id>')
+@livestock_bp.route('/toggle_star/<int:id>', methods=['POST'])
+@login_required
 def toggle_star(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.is_starred = not sheep.is_starred

@@ -1,8 +1,9 @@
 from flask import Flask, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash
-import jdatetime # کتابخانه تاریخ شمسی
+import jdatetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, UTC
 import os
@@ -13,6 +14,7 @@ from config import Config
 
 db = SQLAlchemy()
 login_manager = LoginManager()
+csrf = CSRFProtect()
 scheduler = BackgroundScheduler(daemon=True)
 
 def get_system_setting(key, default):
@@ -36,6 +38,7 @@ def create_app():
     app.config.from_object(Config)
 
     db.init_app(app)
+    csrf.init_app(app)
     
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
@@ -53,7 +56,6 @@ def create_app():
 
     @app.before_request
     def check_valid_login():
-        # مستثنی کردن API سخت‌افزار از سیستم لاگین تحت وب
         if request.endpoint in ['finance.update_sensors', 'finance.update_weight_iot']:
             return
         if request.endpoint and 'static' not in request.endpoint and 'auth.' not in request.endpoint:

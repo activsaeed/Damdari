@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from flask_login import current_user, login_required
-from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from app import db
 from app.accounting_engine import AccountingEngine
@@ -14,10 +13,11 @@ import jdatetime
 hr_bp = Blueprint('hr', __name__)
 
 def send_to_telegram(message):
-    token = "8951875656:AAEicWcnwup00o46y8vCL3nXw_aa1xQXS_w"
-    chat_id = "6690587060"
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try: requests.post(url, data={'chat_id': chat_id, 'text': message})
+    from app.models import TelegramBot
+    bot = TelegramBot.query.filter_by(is_active=True).first()
+    if not bot: return
+    url = f"https://api.telegram.org/bot{bot.bot_token}/sendMessage"
+    try: requests.post(url, data={'chat_id': bot.chat_id, 'text': message})
     except: pass
 
 def parse_smart_date(date_str):
@@ -206,7 +206,7 @@ def add_event(id):
     db.session.commit()
     return redirect(url_for('hr.profile', id=id))
 
-@hr_bp.route('/delete_worker/<int:id>')
+@hr_bp.route('/delete_worker/<int:id>', methods=['POST'])
 @login_required
 def delete_worker(id):
     from app.models import Worker
@@ -218,13 +218,15 @@ def delete_worker(id):
     return redirect(url_for('hr.index'))
 
 @hr_bp.route('/add_task', methods=['POST'])
+@login_required
 def add_task():
     from app.models import Task
     db.session.add(Task(worker_id=request.form.get('worker_id'), description=request.form.get('description')))
     db.session.commit()
     return redirect(url_for('hr.index'))
 
-@hr_bp.route('/toggle_task/<int:task_id>')
+@hr_bp.route('/toggle_task/<int:task_id>', methods=['POST'])
+@login_required
 def toggle_task(task_id):
     from app.models import Task
     task = Task.query.get_or_404(task_id)
@@ -233,6 +235,7 @@ def toggle_task(task_id):
     return redirect(url_for('hr.index'))
 
 @hr_bp.route('/quick_report', methods=['POST'])
+@login_required
 def quick_report():
     from app.models import User, Task, Sheep
     issue_type = request.form.get('issue_type')

@@ -23,3 +23,18 @@ overlay.addEventListener('click', function() {
     sidebarWrapper.classList.remove('toggled');
     overlay.classList.add('d-none');
 });
+
+function formatCurrency(input) {
+    var raw = input.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+    if (raw) {
+        var parts = raw.split('.');
+        parts[0] = Number(parts[0]).toLocaleString('en-US');
+        input.value = parts.join('.');
+    }
+    var hidden = input.closest('div').querySelector('input[type="hidden"]');
+    if (!hidden) hidden = input.parentElement.querySelector('input[type="hidden"]');
+    if (!hidden) hidden = document.getElementById('raw_' + input.id);
+    if (hidden) {
+        hidden.value = raw;
+    }
+}
