@@ -116,14 +116,26 @@ def transaction():
         total_price_str = request.form.get('total_price')
         if total_price_str and float(total_price_str) > 0:
             total_price = float(total_price_str)
-            # فرمول حسابداری میانگین موزون: (ارزش فعلی انبار + مبلغ خرید جدید) / کل تعداد جدید
-            current_value = item.quantity * item.unit_price
-            item.quantity += amount
-            item.unit_price = (current_value + total_price) / item.quantity
             
-            # ثبت اتوماتیک در دفتر کل حسابداری! # ۲. رفع ضعف موتور حسابداری (حذف String Matching)
-            db.session.add(Transaction(t_type='هزینه', category='خرید انبار (خودکار)', amount=total_price, t_date=today, is_archived=False, description=f"خرید {amount} {item.unit.name if item.unit else ''} {item.name}"))
-            flash('موجودی شارژ شد و مبلغ در دفتر کل مالی ثبت گردید.', 'success')
+            # تراکنش اتمیک برای شارژ انبار و ثبت سند مالی بصورت همزمان
+            with db.session.begin_nested():
+                current_qty = item.quantity if item.quantity else 0
+                current_price = item.unit_price if item.unit_price else 0
+                current_value = current_qty * current_price
+                
+                # فرمول دقیق میانگین موزون با جلوگیری از ریسک تقسیم بر صفر
+                new_total_qty = current_qty + amount
+                if new_total_qty > 0:
+                    item.unit_price = (current_value + total_price) / new_total_qty
+                item.quantity = new_total_qty
+
+                # ثبت خودکار هزینه در دفتر کل
+                new_tx = Transaction(t_type='هزینه', category='خرید انبار (خودکار)', amount=total_price, t_date=today, is_archived=False, description=f"خرید {amount} {item.unit.name if item.unit else ''} {item.name}")
+                db.session.add(new_tx)
+                db.session.flush()
+                AccountingEngine.record_expense(new_tx)
+
+            flash('موجودی شارژ شد و سند مالی با متد میانگین موزون ثبت گردید.', 'success')
         else:
             item.quantity += amount
             flash('موجودی بدون ثبت هزینه شارژ شد.', 'warning')

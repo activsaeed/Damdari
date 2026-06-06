@@ -11,6 +11,7 @@ import os
 import time
 import csv
 import io
+import xlsxwriter
 import jdatetime
 try:
     import pdfkit
@@ -50,17 +51,24 @@ def require_api_token(f):
 # توضیح: ما یک تابع کمکی می‌نویسیم که تمام ورودی‌ها را به "تومان" تبدیل می‌کند و نرخ مالیات را از دیتابیس می‌خواند.
 # فایل: app/blueprints/finance.py
 # در بالای فایل، زیر ایمپورت‌ها، این توابع را اضافه کنید:
-def get_system_currency_from_settings():
-    """دریافت واحد پول فعلی سیستم از تنظیمات"""
-    return get_setting('currency_unit', 'تومان')
-
 def normalize_amount_to_toman(amount_str):
     """تبدیل تمام ورودی ها به تومان بر اساس تنظیمات فعلی کاربر"""
-    if not amount_str: return 0.0
-    amount = float(amount_str.replace(',', '')) # حذف کاما برای تبدیل به عدد
-    if get_system_currency_from_settings() == 'ریال':
-        return amount / 10.0
-    return amount
+    if not amount_str: 
+        return 0.0
+    try:
+        # پاکسازی کاراکترهای غیرعددی و تبدیل اعداد فارسی/عربی
+        persian_digits = '۰۱۲۳۴۵۶۷۸۹'
+        arabic_digits = '٠١٢٣٤٥٦٧٨٩'
+        english_digits = '0123456789'
+        translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
+        clean_str = str(amount_str).translate(translation_table).replace(',', '').strip()
+        
+        amount = float(clean_str)
+        if get_setting('currency_unit', 'تومان') == 'ریال':
+            return amount / 10.0
+        return amount
+    except (ValueError, TypeError):
+        return 0.0
 
 def parse_smart_date(date_str, default_val=None):
     """تبدیل هوشمند تاریخ شمسی/میلادی با پشتیبانی از اعداد فارسی و مقادیر خالی"""
@@ -175,40 +183,40 @@ def add_transaction():
         linked_contact = None        
         amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
 
-        try:
-            if contact_id:
-                linked_contact = Contact.query.get(contact_id)
-            elif party_name:
-                linked_contact = Contact.query.filter_by(name=party_name).first()
-                if not linked_contact:
-                    linked_contact = Contact(name=party_name, contact_type='عمومی', balance=0.0)
-                    db.session.add(linked_contact)
-                    db.session.flush()
+        # استفاده از تراکنش اتمیک برای تضمین سلامت داده‌های مالی
+        with db.session.begin_nested():
+            try:
+                if contact_id:
+                    linked_contact = Contact.query.get(contact_id)
+                elif party_name:
+                    linked_contact = Contact.query.filter_by(name=party_name).first()
+                    if not linked_contact:
+                        linked_contact = Contact(name=party_name, contact_type='عمومی', balance=0.0)
+                        db.session.add(linked_contact)
+                        db.session.flush()
 
-            new_transaction = Transaction(
-                t_type=t_type, category=category_name, amount=amount_val,
-                invoice_number=invoice_number, t_date=t_date, description=description,
-                party_name=linked_contact.name if linked_contact else party_name,
-                contact_id=linked_contact.id if linked_contact else None
-            )
-            db.session.add(new_transaction)
-            db.session.flush() # دریافت ID برای موتور حسابداری
+                new_transaction = Transaction(
+                    t_type=t_type, category=category_name, amount=amount_val,
+                    invoice_number=invoice_number, t_date=t_date, description=description,
+                    party_name=linked_contact.name if linked_contact else party_name,
+                    contact_id=linked_contact.id if linked_contact else None
+                )
+                db.session.add(new_transaction)
+                db.session.flush()
 
-            if linked_contact:
-                # آپدیت تراز در همان تراکنش
-                if t_type == 'درآمد': linked_contact.balance += amount_val
-                else: linked_contact.balance -= amount_val
+                if linked_contact:
+                    if t_type == 'درآمد': linked_contact.balance += amount_val
+                    else: linked_contact.balance -= amount_val
 
-            if t_type == 'درآمد':
-                AccountingEngine.record_sale(new_transaction, include_vat=True)
-            elif t_type == 'هزینه':
-                AccountingEngine.record_expense(new_transaction, include_vat=True)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'خطا در صدور سند حسابداری: {str(e)}', 'danger')
-            return redirect(url_for('finance.index'))
-        
+                if t_type == 'درآمد':
+                    AccountingEngine.record_sale(new_transaction, include_vat=True)
+                elif t_type == 'هزینه':
+                    AccountingEngine.record_expense(new_transaction, include_vat=True)
+            except Exception as e:
+                db.session.rollback()
+                flash(f'خطا در صدور سند حسابداری: {str(e)}', 'danger')
+                return redirect(url_for('finance.index'))
+
         documents = request.files.getlist('documents')
         upload_folder = os.path.join('app', 'static', 'uploads', 'documents')
         os.makedirs(upload_folder, exist_ok=True)
@@ -271,16 +279,29 @@ def export_tx():
     unit = get_setting('currency_unit', 'تومان')
     factor = 10 if unit == 'ریال' else 1
     transactions = query.order_by(Transaction.t_date.asc()).all()
-    
-    html_content = '<html dir="rtl"><head><meta charset="utf-8"><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: center;} th {background-color: #f2f2f2; font-weight: bold;}</style></head><body>'
-    html_content += f'<table><thead><tr><th>تاریخ</th><th>شماره فاکتور</th><th>شخص/شرکت</th><th>نوع</th><th>دسته‌بندی</th><th>مبلغ ({unit})</th><th>توضیحات</th></tr></thead><tbody>'
-    for t in transactions:
-        html_content += f"<tr><td>{t.t_date}</td><td>{t.invoice_number or '-'}</td><td>{t.party_name or '-'}</td><td>{t.t_type}</td><td>{t.category}</td><td>{t.amount * factor:,.0f}</td><td>{t.description or '-'}</td></tr>"
-    html_content += '</tbody></table></body></html>'
-    
-    response = Response(html_content, mimetype='application/vnd.ms-excel')
-    response.headers['Content-Disposition'] = f'attachment; filename=transactions_export.xls'
-    return response
+
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+    worksheet.right_to_left()
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
+
+    headers = ['تاریخ', 'شماره فاکتور', 'شخص/شرکت', 'نوع', 'دسته‌بندی', f'مبلغ ({unit})', 'توضیحات']
+    for col, h in enumerate(headers): worksheet.write(0, col, h, header_format)
+
+    for row, t in enumerate(transactions, 1):
+        worksheet.write(row, 0, str(t.t_date))
+        worksheet.write(row, 1, t.invoice_number or '-')
+        worksheet.write(row, 2, t.party_name or '-')
+        worksheet.write(row, 3, t.t_type)
+        worksheet.write(row, 4, t.category)
+        worksheet.write(row, 5, t.amount * factor)
+        worksheet.write(row, 6, t.description or '-')
+
+    workbook.close()
+    output.seek(0)
+    return Response(output.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=transactions.xlsx"})
 
 @finance_bp.route('/export_cheques')
 @login_required
@@ -300,15 +321,37 @@ def export_cheques():
     factor = 10 if unit == 'ریال' else 1
     cheques = query.order_by(Cheque.due_date.asc()).all()
 
-    html_content = '<html dir="rtl"><head><meta charset="utf-8"><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: center;} th {background-color: #f2f2f2; font-weight: bold;}</style></head><body>'
-    html_content += f'<table><thead><tr><th>نوع چک</th><th>شماره چک</th><th>مبلغ ({unit})</th><th>سررسید</th><th>وضعیت</th><th>بانک</th><th>صادرکننده</th><th>بابت</th></tr></thead><tbody>'
-    for c in cheques:
-        html_content += f"<tr><td>{c.cheque_type}</td><td>{c.cheque_number}</td><td>{c.amount * factor:,.0f}</td><td>{c.due_date}</td><td>{c.status}</td><td>{c.bank_name or '-'}</td><td>{c.issuer_name or '-'}</td><td>{c.reason}</td></tr>"
-    html_content += '</tbody></table></body></html>'
-    
-    response = Response(html_content, mimetype='application/vnd.ms-excel')
-    response.headers['Content-Disposition'] = f'attachment; filename=cheques_filtered_export.xls'
-    return response
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+    worksheet.right_to_left()
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
+
+    headers = ['نوع چک', 'شماره چک', f'مبلغ ({unit})', 'سررسید', 'وضعیت', 'بانک', 'صادرکننده', 'بابت']
+    for col, h in enumerate(headers): worksheet.write(0, col, h, header_format)
+
+    for row, c in enumerate(cheques, 1):
+        worksheet.write(row, 0, c.cheque_type)
+        worksheet.write(row, 1, c.cheque_number)
+        worksheet.write(row, 2, c.amount * factor)
+        worksheet.write(row, 3, str(c.due_date))
+        worksheet.write(row, 4, c.status)
+        worksheet.write(row, 5, c.bank_name or '-')
+        worksheet.write(row, 6, c.issuer_name or '-')
+        worksheet.write(row, 7, c.reason)
+
+    workbook.close()
+    output.seek(0)
+    return Response(output.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=cheques.xlsx"})
+
+@finance_bp.route('/api/iot/weight_status', methods=['GET'])
+@login_required
+def get_weight_status():
+    """دریافت وضعیت وزن لحظه‌ای برای نمایش در رابط کاربری بدون رفرش"""
+    ear_tag = request.args.get('ear_tag')
+    sheep = Sheep.query.filter_by(ear_tag=ear_tag).first()
+    return jsonify({"weight": sheep.weight if sheep else None})
 
 @finance_bp.route('/print_tx')
 @login_required
@@ -1192,22 +1235,24 @@ def export_contact_statement_pdf(id):
         'quiet': ''
     }
 
-    # شناسایی خودکار مسیر فایل اجرایی wkhtmltopdf در ویندوز
+    # شناسایی هوشمند مسیر wkhtmltopdf (رفع هاردکد درایو C)
     path_wk = None
-    for p in [r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe', 
-              r'C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe']:
-        if os.path.exists(p):
-            path_wk = p
-            break
-    
+    import shutil
+    path_wk = shutil.which("wkhtmltopdf") # جستجو در System PATH
+    if not path_wk:
+        for p in [r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe', r'C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe', '/usr/bin/wkhtmltopdf', '/usr/local/bin/wkhtmltopdf']:
+            if os.path.exists(p):
+                path_wk = p
+                break
+
     config = pdfkit.configuration(wkhtmltopdf=path_wk) if path_wk else None
 
     try:
         pdf = pdfkit.from_string(html, False, options=options, configuration=config)
     except OSError:
-        flash('خطا: فایل اجرایی wkhtmltopdf در مسیر پیش‌فرض یافت نشد. لطفا بررسی کنید که نرم‌افزار در درایو C نصب شده باشد.', 'danger')
+        flash('خطا: ابزار تولید PDF در سرور یافت نشد. لطفاً wkhtmltopdf را نصب و به PATH اضافه کنید.', 'danger')
         return redirect(url_for('finance.contact_profile', id=id))
-    
+
     response = make_response(pdf)
     response.headers['Content-Type'] = 'application/pdf'
     filename_suffix = f"{year}_{quarter}" if report_type == 'seasonal' else "Custom_Range"

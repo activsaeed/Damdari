@@ -683,8 +683,14 @@ def cleanup_transactions():
         return redirect(url_for('dashboard.index'))
 
     cutoff_date = datetime.now(UTC).date() - timedelta(days=730)
-    # فقط فاکتورهایی که هم بایگانی شده‌اند و هم تاریخشان قدیمی‌تر از ۲ سال است
-    deleted_count = Transaction.query.filter(Transaction.is_archived == True, Transaction.t_date < cutoff_date).delete()
+    # تضمین حذف فقط داده‌های غیرحساس و بایگانی شده در یک تراکنش واحد
+    with db.session.begin_nested():
+        deleted_count = Transaction.query.filter(
+            Transaction.is_archived == True, 
+            Transaction.t_date < cutoff_date, 
+            Transaction.is_starred == False
+        ).delete(synchronize_session=False)
+
     db.session.commit()
     flash(f'پاکسازی فاکتورهای بایگانی قدیمی (قبل از ۲ سال) انجام شد. {deleted_count} مورد حذف گردید.', 'success')
     return redirect(url_for('dashboard.settings'))

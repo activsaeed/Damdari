@@ -9,7 +9,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, UTC
 import os
 import requests
+import time
 from sqlalchemy import func, text, inspect
+from sqlalchemy import event
 
 from config import Config
 
@@ -18,6 +20,9 @@ migrate = Migrate()
 login_manager = LoginManager()
 csrf = CSRFProtect()
 scheduler = BackgroundScheduler(daemon=True)
+
+# کش برای هشدارهای جهانی جهت جلوگیری از کندی
+_warning_cache = {'count': 0, 'timestamp': 0}
 
 def get_system_setting(key, default):
     from app.models import SystemSetting
@@ -84,15 +89,22 @@ def create_app():
 
     @app.context_processor
     def inject_global_warnings():
+        now = time.time()
+        # کش کردن نتایج برای ۵ دقیقه جهت جلوگیری از گلوگاه در کوئری‌های سنگین Count
+        if now - _warning_cache['timestamp'] < 300:
+            return dict(global_warnings_count=_warning_cache['count'])
         try:
             from app.models import Sheep, InventoryItem, Task
             # استفاده از .count() مستقیم در دیتابیس به جای لود کردن و شمردن در پایتون
             sick_sheep = db.session.query(func.count(Sheep.id)).filter(Sheep.status == 'بیمار').scalar() or 0
             low_stock = db.session.query(func.count(InventoryItem.id)).filter(InventoryItem.quantity <= InventoryItem.min_threshold).scalar() or 0
             pending_tasks = db.session.query(func.count(Task.id)).filter(Task.task_date == datetime.now(UTC).date(), Task.is_done == False).scalar() or 0
-            return dict(global_warnings_count=(sick_sheep + low_stock + pending_tasks))
-        except:
-            return dict(global_warnings_count=0)
+            total = sick_sheep + low_stock + pending_tasks
+            _warning_cache['count'] = total
+            _warning_cache['timestamp'] = now
+            return dict(global_warnings_count=total)
+        except Exception:
+            return dict(global_warnings_count=_warning_cache['count'])
 
     # ---> فیلتر هوشمند تاریخ شمسی برای قالب های HTML <---
     @app.template_filter('jalali')
@@ -122,22 +134,6 @@ def create_app():
         return f"{formatted} {unit}"
 
     with app.app_context():
-        # استفاده از db.create_all() تنها برای جداول غیر موجود
-        # ایده‌آل: از Flask-Migrate برای migrations استفاده کنید
-        try:
-            inspector = inspect(db.engine)
-            existing_tables = inspector.get_table_names()
-
-            # اگر اساساً دیتابیس خالی است، بسازید
-            if not existing_tables or 'user' not in existing_tables:
-                db.create_all()
-        except Exception as e:
-            print(f"Warning: Could not check existing tables: {e}")
-            db.create_all()
-
-        # مدیریت دیتابیس به Flask-Migrate منتقل شد.
-        # تمامی ALTER TABLE های دستی حذف شدند تا از تداخل و فساد داده جلوگیری شود.
-        
         # ---> رفع باگ: ساخت ادمین با نقش دقیق "مدیر" و تمام دسترسی‌های True <---
         if not User.query.filter_by(username=app.config['ADMIN_USERNAME']).first():
             admin_user = User(
@@ -155,6 +151,25 @@ def create_app():
             db.session.add(admin_user)
         
         pass # تمامی داده های پایه و بذرپاشی اکنون از طریق seed.py مدیریت می شوند
+
+    # مکانیزم همگامی انبار و مالی: بازگرداندن موجودی در صورت حذف فاکتور خرید
+    from app.models import Transaction, InventoryItem
+    @event.listens_for(db.session, "before_flush")
+    def observe_transaction_deletion(session, flush_context, instances):
+        for obj in session.deleted:
+            if isinstance(obj, Transaction) and obj.category == 'خرید انبار (خودکار)':
+                import re
+                # استخراج مقدار و نام کالا از شرح فاکتور
+                match = re.search(r"خرید ([\d.]+) .* (.*)$", obj.description)
+                if match:
+                    try:
+                        amount = float(match.group(1))
+                        item_name = match.group(2).strip()
+                        item = InventoryItem.query.filter_by(name=item_name).first()
+                        if item:
+                            item.quantity -= amount
+                    except Exception: pass
+
     # ---> سیستم بک آپ گیری اتوماتیک ساعت 12 شب <---
     def scheduled_telegram_backup_task():
         with app.app_context():

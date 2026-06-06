@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, current_app
 from werkzeug.utils import secure_filename
 from app import db
 from sqlalchemy import func, case
@@ -9,6 +9,7 @@ import qrcode
 import os
 import csv
 import io
+import xlsxwriter
 import time
 import random
 from flask_login import current_user, login_required
@@ -23,8 +24,8 @@ def log_audit(action):
         from app.models import AuditLog
         db.session.add(AuditLog(user_name=user, action=action, ip_address=ip))
         db.session.commit()
-    except:
-        pass
+    except Exception as e:
+        current_app.logger.error(f"Audit log failed: {e}")
 
 @livestock_bp.route('/')
 def index():
@@ -100,17 +101,35 @@ def export_sheep():
     if starred_q == '1': query = query.filter(Sheep.is_starred.is_(True))
 
     sheeps = query.all()
-    
-    # تکنیک جادویی تولید اکسل استایل دار و راست چین
-    html_content = '<html dir="rtl"><head><meta charset="utf-8"><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: center;} th {background-color: #f2f2f2; font-weight: bold;}</style></head><body>'
-    html_content += '<table><thead><tr><th>پلاک</th><th>نژاد</th><th>جنسیت</th><th>وزن (kg)</th><th>وضعیت</th><th>هدف</th><th>جیره</th><th>بهاربند</th></tr></thead><tbody>'
-    for s in sheeps:
-        html_content += f"<tr><td>{s.ear_tag}</td><td>{s.breed or '-'}</td><td>{s.gender}</td><td>{s.weight}</td><td>{s.status}</td><td>{s.purpose or '-'}</td><td>{s.ration.name if s.ration else 'ندارد'}</td><td>{s.pen.name if s.pen else 'نامشخص'}</td></tr>"
-    html_content += '</tbody></table></body></html>'
-    
-    response = Response(html_content, mimetype='application/vnd.ms-excel')
-    response.headers['Content-Disposition'] = 'attachment; filename=livestock_filtered_export.xls'
-    return response
+
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+    worksheet.right_to_left()
+
+    headers = ['پلاک', 'نژاد', 'جنسیت', 'وزن (kg)', 'وضعیت', 'هدف', 'جیره', 'بهاربند']
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+
+    for row, s in enumerate(sheeps, 1):
+        worksheet.write(row, 0, s.ear_tag)
+        worksheet.write(row, 1, s.breed or '-')
+        worksheet.write(row, 2, s.gender)
+        worksheet.write(row, 3, s.weight)
+        worksheet.write(row, 4, s.status)
+        worksheet.write(row, 5, s.purpose or '-')
+        worksheet.write(row, 6, s.ration.name if s.ration else 'ندارد')
+        worksheet.write(row, 7, s.pen.name if s.pen else 'نامشخص')
+
+    workbook.close()
+    output.seek(0)
+
+    return Response(
+        output.read(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=livestock_export.xlsx"}
+    )
 
 @livestock_bp.route('/print')
 def print_sheep():
@@ -153,99 +172,59 @@ def quick_weight():
 def bulk_action():
     sheep_ids = request.form.getlist('sheep_ids')
     action_type = request.form.get('bulk_action_type')
-    
+
     if sheep_ids:
-        try:
+        with db.session.begin_nested():
             if action_type == 'change_status':
                 new_status = request.form.get('new_status')
-                # تراکنش اتمیک برای آپدیت وضعیت و صدور فاکتور
+                # بروزرسانی وضعیت دام‌ها
                 Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.status: new_status}, synchronize_session=False)
-                
-                if new_status == 'فروخته شده':
-                    # منطق فروش گروهی در یک تراکنش واحد
-                    # ... (کد فروش قبلی به همراه AccountingEngine بصورت اتمیک)
-                    pass
 
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'خطا در عملیات گروهی: {str(e)}', 'danger')
-            
-            # اگر وضعیت جدید "فروخته شده" است، باید فاکتور خودکار ایجاد شود
-            if new_status == 'فروخته شده':
-                bulk_sale_price = request.form.get('bulk_sale_price', '0').replace(',', '').strip()
-                bulk_sale_date = request.form.get('bulk_sale_date')
-                
-                try:
+                if new_status == 'فروخته شده':
+                    bulk_sale_price = request.form.get('bulk_sale_price', '0').replace(',', '').strip()
+                    bulk_sale_date = request.form.get('bulk_sale_date')
                     sale_price = float(bulk_sale_price) if bulk_sale_price else 0.0
-                except ValueError:
-                    sale_price = 0.0
-                
-                try:
                     sale_date = datetime.strptime(bulk_sale_date, '%Y-%m-%d').date() if bulk_sale_date else datetime.now(UTC).date()
-                except (ValueError, TypeError):
-                    sale_date = datetime.now(UTC).date()
-                
-                # دریافت تمام دام‌های انتخاب شده برای ایجاد فاکتورهای منفرد
-                selected_sheeps = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
-                transaction_count = 0
-                
-                for sheep in selected_sheeps:
-                    sheep.sale_price = sale_price
-                    sheep.sale_date = sale_date
-                    
-                    if sale_price > 0:
-                        # بررسی اینکه فاکتور قبلی وجود دارد یا نه
-                        existing_tx = Transaction.query.filter(
-                            Transaction.description.ilike(f"%پلاک: {sheep.ear_tag}%"),
-                            Transaction.category == 'فروش دام'
-                        ).first()
-                        
-                        if not existing_tx:
-                            from app.models import BuyerCategory
-                            buyer_name = 'فروش گروهی'
-                            if sheep.buyer_category_id:
-                                bc = db.session.get(BuyerCategory, sheep.buyer_category_id)
-                                if bc: buyer_name = bc.name
-                            
-                            new_tx = Transaction(
-                                t_type='درآمد',
-                                category='فروش دام',
-                                amount=sale_price,
-                                t_date=sale_date,
-                                is_archived=False,
-                                party_name=buyer_name,
-                                description=f"فروش سیستمی - پلاک: {sheep.ear_tag} - خریدار: {sheep.buyer_category.name if sheep.buyer_category else 'نامشخص'}"
-                            )
-                            db.session.add(new_tx)
-                            db.session.flush()
-                            
-                            try:
+
+                    selected_sheeps = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
+                    transaction_count = 0
+
+                    for sheep in selected_sheeps:
+                        sheep.sale_price = sale_price
+                        sheep.sale_date = sale_date
+                        if sale_price > 0:
+                            # جلوگیری از ثبت فاکتور تکراری برای یک پلاک
+                            existing_tx = Transaction.query.filter(Transaction.description.ilike(f"%پلاک: {sheep.ear_tag}%"), Transaction.category == 'فروش دام').first()
+                            if not existing_tx:
+                                from app.models import BuyerCategory
+                                buyer_name = 'فروش گروهی'
+                                if sheep.buyer_category_id:
+                                    bc = db.session.get(BuyerCategory, sheep.buyer_category_id)
+                                    if bc: buyer_name = bc.name
+
+                                new_tx = Transaction(
+                                    t_type='درآمد', category='فروش دام', amount=sale_price, t_date=sale_date,
+                                    is_archived=False, party_name=buyer_name,
+                                    description=f"فروش سیستمی - پلاک: {sheep.ear_tag} - خریدار: {sheep.buyer_category.name if sheep.buyer_category else 'نامشخص'}"
+                                )
+                                db.session.add(new_tx)
+                                db.session.flush()
                                 AccountingEngine.record_sale(new_tx, include_vat=True)
-                                db.session.commit()
-                            except Exception as e:
-                                print(f"خطا در ثبت حسابداری: {e}")
-                                db.session.rollback()
-                            
-                            transaction_count += 1
-                
-                db.session.commit()
-                
-                if transaction_count > 0:
-                    flash(f'✅ {transaction_count} فاکتور درآمد با موفقیت ایجاد و در دفتر کل ثبت شد.', 'success')
-                else:
-                    flash('⚠️ وضعیت دام‌ها به "فروخته شده" تغییر یافت ولی فاکتوری جدید ایجاد نشد (احتمالاً قبلاً ثبت شده بودند یا قیمت وارد نشده بود).', 'warning')
-                
-                log_audit(f"ثبت فروش گروهی برای {len(selected_sheeps)} رأس دام")
-        
-        elif action_type == 'change_ration':
-            Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.feed_ration_id: request.form.get('new_ration_id')}, synchronize_session=False)
-            db.session.commit()
-        
-        elif action_type == 'change_pen':
-            Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.pen_id: request.form.get('new_pen_id')}, synchronize_session=False)
-            db.session.commit()
-    
+                                transaction_count += 1
+
+                    if transaction_count > 0:
+                        flash(f'✅ {transaction_count} فاکتور فروش صادر و ثبت شد.', 'success')
+
+            elif action_type == 'change_ration':
+                Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.feed_ration_id: request.form.get('new_ration_id')}, synchronize_session=False)
+            
+            elif action_type == 'change_pen':
+                Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.pen_id: request.form.get('new_pen_id')}, synchronize_session=False)
+
+        db.session.commit()
+        log_audit(f"عملیات گروهی {action_type} روی {len(sheep_ids)} دام")
+        flash('عملیات گروهی با موفقیت انجام شد.', 'success')
+
     return redirect(url_for('livestock.index'))
 
 @livestock_bp.route('/add', methods=['GET', 'POST'])
@@ -408,74 +387,64 @@ def edit_sheep(id):
     heat_str = request.form.get('last_heat_date')
     sheep.last_heat_date = datetime.strptime(heat_str, '%Y-%m-%d').date() if heat_str else None
 
-    # منطق ثبت خودکار فاکتور فروش در دفتر کل
-    if sheep.status == 'فروخته شده':
-        # جلوگیری از خطا در صورت خالی بودن یا فرمت ناصحیح مبالغ و تاریخ
-        raw_price = request.form.get('sale_price', '0').replace(',', '').strip()
-        try:
-            sheep.sale_price = float(raw_price) if raw_price else 0.0
-        except ValueError:
-            sheep.sale_price = 0.0
+    with db.session.begin_nested():
+        # منطق ثبت خودکار فاکتور فروش در دفتر کل
+        if sheep.status == 'فروخته شده':
+            raw_price = request.form.get('sale_price', '0').replace(',', '').strip()
+            try:
+                sheep.sale_price = float(raw_price) if raw_price else 0.0
+            except ValueError:
+                sheep.sale_price = 0.0
 
-        s_date_str = request.form.get('sale_date')
-        try:
-            sheep.sale_date = datetime.strptime(s_date_str, '%Y-%m-%d').date() if s_date_str else datetime.now(UTC).date()
-        except ValueError:
-            sheep.sale_date = datetime.now(UTC).date()
+            s_date_str = request.form.get('sale_date')
+            try:
+                sheep.sale_date = datetime.strptime(s_date_str, '%Y-%m-%d').date() if s_date_str else datetime.now(UTC).date()
+            except ValueError:
+                sheep.sale_date = datetime.now(UTC).date()
 
-        # انتساب خریدار و فلاش کردن جهت دسترسی به روابط در گام بعد
-        buyer_cat_id = request.form.get('buyer_category_id')
-        sheep.buyer_category_id = int(buyer_cat_id) if (buyer_cat_id and buyer_cat_id.isdigit()) else None
-        db.session.flush()
-        
-        if sheep.sale_price > 0:
-            # تهیه نام خریدار برای درج در ستون طرف حساب دفتر کل
-            from app.models import BuyerCategory
-            buyer_name = 'فروش نقدی'
-            if sheep.buyer_category_id:
-                bc = db.session.get(BuyerCategory, sheep.buyer_category_id)
-                if bc: buyer_name = bc.name
+            buyer_cat_id = request.form.get('buyer_category_id')
+            sheep.buyer_category_id = int(buyer_cat_id) if (buyer_cat_id and buyer_cat_id.isdigit()) else None
+            db.session.flush()
+            
+            if sheep.sale_price > 0:
+                from app.models import BuyerCategory
+                buyer_name = 'فروش نقدی'
+                if sheep.buyer_category_id:
+                    bc = db.session.get(BuyerCategory, sheep.buyer_category_id)
+                    if bc: buyer_name = bc.name
 
-            existing_tx = Transaction.query.filter(
-                Transaction.description.ilike(f"%پلاک: {sheep.ear_tag}%"),
-                Transaction.category == 'فروش دام'
-            ).first()
+                existing_tx = Transaction.query.filter(
+                    Transaction.description.ilike(f"%پلاک: {sheep.ear_tag}%"),
+                    Transaction.category == 'فروش دام'
+                ).first()
 
-            if not existing_tx:
-                new_tx = Transaction(
-                    t_type='درآمد',
-                    category='فروش دام', # ۲. رفع ضعف موتور حسابداری (حذف String Matching)
-                    amount=sheep.sale_price,
-                    t_date=sheep.sale_date,
-                    is_archived=False,
-                    party_name=buyer_name,
-                    description=f"فروش سیستمی - پلاک: {sheep.ear_tag} - خریدار: {sheep.buyer_category.name if sheep.buyer_category else 'نامشخص'}"
-                )
-                db.session.add(new_tx)
-                db.session.flush()
-                
-                try:
+                if not existing_tx:
+                    new_tx = Transaction(
+                        t_type='درآمد',
+                        category='فروش دام',
+                        amount=sheep.sale_price,
+                        t_date=sheep.sale_date,
+                        is_archived=False,
+                        party_name=buyer_name,
+                        description=f"فروش سیستمی - پلاک: {sheep.ear_tag} - خریدار: {sheep.buyer_category.name if sheep.buyer_category else 'نامشخص'}"
+                    )
+                    db.session.add(new_tx)
+                    db.session.flush()
                     AccountingEngine.record_sale(new_tx, include_vat=True)
-                except:
-                    pass
-                flash(f'✅ فروش دام (پلاک {sheep.ear_tag}) با موفقیت ثبت شد و فاکتور درآمد در لیست فاکتورها قرار گرفت.', 'success')
-            else:
-                existing_tx.amount = sheep.sale_price
-                existing_tx.t_date = sheep.sale_date
-                existing_tx.party_name = buyer_name
-                db.session.add(existing_tx)
-                flash(f'ℹ️ فاکتور فروش پلاک {sheep.ear_tag} در دفتر کل بروزرسانی شد.', 'info')
-        else:
-            flash('⚠️ وضعیت دام به "فروخته شده" تغییر یافت، اما به دلیل عدم ورود مبلغ فروش، فاکتوری صادر نشد.', 'warning')
+                    flash(f'✅ فروش دام (پلاک {sheep.ear_tag}) ثبت شد.', 'success')
+                else:
+                    existing_tx.amount = sheep.sale_price
+                    existing_tx.t_date = sheep.sale_date
+                    existing_tx.party_name = buyer_name
+                    flash(f'ℹ️ فاکتور قبلی پلاک {sheep.ear_tag} بروز شد.', 'info')
 
-        # ثبت آخرین وزن زمان فروش اگر وارد شده باشد
-        s_weight = request.form.get('sale_weight')
-        if s_weight:
-            sheep.weight = float(s_weight)
-            db.session.add(WeightRecord(sheep_id=sheep.id, weight=float(s_weight), notes="وزن زمان فروش"))
-    else:
-        sheep.sale_price = 0.0
-        sheep.sale_date = None
+            s_weight = request.form.get('sale_weight')
+            if s_weight:
+                sheep.weight = float(s_weight)
+                db.session.add(WeightRecord(sheep_id=sheep.id, weight=float(s_weight), notes="وزن زمان فروش"))
+        else:
+            sheep.sale_price = 0.0
+            sheep.sale_date = None
      
     log_audit(f"ویرایش اطلاعات پروفایل دام پلاک {sheep.ear_tag}") 
     db.session.commit()
@@ -573,7 +542,7 @@ def vet_queue():
 @livestock_bp.route('/apply_protocol/<int:id>', methods=['POST'])
 def apply_protocol(id):
     template = TreatmentTemplate.query.get_or_404(request.form.get('template_id'))
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     for med in template.medicines.split(','):
         db.session.add(MedicalRecord(sheep_id=id, action_type="پروتکل", medicine_name=med.strip(), record_date=today, operator="سیستم", notes=f"پروتکل: {template.name}"))
     sheep = Sheep.query.get(id)

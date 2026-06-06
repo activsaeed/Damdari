@@ -294,7 +294,7 @@
                         <h6 class="text-success fw-bold"><i class="fa-solid fa-hand-holding-dollar"></i> اطلاعات فروش دام</h6>
                         <div class="mb-2">
                             <label>قیمت فروش کل (تومان)</label>
-                            <input type="text" class="form-control" dir="ltr" value="{{ sheep.sale_price or '' }}" onkeyup="formatCurrency(this, 'raw_sale_price')">
+                            <input type="text" class="form-control" dir="ltr" value="{{ sheep.sale_price or '' }}" onkeyup="formatCurrency(this, 'raw_sale_price')" id="salePriceInput">
                             <input type="hidden" name="sale_price" id="raw_sale_price" value="{{ sheep.sale_price or '' }}">
                         </div>
                         <div class="mb-2"><label>تاریخ فروش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="sale_date" class="gregorian-hidden-field" value="{{ sheep.sale_date.strftime('%Y-%m-%d') if sheep.sale_date else today_str }}"></div>
@@ -387,6 +387,21 @@
 <div class="modal fade" id="birthModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-baby text-info"></i> ثبت زایش</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_birth', id=sheep.id) }}" method="POST"><div class="modal-body"><div class="mb-3"><label>تاریخ زایش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}"></div><div class="mb-3"><label>تعداد بره</label><input type="number" name="lambs_count" class="form-control text-center fw-bold" value="1"></div><div class="mb-3"><label>وضعیت</label><select name="status" class="form-select"><option value="موفق">موفق</option><option value="مرده‌زایی">مرده‌زایی</option></select></div><div class="mb-3"><label>توضیحات</label><input type="text" name="notes" class="form-control" placeholder="شرایط زایمان و..."></div></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark w-100 fw-bold">ثبت زایش</button></div></form></div></div></div>
 
 <script>
+    // اعتبارسنجی هوشمند فرم (استفاده از سیستم استاندارد مرورگر بجای alert)
+    document.querySelector('#editModal form').addEventListener('submit', function(e) {
+        const status = document.getElementById('statusSelect').value;
+        const priceInput = document.getElementById('salePriceInput');
+        const priceVal = document.getElementById('raw_sale_price').value;
+        
+        if (status === 'فروخته شده' && (!priceVal || parseFloat(priceVal) <= 0)) {
+            priceInput.setCustomValidity('برای وضعیت "فروخته شده" باید مبلغ فروش معتبری وارد کنید.');
+            priceInput.reportValidity();
+            e.preventDefault();
+        } else {
+            priceInput.setCustomValidity('');
+        }
+    });
+
     function toggleDynamicFields() {
         let status = document.getElementById('statusSelect').value;
         let isDead = (status === 'تلف شده' || status === 'مرده');
@@ -397,8 +412,38 @@
         // وقتی مرد یا فروخته شد، هدف و جیره و بهاربند مخفی میشوند!
         document.getElementById('livingFieldsDiv').style.display = (isDead || isSold) ? 'none' : 'block';
     }
-    // یک ثانیه تاخیر میدهیم تا مطمئن شویم تقویم شمسی جی کوئری لود شده است
-    setTimeout(toggleDynamicFields, 500); 
+    
+    // جایگزینی setTimeout با رویدادهای استاندارد لود و نمایش مودال
+    document.addEventListener('DOMContentLoaded', toggleDynamicFields);
+    document.getElementById('editModal').addEventListener('shown.bs.modal', toggleDynamicFields);
+
+    // شنونده خودکار وزن باسکول (IoT Weight Sync)
+    {% if sheep.status not in ['فروخته شده', 'تلف شده', 'مرده'] %}
+    setInterval(() => {
+        fetch("{{ url_for('finance.get_weight_status', ear_tag=sheep.ear_tag) }}")
+        .then(res => res.json())
+        .then(data => {
+            if (data.weight) {
+                const weightDisplay = document.querySelector('.text-success.fw-bold');
+                const oldWeight = parseFloat(weightDisplay.innerText);
+                const newWeight = parseFloat(data.weight);
+                
+                if (oldWeight !== newWeight) {
+                    weightDisplay.innerText = newWeight + ' کیلو';
+                    // فیدبک بصری به کاربر هنگام تغییر خودکار وزن
+                    weightDisplay.classList.add('text-warning');
+                    setTimeout(() => weightDisplay.classList.remove('text-warning'), 2000);
+                    
+                    // اگر کاربر در تب نمودار رشد باشد، صفحه رفرش شود
+                    if (document.querySelector('#growth.active')) {
+                        location.reload();
+                    }
+                }
+            }
+        })
+        .catch(err => console.error('IoT Weight sync failed'));
+    }, 10000); // چک کردن وزن هر ۱۰ ثانیه
+    {% endif %}
     
     // کدهای نمودار وزن سر جای خود بماند...
 </script>

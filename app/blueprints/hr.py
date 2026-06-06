@@ -3,7 +3,7 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
 from app.accounting_engine import AccountingEngine
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import requests
 import os
 import time
@@ -21,7 +21,7 @@ def send_to_telegram(message):
     except: pass
 
 def parse_smart_date(date_str):
-    if not date_str: return datetime.utcnow().date()
+    if not date_str: return datetime.now(UTC).date()
     date_str = date_str.replace('/', '-')
     if date_str.startswith('13') or date_str.startswith('14'):
         parts = date_str.split('-')
@@ -34,7 +34,7 @@ def index():
     from app.models import Worker, Task, Pen, Sheep
     workers = Worker.query.order_by(Worker.id.desc()).all()
     pens = Pen.query.all()
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     thirty_days_ago = today - timedelta(days=30)
     
     if current_user.role == 'کارگر':
@@ -71,7 +71,7 @@ def index():
                 
         kpi_data[w.id] = {'score': max(0, score), 'bonus': bonus, 'notes': " | ".join(notes) if notes else "عملکرد نرمال"}
 
-    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    today_str = datetime.now(UTC).strftime('%Y-%m-%d')
     return render_template('hr/index.html', workers=workers, tasks=tasks, pens=pens, kpi_data=kpi_data, today=today, today_str=today_str)
 
 @hr_bp.route('/add_worker', methods=['POST'])
@@ -133,7 +133,7 @@ def profile(id):
     petty_cash = PettyCash.query.filter_by(worker_id=id).order_by(PettyCash.record_date.desc()).limit(10).all()
     
     pens = Pen.query.all()
-    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    today_str = datetime.now(UTC).strftime('%Y-%m-%d')
     return render_template('hr/profile.html', worker=worker, events=events, loans=loans, tasks=tasks, petty_cash=petty_cash, pens=pens, today_str=today_str)
 
 @hr_bp.route('/edit_worker/<int:id>', methods=['POST'])
@@ -261,7 +261,7 @@ def quick_report():
         if sheep:
             sheep.status = 'بیمار'
             vet_user = User.query.filter_by(role='دامپزشک').first()
-            db.session.add(Task(worker_id=vet_user.id if vet_user else 1, description=f"گزارش فوری از {worker_name}: دام {ear_tag} دچار {issue_type} شده!", task_date=datetime.utcnow().date(), livestock_id=sheep.id))
+            db.session.add(Task(worker_id=vet_user.id if vet_user else 1, description=f"گزارش فوری از {worker_name}: دام {ear_tag} دچار {issue_type} شده!", task_date=datetime.now(UTC).date(), livestock_id=sheep.id))
             send_to_telegram(f"🚨 #اورژانس_دامپزشکی\nپلاک: {ear_tag}\nمشکل: {issue_type}\nگزارشگر: {worker_name}")
             flash(f"گزارش خطر برای پلاک {ear_tag} ارسال شد.", "danger")
         else:
@@ -280,7 +280,7 @@ def payslips():
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
     workers = Worker.query.filter_by(status='فعال').all()
     all_payslips = Payslip.query.order_by(Payslip.issue_date.desc()).all()
-    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    today_str = datetime.now(UTC).strftime('%Y-%m-%d')
     return render_template('hr/payslips.html', workers=workers, payslips=all_payslips, today_str=today_str)
 
 @hr_bp.route('/generate_payslip', methods=['POST'])
@@ -291,23 +291,27 @@ def generate_payslip():
     month_name = request.form.get('month_name')
     worker = Worker.query.get_or_404(worker_id)
     
-    # محاسبات قانون کار
+    # دریافت نرخ‌ها از تنظیمات (رفع هاردکد نرخ اضافه کار و شب کاری)
+    overtime_rate = float(get_setting('overtime_rate', 1.4))
+    night_shift_rate = float(get_setting('night_shift_rate', 0.35))
+    
     overtime_hours = float(request.form.get('overtime_hours') or 0)
     night_shift_hours = float(request.form.get('night_shift_hours') or 0)
     transportation = float(request.form.get('transportation_pay') or 0)
     eydi = float(request.form.get('eydi_sanavat') or 0)
     
-    # فرمول محاسبه اضافه کاری و شب کاری بر اساس حقوق پایه (قانون کار ایران: مزد هر ساعت * 1.4 برای اضافه کار)
-    hourly_rate = worker.salary / 220 if worker.salary > 0 else 0
-    overtime_pay = overtime_hours * (hourly_rate * 1.4)
-    night_shift_pay = night_shift_hours * (hourly_rate * 0.35)
+    from app.blueprints.dashboard import get_setting
+    working_hours = float(get_setting('working_hours', 220))
+    hourly_rate = worker.salary / working_hours if worker.salary > 0 else 0
+    overtime_pay = overtime_hours * (hourly_rate * overtime_rate)
+    night_shift_pay = night_shift_hours * (hourly_rate * night_shift_rate)
     
     # پیدا کردن اقساط وام های فعال
     active_loans = WorkerLoan.query.filter_by(worker_id=worker.id, status='در حال پرداخت').all()
     loan_deduction = sum(l.installment_amount for l in active_loans if l.installment_amount)
     
     # محاسبه پاداش هوشمند (بر اساس وظایف انجام شده در 30 روز اخیر)
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     done_tasks = Task.query.filter_by(worker_id=worker.id, is_done=True).filter(Task.task_date >= today - timedelta(days=30)).count()
     kpi_bonus = 500000 if done_tasks > 10 else 0
     
@@ -323,17 +327,15 @@ def generate_payslip():
         overtime_pay=overtime_pay, night_shift_pay=night_shift_pay, transportation_pay=transportation,
         kpi_bonus=kpi_bonus, eydi_sanavat=eydi, loan_deduction=loan_deduction, fines=fines, gross_pay=gross_pay, net_pay=net_pay
     )
-    db.session.add(new_payslip)
     
-    try:
+    with db.session.begin_nested():
+        db.session.add(new_payslip)
+        db.session.flush()
         # صدور همزمان سند حسابداری در دفتر کل
         AccountingEngine.record_payroll(new_payslip)
-        db.session.commit()
-        flash(f"فیش حقوقی {worker.name} برای {month_name} صادر و سند مالی آن در دفتر کل ثبت شد.", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"خطا در صدور فیش یا سند مالی: {str(e)}", "danger")
-        
+
+    db.session.commit()
+    flash(f"فیش حقوقی {worker.name} صادر و سند مالی ثبت شد.", "success")
     return redirect(url_for('hr.payslips'))
 
 @hr_bp.route('/pay_payslip/<int:id>')
@@ -342,7 +344,7 @@ def pay_payslip(id):
     from app.models import Payslip, Transaction
     p = Payslip.query.get_or_404(id)
     p.is_paid = True
-    db.session.add(Transaction(t_type='هزینه', category='حقوق کارگران', amount=p.net_pay, t_date=datetime.utcnow().date(), description=f"تسویه فیش حقوقی {p.worker.name} بابت {p.month_name}"))
+    db.session.add(Transaction(t_type='هزینه', category='حقوق کارگران', amount=p.net_pay, t_date=datetime.now(UTC).date(), description=f"تسویه فیش حقوقی {p.worker.name} بابت {p.month_name}"))
     db.session.commit()
     flash("حقوق تسویه و در دفتر کل مالی ثبت شد.", "success")
     return redirect(url_for('hr.payslips'))
