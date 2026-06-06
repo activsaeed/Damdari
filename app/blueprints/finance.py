@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, make_response, current_app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app import db
@@ -16,8 +16,25 @@ try:
 except ImportError:
     pdfkit = None
 from app.blueprints.dashboard import get_setting  # این تابع در داشبورد تعریف شده
+ 
 
 finance_bp = Blueprint('finance', __name__)
+
+# ۱. حل بحران واحد پول و هاردکد مالیات (Data Integrity & VAT)
+# توضیح: ما یک تابع کمکی می‌نویسیم که تمام ورودی‌ها را به "تومان" تبدیل می‌کند و نرخ مالیات را از دیتابیس می‌خواند.
+# فایل: app/blueprints/finance.py
+# در بالای فایل، زیر ایمپورت‌ها، این توابع را اضافه کنید:
+def get_system_currency_from_settings():
+    """دریافت واحد پول فعلی سیستم از تنظیمات"""
+    return get_setting('currency_unit', 'تومان')
+
+def normalize_amount_to_toman(amount_str):
+    """تبدیل تمام ورودی ها به تومان بر اساس تنظیمات فعلی کاربر"""
+    if not amount_str: return 0.0
+    amount = float(amount_str.replace(',', '')) # حذف کاما برای تبدیل به عدد
+    if get_system_currency_from_settings() == 'ریال':
+        return amount / 10.0
+    return amount
 
 def parse_smart_date(date_str, default_val=None):
     """تبدیل هوشمند تاریخ شمسی/میلادی با پشتیبانی از اعداد فارسی و مقادیر خالی"""
@@ -103,7 +120,7 @@ def add_transaction():
     if request.method == 'POST':
         t_type = request.form.get('t_type')
         category_name = request.form.get('category').strip()
-        raw_amount = request.form.get('amount', '0').replace(',', '')
+        raw_amount = request.form.get('amount', '0')
         invoice_number = request.form.get('invoice_number')
         description = request.form.get('description')
         party_name = request.form.get('party_name') # فیلد جدید شخص/شرکت
@@ -118,8 +135,8 @@ def add_transaction():
             db.session.flush()
 
         # --- منطق هوشمند اتصال یا ساخت حساب شخص ---
-        linked_contact = None
-        amount_val = float(raw_amount)
+        linked_contact = None        
+        amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
 
         if contact_id:
             linked_contact = Contact.query.get(contact_id)
@@ -355,7 +372,7 @@ def edit_cheque(id):
 def add_cheque():
     due_date = parse_smart_date(request.form.get('due_date')) # رفع خطای تاریخ
     
-    image_path = None
+    image_path = None    
     photo = request.files.get('image')
     if photo and photo.filename != '':
         filename = f"cheque_{int(time.time())}_{secure_filename(photo.filename)}"
@@ -365,8 +382,8 @@ def add_cheque():
         image_path = f"uploads/cheques/{filename}"
 
     new_cheque = Cheque(
-        cheque_type=request.form.get('cheque_type'), cheque_number=request.form.get('cheque_number'),
-        amount=float(request.form.get('amount') or 0), due_date=due_date, bank_name=request.form.get('bank_name'),
+        cheque_type=request.form.get('cheque_type'), cheque_number=request.form.get('cheque_number'),        
+        amount=normalize_amount_to_toman(request.form.get('amount')), due_date=due_date, bank_name=request.form.get('bank_name'),
         issuer_name=request.form.get('issuer_name'), issuer_national_id=request.form.get('issuer_national_id'),
         registered_to=request.form.get('registered_to'), registrar_national_id=request.form.get('registrar_national_id'),
         reason=request.form.get('reason'), notes=request.form.get('notes'), image_path=image_path
@@ -445,7 +462,7 @@ def petty_cash():
 def add_petty_cash():
     from app.models import PettyCash, Transaction
     worker_id = request.form.get('worker_id')
-    amount = float(request.form.get('amount') or 0)
+    amount = normalize_amount_to_toman(request.form.get('amount'))
     action_type = request.form.get('action_type')
     description = request.form.get('description')
     
@@ -489,8 +506,8 @@ def edit_tx(id):
     
     tx = Transaction.query.get_or_404(id)
     tx.t_type = request.form.get('t_type')
-    tx.category = request.form.get('category')
-    tx.amount = float(request.form.get('amount') or 0) # اینجا مبلغ بدون کاما که از هیدن فیلد میاد دریافت میشه
+    tx.category = request.form.get('category')    
+    tx.amount = normalize_amount_to_toman(request.form.get('amount')) # اینجا مبلغ بدون کاما که از هیدن فیلد میاد دریافت میشه
     tx.t_date = parse_smart_date(request.form.get('t_date'))
     tx.invoice_number = request.form.get('invoice_number')
     tx.party_name = request.form.get('party_name')
@@ -654,9 +671,8 @@ def contact_profile(id):
 def contact_add_tx(id):
     from app.models import Contact, Transaction, TransactionCategory, TransactionDocument
     c = Contact.query.get_or_404(id)
-    # جلوگیری از خطای ValueError در صورت خالی بودن مبلغ
-    raw_val = request.form.get('amount', '0').replace(',', '').strip()
-    amount = float(raw_val) if raw_val and raw_val != '' else 0.0
+    # جلوگیری از خطای ValueError در صورت خالی بودن مبلغ    
+    amount = normalize_amount_to_toman(request.form.get('amount'))
     
     if amount <= 0:
         flash('خطا: مبلغ وارد شده باید بیشتر از صفر باشد.', 'contact_tx_error')

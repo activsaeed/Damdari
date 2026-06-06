@@ -52,8 +52,8 @@
 
             <!-- سوئیچ واحد پول -->
             <div class="px-3 mb-2">
-                <a href="{{ url_for('dashboard.toggle_currency') }}" class="btn btn-sm btn-outline-warning w-100 fw-bold shadow-sm">
-                    <i class="fa-solid fa-coins me-1"></i> واحد: {{ current_currency_unit }} (تغییر)
+                <a href="{{ url_for('dashboard.toggle_currency') }}" class="btn btn-sm btn-outline-warning w-100 fw-bold shadow-sm">                    
+                    <i class="fa-solid fa-coins me-1"></i> واحد: {{ get_system_currency_from_settings() }} (تغییر)
                 </a>
             </div>
 
@@ -84,7 +84,7 @@
                     {% endif %}
 
                     {% if current_user.can_view_finance or current_user.role == 'مدیر' %}
-                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-wallet me-2"></i> حسابداری و مالی</a>
+                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}" {% if request.blueprint == 'finance' %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری و مالی</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'finance' %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل (نقد/فاکتور)</a>
                         <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar"></i> مدیریت چک‌ها (اسناد)</a>

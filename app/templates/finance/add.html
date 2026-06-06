@@ -28,7 +28,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label fw-bold">مبلغ کل ({{ current_currency_unit }})</label>
+                    <label class="form-label fw-bold">مبلغ کل ({{ get_system_currency_from_settings() }})</label>
                     <input type="text" class="form-control form-control-lg text-start fw-bold text-primary" dir="ltr" placeholder="مثال: 5,000,000" onkeyup="formatCurrency(this)" required>
                     <input type="hidden" id="raw_amount" name="amount" required>
                 </div>

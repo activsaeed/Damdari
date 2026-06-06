@@ -188,6 +188,8 @@ class TransactionCategory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     t_type = db.Column(db.String(20), nullable=False)
+    # ---> فیلد جدید: تگ سیستمی غیرقابل تغییر برای بک‌اند <---
+    system_tag = db.Column(db.String(50), nullable=True, unique=True)
 
 
 class Transaction(db.Model):

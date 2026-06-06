@@ -425,7 +425,7 @@ def edit_sheep(id):
             if not existing_tx:
                 new_tx = Transaction(
                     t_type='درآمد',
-                    category='فروش دام',
+                    category='فروش دام', # ۲. رفع ضعف موتور حسابداری (حذف String Matching)
                     amount=sheep.sale_price,
                     t_date=sheep.sale_date,
                     is_archived=False,

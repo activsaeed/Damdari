@@ -26,8 +26,8 @@
 </div>
 
 <!-- جدول ریز تراکنش های تنخواه -->
-<div class="card shadow-sm border-0 mb-3 bg-white">
-    <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-list text-primary"></i> ریز تراکنش‌های تنخواه ({{ current_currency_unit }})</div>
+<div class="card shadow-sm border-0 mb-3 bg-white">    
+    <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-list text-primary"></i> ریز تراکنش‌های تنخواه ({{ get_system_currency_from_settings() }})</div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle text-center mb-0">
@@ -77,7 +77,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">مبلغ ({{ current_currency_unit }})</label>
+                        <label class="form-label fw-bold">مبلغ ({{ get_system_currency_from_settings() }})</label>
                         <input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" onkeyup="formatCurrency(this, 'raw_petty_cash')" required>
                         <input type="hidden" name="amount" id="raw_petty_cash" required>
                     </div>

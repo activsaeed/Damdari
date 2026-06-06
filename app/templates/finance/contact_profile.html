@@ -162,7 +162,7 @@
                                 </div>
                                 {% endif %}
                                 <div class="mb-4"><label class="form-label fw-bold">نوع عملیات تسویه</label><select name="tx_type" class="form-select form-select-lg fw-bold"><option value="پرداخت به شخص (تسویه بدهی)">پرداخت پول به ایشان</option><option value="دریافت از شخص (وصول طلب)">دریافت پول از ایشان</option></select></div>
-                                <div class="mb-4"><label class="form-label fw-bold">مبلغ رسید ({{ current_currency_unit }})</label><input type="text" class="form-control form-control-lg text-center fw-bold text-success" onkeyup="formatCurrency(this, 'raw_amt')" required><input type="hidden" name="amount" id="raw_amt"></div>
+                                <div class="mb-4"><label class="form-label fw-bold">مبلغ رسید ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control form-control-lg text-center fw-bold text-success" onkeyup="formatCurrency(this, 'raw_amt')" required><input type="hidden" name="amount" id="raw_amt"></div>
                                 <div class="row g-3 mb-4">
                                     <div class="col-6"><label class="form-label small fw-bold">تاریخ شمسی</label><input type="text" name="t_date_jalali" class="form-control jalali-datepicker" required><input type="hidden" name="t_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
                                     <div class="col-6"><label class="form-label small fw-bold">تصویر فیش/چک</label><input type="file" name="receipt" class="form-control" accept="image/*,.pdf"></div>

@@ -55,8 +55,8 @@
             <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST">
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>
-                        <div class="col-md-6"><label class="form-label fw-bold">مبلغ چک ({{ current_currency_unit }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" value="{{ c.amount }}" onkeyup="formatCurrency(this, 'raw_edit_cheque_{{ c.id }}')" required><input type="hidden" name="amount" id="raw_edit_cheque_{{ c.id }}" value="{{ c.amount }}" required></div>
+                        <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>                        
+                        <div class="col-md-6"><label class="form-label fw-bold">مبلغ چک ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" value="{{ c.amount }}" onkeyup="formatCurrency(this, 'raw_edit_cheque_{{ c.id }}')" required><input type="hidden" name="amount" id="raw_edit_cheque_{{ c.id }}" value="{{ c.amount }}" required></div>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4"><label class="form-label fw-bold">شماره چک</label><input type="text" name="cheque_number" class="form-control" dir="ltr" value="{{ c.cheque_number }}" required></div>

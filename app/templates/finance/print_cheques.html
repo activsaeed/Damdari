@@ -15,7 +15,7 @@
 <body onload="window.print()">
     <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
         <div><h3 class="fw-bold mb-1">گزارش اسناد بانکی (چک‌ها)</h3><span class="text-muted">تاریخ گزارش: {{ today_date|jalali }}</span></div>
-        <div class="text-end"><h5 class="fw-bold">سیستم مدیریت هوشمند دامداری</h5><small class="text-muted">واحد پول: {{ current_currency_unit }}</small></div>
+        <div class="text-end"><h5 class="fw-bold">سیستم مدیریت هوشمند دامداری</h5><small class="text-muted">واحد پول: {{ get_system_currency_from_settings() }}</small></div>
     </div>
     <table class="table table-sm text-center">
         <thead><tr><th>ردیف</th><th>نوع چک</th><th>سررسید</th><th>شماره چک</th><th>بانک / صادرکننده</th><th>مبلغ</th><th>بابت</th><th>وضعیت</th></tr></thead>

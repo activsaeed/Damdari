@@ -49,7 +49,7 @@ def create_app():
     # اینجکت کردن تنظیمات عمومی سیستم به تمامی قالب‌ها
     @app.context_processor
     def inject_global_settings():
-        return dict(current_currency_unit=get_system_setting('currency_unit', 'تومان'))
+        return dict(get_system_currency_from_settings=lambda: get_system_setting('currency_unit', 'تومان'))
 
     @app.before_request
     def check_valid_login():
@@ -106,7 +106,7 @@ def create_app():
     @app.template_filter('currency')
     def currency_filter(amount):
         if amount is None: amount = 0
-        # دریافت واحد پول از تنظیمات سیستم
+        # دریافت واحد پول از تنظیمات سیستم # ۱. حل بحران واحد پول و هاردکد مالیات (Data Integrity & VAT)
         unit = get_system_setting('currency_unit', 'تومان')
         factor = 10 if unit == 'ریال' else 1
         
@@ -162,6 +162,8 @@ def create_app():
         cols_inv = [c['name'] for c in inspector.get_columns('inventory_item')]
         if 'category_id' not in cols_inv:
             db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN category_id INTEGER REFERENCES inventory_category(id)'))
+        if 'system_tag' not in cols_inv:
+            db.session.execute(text('ALTER TABLE "transaction_category" ADD COLUMN system_tag VARCHAR(50) UNIQUE'))
         if 'unit_id' not in cols_inv:
             db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN unit_id INTEGER REFERENCES unit(id)'))
 

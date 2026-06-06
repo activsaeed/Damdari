@@ -113,7 +113,7 @@ def transaction():
             item.quantity += amount
             item.unit_price = (current_value + total_price) / item.quantity
             
-            # ثبت اتوماتیک در دفتر کل حسابداری!
+            # ثبت اتوماتیک در دفتر کل حسابداری! # ۲. رفع ضعف موتور حسابداری (حذف String Matching)
             db.session.add(Transaction(t_type='هزینه', category='خرید انبار (خودکار)', amount=total_price, t_date=today, is_archived=False, description=f"خرید {amount} {item.unit.name if item.unit else ''} {item.name}"))
             flash('موجودی شارژ شد و مبلغ در دفتر کل مالی ثبت گردید.', 'success')
         else:

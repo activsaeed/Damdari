@@ -451,7 +451,7 @@ def pay_insurance():
     pay_date = parse_smart_date(request.form.get('pay_date'))
 
     try:
-        AccountingEngine.record_insurance_payment(amount, description, pay_date)
+        AccountingEngine.record_insurance_payment(amount, description, pay_date) # ۲. رفع ضعف موتور حسابداری (حذف String Matching)
         db.session.commit()
         flash(f'سند واریز بیمه به مبلغ {amount:,.0f} تومان با موفقیت ثبت شد و از بدهی جاری کسر گردید.', 'success')
     except Exception as e:

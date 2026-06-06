@@ -31,7 +31,7 @@
         </div>
         <div style="width: 200px;" class="text-start small">
             <p class="mb-1">شماره گزارش: {{ range(1000, 9999) | random }}</p>
-            <p class="mb-0">واحد پول: {{ current_currency_unit }}</p>
+            <p class="mb-0">واحد پول: {{ get_system_currency_from_settings() }}</p>
         </div>
     </div>
 

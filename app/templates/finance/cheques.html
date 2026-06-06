@@ -176,9 +176,9 @@
                                 <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش چک</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                                 <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST">
                                     <div class="modal-body">
-                                        <div class="row g-3 mb-3">
-                                            <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>
-                                            <div class="col-md-6"><label class="form-label fw-bold">مبلغ چک ({{ current_currency_unit }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" value="{{ c.amount }}" onkeyup="formatCurrency(this, 'raw_edit_cheque_{{ c.id }}')" required><input type="hidden" name="amount" id="raw_edit_cheque_{{ c.id }}" value="{{ c.amount }}" required></div>
+                                        <div class="row g-3 mb-3">                                            
+                                            <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>                                            
+                                            <div class="col-md-6"><label class="form-label fw-bold">مبلغ چک ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" value="{{ c.amount }}" onkeyup="formatCurrency(this, 'raw_edit_cheque_{{ c.id }}')" required><input type="hidden" name="amount" id="raw_edit_cheque_{{ c.id }}" value="{{ c.amount }}" required></div>
                                         </div>
                                         <div class="row g-3 mb-3">
                                             <div class="col-md-4"><label class="form-label fw-bold">شماره چک</label><input type="text" name="cheque_number" class="form-control" dir="ltr" value="{{ c.cheque_number }}" required></div>
@@ -245,8 +245,8 @@
             <form action="{{ url_for('finance.add_cheque') }}" method="POST" enctype="multipart/form-data">
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6"><label class="form-label fw-bold text-primary">نوع چک</label><select name="cheque_type" class="form-select fw-bold" required><option value="دریافتی (مشتری)">دریافتی از مشتری (طلب)</option><option value="پرداختی (خودم)">پرداختی خودم (بدهی)</option></select></div>
-                        <div class="col-md-6"><label class="form-label fw-bold text-danger">مبلغ چک ({{ current_currency_unit }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" onkeyup="formatCurrency(this, 'raw_amount_cheque')" required><input type="hidden" name="amount" id="raw_amount_cheque" required></div>
+                        <div class="col-md-6"><label class="form-label fw-bold text-primary">نوع چک</label><select name="cheque_type" class="form-select fw-bold" required><option value="دریافتی (مشتری)">دریافتی از مشتری (طلب)</option><option value="پرداختی (خودم)">پرداختی خودم (بدهی)</option></select></div>                        
+                        <div class="col-md-6"><label class="form-label fw-bold text-danger">مبلغ چک ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control fw-bold fs-5 text-center" dir="ltr" onkeyup="formatCurrency(this, 'raw_amount_cheque')" required><input type="hidden" name="amount" id="raw_amount_cheque" required></div>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4"><label class="form-label fw-bold">شماره چک (۴ رقم آخر)</label><input type="text" name="cheque_number" class="form-control" dir="ltr" required></div>

@@ -120,7 +120,11 @@
                         <th>شماره فاکتور</th>
                         <th>شرکت/شخص</th>
                         <th>دسته‌بندی</th>
-                        <th>مبلغ ({{ current_currency_unit }})</th>
+                        <th>مبلغ ({{ get_system_currency_from_settings() }})</th>
+                        <th>
+                            {% if t.is_archived %}<span class="badge bg-dark"><i class="fa-solid fa-archive"></i> بایگانی شده</span>
+                            {% else %}<span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }}</span>{% endif %}
+                        </th>
                         <th>اسناد/فایل</th>
                         <th>عملیات</th>
                     </tr>
@@ -143,7 +147,11 @@
                         <td class="fw-bold text-secondary">{{ t.invoice_number or '-' }}</td>
                         <td class="fw-bold">{{ t.party_name or 'نامشخص' }}</td>
                         <td>
-                            <span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %} mb-1">{{ t.t_type }}</span><br>
+                            {% if t.is_archived %}
+                            <span class="badge bg-dark mb-1"><i class="fa-solid fa-archive"></i> بایگانی شده</span>
+                            {% else %}
+                            <span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %} mb-1">{{ t.t_type }}</span>
+                            {% endif %}<br>
                             <small class="text-muted">{{ t.category }}</small>
                         </td>
                                                 <td class="{% if t.t_type == 'درآمد' %}text-success{% else %}text-danger{% endif %} fw-bold fs-6">
