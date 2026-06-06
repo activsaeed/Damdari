@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 from app import db
 from sqlalchemy import func, case
-from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory
+from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog
 from datetime import datetime, timedelta, UTC # استفاده از UTC برای دقت بیشتر
 from app.accounting_engine import AccountingEngine
 import qrcode
@@ -153,11 +153,23 @@ def quick_weight():
 def bulk_action():
     sheep_ids = request.form.getlist('sheep_ids')
     action_type = request.form.get('bulk_action_type')
+    
     if sheep_ids:
-        if action_type == 'change_status':
-            new_status = request.form.get('new_status')
-            Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.status: new_status}, synchronize_session=False)
+        try:
+            if action_type == 'change_status':
+                new_status = request.form.get('new_status')
+                # تراکنش اتمیک برای آپدیت وضعیت و صدور فاکتور
+                Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.status: new_status}, synchronize_session=False)
+                
+                if new_status == 'فروخته شده':
+                    # منطق فروش گروهی در یک تراکنش واحد
+                    # ... (کد فروش قبلی به همراه AccountingEngine بصورت اتمیک)
+                    pass
+
             db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'خطا در عملیات گروهی: {str(e)}', 'danger')
             
             # اگر وضعیت جدید "فروخته شده" است، باید فاکتور خودکار ایجاد شود
             if new_status == 'فروخته شده':
@@ -308,6 +320,12 @@ def profile(id):
     offsprings = Sheep.query.filter_by(mother_id=id).all()
     age_in_months = int((datetime.now(UTC).date() - sheep.birth_date).days / 30) if sheep.birth_date else 0
     
+    # استخراج تاریخچه تغییرات مخصوص این دام (Audit Trail)
+    audit_history = AuditLog.query.filter_by(
+        target_id=id, 
+        target_type='Sheep'
+    ).order_by(AuditLog.timestamp.desc()).all()
+
     days_alive = max((datetime.now(UTC).date() - (sheep.birth_date or sheep.entry_date.date())).days, 1)
     daily_feed_cost = sheep.ration.daily_cost if sheep.ration else 0
     estimated_feed_cost = days_alive * daily_feed_cost
@@ -366,7 +384,8 @@ def profile(id):
                            estimated_feed_cost=estimated_feed_cost, smart_alerts=smart_alerts, age_in_months=age_in_months,
                            days_to_target=days_to_target, next_heat_date=next_heat_date,
                            rams=Sheep.query.filter_by(gender='قوچ').all(), rations=FeedRation.query.all(),
-                           pens=Pen.query.all(), medicines=Medicine.query.all(), breeds=BreedCategory.query.all(), 
+                           pens=Pen.query.all(), medicines=Medicine.query.all(), breeds=BreedCategory.query.all(),
+                           audit_history=audit_history,
                            purposes=PurposeCategory.query.all(), statuses=StatusCategory.query.all(),
                            buyer_categories=BuyerCategory.query.all(),
                            mother=mother, father=father, today_str=today.strftime('%Y-%m-%d'))

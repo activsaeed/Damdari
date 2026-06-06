@@ -1,6 +1,7 @@
 from app import db
 from datetime import datetime
 from flask_login import UserMixin
+from sqlalchemy import Numeric
 
 # این کلاس User را جایگزین کلاس قبلی کنید
 class User(UserMixin, db.Model):
@@ -27,7 +28,7 @@ class Medicine(db.Model):
 class FeedRation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    daily_cost = db.Column(db.Float, default=0.0)
+    daily_cost = db.Column(Numeric(18, 2), default=0.0)
     description = db.Column(db.String(255), nullable=True)
     schedules = db.relationship('FeedingSchedule', backref='ration', lazy=True, cascade="all, delete-orphan")
 
@@ -35,8 +36,9 @@ class FeedingSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id'), nullable=False)
     time_of_day = db.Column(db.String(50), nullable=False)
-    feed_type = db.Column(db.String(100), nullable=False)
-    amount_kg = db.Column(db.Float, nullable=False)
+    inventory_item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False, index=True)
+    amount_kg = db.Column(Numeric(18, 2), nullable=False)
+    item = db.relationship('InventoryItem', backref='usage_in_schedules')
 
 class Pen(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -71,11 +73,11 @@ class Sheep(db.Model):
     gender = db.Column(db.String(20), nullable=False)
     birth_date = db.Column(db.Date, nullable=True)
     entry_date = db.Column(db.DateTime, default=datetime.utcnow)
-    weight = db.Column(db.Float, nullable=True)
-    purchase_price = db.Column(db.Float, default=0.0) 
+    weight = db.Column(Numeric(18, 2), nullable=True)
+    purchase_price = db.Column(Numeric(18, 2), default=0.0) 
     last_heat_date = db.Column(db.Date, nullable=True) 
-    target_weight = db.Column(db.Float, nullable=True) 
-    sale_price = db.Column(db.Float, default=0.0) 
+    target_weight = db.Column(Numeric(18, 2), nullable=True) 
+    sale_price = db.Column(Numeric(18, 2), default=0.0) 
     sale_date = db.Column(db.Date, nullable=True)
     buyer_category_id = db.Column(db.Integer, db.ForeignKey('buyer_category.id'), nullable=True)
     buyer_category = db.relationship('BuyerCategory', backref='sold_sheeps')
@@ -100,7 +102,7 @@ class LactationRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
     record_date = db.Column(db.Date, default=datetime.utcnow)
-    milk_yield = db.Column(db.Float, nullable=False)
+    milk_yield = db.Column(Numeric(18, 2), nullable=False)
     notes = db.Column(db.String(200), nullable=True)
 
 class BirthRecord(db.Model):
@@ -115,9 +117,9 @@ class BirthRecord(db.Model):
 class WeightRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
-    weight = db.Column(db.Float, nullable=False)
+    weight = db.Column(Numeric(18, 2), nullable=False)
     record_date = db.Column(db.Date, default=datetime.utcnow)
-    bcs = db.Column(db.Float, nullable=True)
+    bcs = db.Column(Numeric(4, 2), nullable=True)
     notes = db.Column(db.String(200), nullable=True)
 
 class MedicalRecord(db.Model):
@@ -179,8 +181,8 @@ class JournalEntryLine(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True) # حساب تفصیلی اشخاص
     
-    debit = db.Column(db.Float, default=0.0)  # بدهکار
-    credit = db.Column(db.Float, default=0.0) # بستانکار
+    debit = db.Column(Numeric(18, 2), default=0.0)  # بدهکار
+    credit = db.Column(Numeric(18, 2), default=0.0) # بستانکار
     description = db.Column(db.String(255), nullable=True)
 
 
@@ -196,7 +198,7 @@ class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     t_type = db.Column(db.String(20), nullable=False) 
     category = db.Column(db.String(50), nullable=False) 
-    amount = db.Column(db.Float, nullable=False) 
+    amount = db.Column(Numeric(18, 2), nullable=False) 
     t_date = db.Column(db.Date, default=datetime.utcnow) 
     description = db.Column(db.String(255), nullable=True)
     invoice_number = db.Column(db.String(100), nullable=True)
@@ -229,13 +231,13 @@ class InventoryItem(db.Model):
     name = db.Column(db.String(100), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=True)
     category = db.relationship('InventoryCategory', backref='items')
-    quantity = db.Column(db.Float, default=0.0)
+    quantity = db.Column(Numeric(18, 2), default=0.0)
     unit_id = db.Column(db.Integer, db.ForeignKey('unit.id'), nullable=False)
     unit = db.relationship('Unit', backref='inventory_items')
-    min_threshold = db.Column(db.Float, default=10.0)
+    min_threshold = db.Column(Numeric(18, 2), default=10.0)
     
     # فیلد جدید: محاسبه میانگین قیمت تمام شده کالا (Moving Average)
-    unit_price = db.Column(db.Float, default=0.0) 
+    unit_price = db.Column(Numeric(18, 2), default=0.0) 
     expiry_date = db.Column(db.Date, nullable=True)
     description = db.Column(db.String(255), nullable=True)
     logs = db.relationship('InventoryLog', backref='item', lazy=True, cascade="all, delete-orphan")
@@ -244,10 +246,10 @@ class InventoryLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
     action_type = db.Column(db.String(20), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Numeric(18, 2), nullable=False)
     
     # فیلد جدید برای لاگ: قیمت در زمان ورود/خروج
-    transaction_price = db.Column(db.Float, default=0.0)
+    transaction_price = db.Column(Numeric(18, 2), default=0.0)
     
     date = db.Column(db.DateTime, default=datetime.utcnow)
     notes = db.Column(db.String(200), nullable=True)
@@ -258,7 +260,7 @@ class Cheque(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cheque_type = db.Column(db.String(50), nullable=False) 
     cheque_number = db.Column(db.String(50), nullable=False) 
-    amount = db.Column(db.Float, nullable=False) 
+    amount = db.Column(Numeric(18, 2), nullable=False) 
     due_date = db.Column(db.Date, nullable=False) 
     bank_name = db.Column(db.String(100), nullable=True) 
     issuer_name = db.Column(db.String(100), nullable=True) 
@@ -293,10 +295,10 @@ class Worker(db.Model):
     bank_account = db.Column(db.String(50), nullable=True) # شماره کارت/شبا
     
     # حقوق و مزایای ثابت ماهانه (قانون کار)
-    salary = db.Column(db.Float, default=0.0) # پایه حقوق
-    housing_allowance = db.Column(db.Float, default=0.0) # حق مسکن
-    food_allowance = db.Column(db.Float, default=0.0) # حق بن و خواربار
-    family_allowance = db.Column(db.Float, default=0.0) # حق عائله‌مندی (اولاد)
+    salary = db.Column(Numeric(18, 2), default=0.0) # پایه حقوق
+    housing_allowance = db.Column(Numeric(18, 2), default=0.0) # حق مسکن
+    food_allowance = db.Column(Numeric(18, 2), default=0.0) # حق بن و خواربار
+    family_allowance = db.Column(Numeric(18, 2), default=0.0) # حق عائله‌مندی (اولاد)
     
     insurance_status = db.Column(db.String(50), default='بدون بیمه')
     status = db.Column(db.String(50), default='فعال') 
@@ -352,16 +354,30 @@ class AuditLog(db.Model):
 class Equipment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    purchase_price = db.Column(db.Float, nullable=False)
+    purchase_price = db.Column(Numeric(18, 2), nullable=False)
     purchase_date = db.Column(db.Date, default=datetime.utcnow)
     lifespan_years = db.Column(db.Integer, nullable=False) # عمر مفید (سال)
+    scrap_value = db.Column(Numeric(18, 2), default=0.0) # ارزش اسقاط
+    
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=True)
+    transaction = db.relationship('Transaction', backref='linked_assets')
+
+    @property
+    def book_value(self):
+        """محاسبه ارزش دفتری: بهای تمام شده منهای استهلاک انباشته"""
+        from app.models import JournalEntryLine
+        # جستجوی تمام آرتیکل‌های بستانکار در دفتر کل که شامل نام این دارایی در شرح استهلاک هستند
+        accumulated = db.session.query(db.func.sum(JournalEntryLine.credit)).filter(
+            JournalEntryLine.description.ilike(f"%ذخیره استهلاک انباشته {self.name}%")
+        ).scalar() or 0
+        return self.purchase_price - accumulated
 
 # 3. جدول اینترنت اشیا (سنسورهای دما و رطوبت بهاربندها)
 class SensorData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=False)
-    temperature = db.Column(db.Float, nullable=False)
-    humidity = db.Column(db.Float, nullable=False)
+    temperature = db.Column(Numeric(5, 2), nullable=False)
+    humidity = db.Column(Numeric(5, 2), nullable=False)
     recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -379,7 +395,7 @@ class Contact(db.Model):
     bank_card = db.Column(db.String(30), nullable=True)
 
     # فرمول تراز: اگر مثبت باشد یعنی ما از او طلبکاریم، اگر منفی باشد یعنی ما به او بدهکاریم
-    balance = db.Column(db.Float, default=0.0) 
+    balance = db.Column(Numeric(18, 2), default=0.0) 
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     transactions = db.relationship('Transaction', backref='contact', lazy=True)
@@ -397,23 +413,23 @@ class Payslip(db.Model):
     issue_date = db.Column(db.Date, default=datetime.utcnow)
     
     # دریافتی ها
-    base_salary = db.Column(db.Float, default=0.0) 
-    housing_allowance = db.Column(db.Float, default=0.0) 
-    food_allowance = db.Column(db.Float, default=0.0) 
-    family_allowance = db.Column(db.Float, default=0.0) 
+    base_salary = db.Column(Numeric(18, 2), default=0.0) 
+    housing_allowance = db.Column(Numeric(18, 2), default=0.0) 
+    food_allowance = db.Column(Numeric(18, 2), default=0.0) 
+    family_allowance = db.Column(Numeric(18, 2), default=0.0) 
     
-    overtime_pay = db.Column(db.Float, default=0.0) # مبلغ اضافه کاری
-    night_shift_pay = db.Column(db.Float, default=0.0) # مبلغ شیفت شب
-    transportation_pay = db.Column(db.Float, default=0.0) # ایاب ذهاب
-    kpi_bonus = db.Column(db.Float, default=0.0) # پاداش
-    eydi_sanavat = db.Column(db.Float, default=0.0) # عیدی و سنوات
+    overtime_pay = db.Column(Numeric(18, 2), default=0.0) # مبلغ اضافه کاری
+    night_shift_pay = db.Column(Numeric(18, 2), default=0.0) # مبلغ شیفت شب
+    transportation_pay = db.Column(Numeric(18, 2), default=0.0) # ایاب ذهاب
+    kpi_bonus = db.Column(Numeric(18, 2), default=0.0) # پاداش
+    eydi_sanavat = db.Column(Numeric(18, 2), default=0.0) # عیدی و سنوات
     
     # کسورات
-    loan_deduction = db.Column(db.Float, default=0.0) 
-    fines = db.Column(db.Float, default=0.0) 
+    loan_deduction = db.Column(Numeric(18, 2), default=0.0) 
+    fines = db.Column(Numeric(18, 2), default=0.0) 
     
-    gross_pay = db.Column(db.Float, default=0.0) # ناخالص دریافتی
-    net_pay = db.Column(db.Float, default=0.0) # خالص پرداختی
+    gross_pay = db.Column(Numeric(18, 2), default=0.0) # ناخالص دریافتی
+    net_pay = db.Column(Numeric(18, 2), default=0.0) # خالص پرداختی
     is_paid = db.Column(db.Boolean, default=False) 
     
     worker = db.relationship('Worker', backref='payslips')

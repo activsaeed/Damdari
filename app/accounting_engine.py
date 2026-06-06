@@ -1,5 +1,5 @@
 from app import db
-from app.models import Account, JournalEntry, JournalEntryLine, InventoryItem
+from app.models import Account, JournalEntry, JournalEntryLine, InventoryItem, Equipment
 from datetime import datetime, UTC
 import time
 import random
@@ -252,8 +252,23 @@ class AccountingEngine:
     @staticmethod
     def record_depreciation(asset_name, amount):
         """ثبت هزینه استهلاک دارایی‌های ثابت"""
+        from app.models import Equipment
+        # یافتن دارایی برای کنترل سقف استهلاک
+        asset = Equipment.query.filter_by(name=asset_name).first()
+
         try:
             with db.session.begin_nested():
+                if asset:
+                    current_bv = asset.book_value
+                    # استهلاک باید تا رسیدن به ارزش اسقاط ادامه یابد
+                    depreciable_base = current_bv - asset.scrap_value
+                    if depreciable_base <= 0:
+                        raise Exception(f"دارایی {asset_name} به ارزش اسقاط رسیده و کاملاً مستهلک شده است.")
+                    
+                    # جلوگیری از ثبت استهلاک مازاد بر مانده استهلاک‌پذیر
+                    if amount > depreciable_base:
+                        amount = depreciable_base
+
                 description = f"ثبت استهلاک دوره‌ای - {asset_name}"
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),

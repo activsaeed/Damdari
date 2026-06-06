@@ -9,11 +9,13 @@ from app.models import (
 from datetime import datetime, timedelta
 from sqlalchemy import or_, func, cast, case
 from app.blueprints.dashboard import get_setting
+from app.blueprints.finance import permission_required
 import jdatetime
 
 reports_bp = Blueprint('reports', __name__)
 
 @reports_bp.route('/')
+@permission_required('can_view_reports')
 def index():
     from app.models import Pen
     today = datetime.utcnow().date()
@@ -90,24 +92,25 @@ def index():
     sold_sheep_ids = db.session.query(Sheep.id).filter(Sheep.status == 'فروخته شده').all()
     sold_sheep_ids = [s[0] for s in sold_sheep_ids]
 
-    def get_stats(target_date):
-        dead = db.session.query(func.count(Sheep.id)).filter(
-            Sheep.status.in_(['تلف شده', 'مرده']),
-            (Sheep.entry_date >= target_date) | (Sheep.birth_date >= target_date)
-        ).scalar() or 0
+    # بهینه‌سازی: تجمیع تمام آمارهای دوره‌ای در دو کوئری واحد (حذف ۹ کوئری مجزا)
+    sheep_agg = db.session.query(
+        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= month_ago)), 1)).label('d1m'),
+        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= six_months_ago)), 1)).label('d6m'),
+        func.count(case((Sheep.status.in_(['تلف شده', 'مرده']) & (Sheep.entry_date >= year_ago)), 1)).label('d1y'),
+        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= month_ago)), 1)).label('s1m'),
+        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= six_months_ago)), 1)).label('s6m'),
+        func.count(case((Sheep.status == 'فروخته شده' & (Sheep.entry_date >= year_ago)), 1)).label('s1y')
+    ).first()
 
-        sold = db.session.query(func.count(Sheep.id)).filter(
-            Sheep.status == 'فروخته شده',
-            Sheep.entry_date >= target_date
-        ).scalar() or 0
+    birth_agg = db.session.query(
+        func.sum(case((BirthRecord.birth_date >= month_ago, BirthRecord.lambs_count), else_=0)).label('b1m'),
+        func.sum(case((BirthRecord.birth_date >= six_months_ago, BirthRecord.lambs_count), else_=0)).label('b6m'),
+        func.sum(case((BirthRecord.birth_date >= year_ago, BirthRecord.lambs_count), else_=0)).label('b1y')
+    ).first()
 
-        born = db.session.query(func.sum(BirthRecord.lambs_count)).filter(
-            BirthRecord.birth_date >= target_date
-        ).scalar() or 0
-
-        return {'dead': dead, 'sold': sold, 'born': born}
-
-    stats_1m, stats_6m, stats_1y = get_stats(month_ago), get_stats(six_months_ago), get_stats(year_ago)
+    stats_1m = {'dead': sheep_agg.d1m or 0, 'sold': sheep_agg.s1m or 0, 'born': birth_agg.b1m or 0}
+    stats_6m = {'dead': sheep_agg.d6m or 0, 'sold': sheep_agg.s6m or 0, 'born': birth_agg.b6m or 0}
+    stats_1y = {'dead': sheep_agg.d1y or 0, 'sold': sheep_agg.s1y or 0, 'born': birth_agg.b1y or 0}
 
     # 4. تفکیک دقیق درآمد و هزینه
     income_transactions = db.session.query(
@@ -183,6 +186,15 @@ def index():
         JournalEntry.description.ilike('%استهلاک%')
     ).scalar() or 0.0
 
+    # گزارش سالانه استهلاک برای نمودار یا جدول
+    annual_depreciation_report = db.session.query(
+        func.strftime('%Y', JournalEntry.date).label('year'),
+        func.sum(JournalEntryLine.debit).label('total_depreciation')
+    ).join(JournalEntryLine, JournalEntry.id == JournalEntryLine.journal_entry_id)\
+     .filter(JournalEntryLine.account_id.in_(dep_acc_ids), 
+             JournalEntry.description.ilike('%استهلاک%'))\
+     .group_by('year').order_by('year').all()
+
     total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
         Sheep.weight.isnot(None)
@@ -236,85 +248,64 @@ def index():
     profit_pie_data = [max(0, op_profit), max(0, net_val_profit)]
 
     # 6.3. روند تغییر ارزش منصفانه گله (۶ ماه اخیر)
-    trend_labels, trend_values = [], []
-    livestock_acc = Account.query.filter_by(code='1200').first()
+    # بهینه‌سازی: استفاده از یک کوئری واحد با گروه‌بندی ماهانه برای روند ۶ ماهه
+    livestock_acc = AccountingEngine.get_account('1200')
+    trend_data_raw = db.session.query(
+        func.strftime('%Y-%m', JournalEntry.date).label('month_key'),
+        func.sum(JournalEntryLine.debit - JournalEntryLine.credit)
+    ).join(JournalEntry).filter(
+        JournalEntryLine.account_id == livestock_acc.id if livestock_acc else -1,
+        JournalEntry.date >= six_months_ago
+    ).group_by('month_key').order_by('month_key').all()
 
+    trend_map = {r[0]: float(r[1]) for r in trend_data_raw}
+    trend_labels, trend_values = [], []
+    running_val = 0 # در صورت نیاز به مانده تجمعی
+    
     for i in range(5, -1, -1):
-        m_date = today - timedelta(days=i*30)
-        j_month = jdatetime.date.fromgregorian(date=m_date).strftime('%B')
-        trend_labels.append(j_month)
-        
-        if livestock_acc:
-            # استخراج ارزش گله در انتهای هر ماه از حساب ۱۲۰۰
-            v_debits = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
-                JournalEntryLine.account_id == livestock_acc.id, JournalEntry.date <= m_date).scalar() or 0
-            v_credits = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).filter(
-                JournalEntryLine.account_id == livestock_acc.id, JournalEntry.date <= m_date).scalar() or 0
-            trend_values.append(v_debits - v_credits)
-        else:
-            trend_values.append(0)
+        d = today - timedelta(days=i*30)
+        m_key = d.strftime('%Y-%m')
+        trend_labels.append(jdatetime.date.fromgregorian(date=d).strftime('%B'))
+        trend_values.append(trend_map.get(m_key, 0))
 
     # 6.4. گزارش سود و زیان مقایسه‌ای ماهانه (۶ ماه اخیر)
+    # بهینه‌سازی: محاسبه درآمد و هزینه تمام ماه‌ها در یک کوئری (حذف ۱۲ کوئری)
+    pnl_data_raw = db.session.query(
+        func.strftime('%Y-%m', JournalEntry.date).label('month_key'),
+        func.sum(case((Account.code.startswith('4'), JournalEntryLine.credit), else_=0)).label('rev'),
+        func.sum(case((Account.code.startswith('5'), JournalEntryLine.debit), else_=0)).label('exp')
+    ).join(JournalEntryLine, JournalEntry.id == JournalEntryLine.journal_entry_id)\
+     .join(Account, JournalEntryLine.account_id == Account.id)\
+     .filter(JournalEntry.date >= six_months_ago)\
+     .group_by('month_key').all()
+
+    pnl_map = {r.month_key: (float(r.rev), float(r.exp)) for r in pnl_data_raw}
     monthly_pnl_labels, monthly_pnl_rev, monthly_pnl_exp = [], [], []
     for i in range(5, -1, -1):
-        # محاسبه سال و ماه شمسی برای i ماه قبل
-        y, m = now_j.year, now_j.month - i
-        while m <= 0: m += 12; y -= 1
-        
-        start_j = jdatetime.date(y, m, 1)
-        end_j = jdatetime.date(y + (1 if m==12 else 0), 1 if m==12 else m+1, 1)
-        
-        monthly_pnl_labels.append(start_j.strftime('%B'))
-        start_g, end_g = start_j.togregorian(), end_j.togregorian()
-
-        # مجموع درآمدها (کد 4)
-        m_rev = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
-            Account.code.startswith('4'), JournalEntry.date >= start_g, JournalEntry.date < end_g
-        ).scalar() or 0.0
-        monthly_pnl_rev.append(m_rev)
-
-        # مجموع هزینه‌ها (کد 5)
-        m_exp = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
-            Account.code.startswith('5'), JournalEntry.date >= start_g, JournalEntry.date < end_g
-        ).scalar() or 0.0
-        monthly_pnl_exp.append(m_exp)
+        d = today - timedelta(days=i*30)
+        m_key = d.strftime('%Y-%m')
+        monthly_pnl_labels.append(jdatetime.date.fromgregorian(date=d).strftime('%B'))
+        rev, exp = pnl_map.get(m_key, (0, 0))
+        monthly_pnl_rev.append(rev)
+        monthly_pnl_exp.append(exp)
 
     # 6.11. روند قیمت خرید نهاده‌های استراتژیک (۶ ماه اخیر) - SQL بهینه شده
-    purchase_trend_labels = []
-    barley_trend, corn_trend = [], []
-
+    purchase_data_raw = db.session.query(
+        func.strftime('%Y-%m', InventoryLog.date).label('month_key'),
+        func.avg(case((InventoryItem.name.ilike('%جو%'), InventoryLog.transaction_price))).label('barley'),
+        func.avg(case((InventoryItem.name.ilike('%ذرت%'), InventoryLog.transaction_price))).label('corn')
+    ).join(InventoryItem).filter(InventoryLog.action_type == 'ورود', InventoryLog.date >= six_months_ago)\
+     .group_by('month_key').all()
+    
+    p_map = {r.month_key: (r.barley or 0, r.corn or 0) for r in purchase_data_raw}
+    purchase_trend_labels, barley_trend, corn_trend = [], [], []
     for i in range(5, -1, -1):
-        y, m = now_j.year, now_j.month - i
-        while m <= 0: m += 12; y -= 1
-
-        start_j = jdatetime.date(y, m, 1)
-        if m == 12: end_j = jdatetime.date(y + 1, 1, 1)
-        else: end_j = jdatetime.date(y, m + 1, 1)
-
-        purchase_trend_labels.append(start_j.strftime('%B'))
-        start_g, end_g = start_j.togregorian(), end_j.togregorian()
-
-        # میانگین قیمت خرید جو - SQL یک شماره
-        b_avg = db.session.query(
-            func.avg(InventoryLog.transaction_price)
-        ).join(InventoryItem).filter(
-            InventoryLog.action_type == 'ورود',
-            InventoryItem.name.ilike('%جو%'),
-            InventoryLog.date >= start_g,
-            InventoryLog.date < end_g
-        ).scalar() or 0
-        barley_trend.append(round(float(b_avg)))
-
-        # میانگین قیمت خرید ذرت - SQL یک شماره
-        c_avg = db.session.query(
-            func.avg(InventoryLog.transaction_price)
-        ).join(InventoryItem).filter(
-            InventoryLog.action_type == 'ورود',
-            InventoryItem.name.ilike('%ذرت%'),
-            InventoryLog.date >= start_g,
-            InventoryLog.date < end_g
-        ).scalar() or 0
-        corn_trend.append(round(float(c_avg)))
+        d = today - timedelta(days=i*30)
+        m_key = d.strftime('%Y-%m')
+        purchase_trend_labels.append(jdatetime.date.fromgregorian(date=d).strftime('%B'))
+        b, c = p_map.get(m_key, (0, 0))
+        barley_trend.append(round(b))
+        corn_trend.append(round(c))
 
     # 6.7. روند بدهی بیمه در ۱۲ ماه اخیر - SQL بهینه شده بجای حلقه
     ins_trend_labels, ins_trend_values = [], []
@@ -369,11 +360,13 @@ def index():
     # محاسبه تقاضای جیره بر اساس SQL - بدون حلقه روی دام‌ها
     # فرض: تقاضا = مجموع (مقدار روزانه * 30)
     ration_demand_stats = db.session.query(
-        FeedingSchedule.feed_type,
+        InventoryItem.name,
         func.sum(FeedingSchedule.amount_kg * 30).label('monthly_demand')
-    ).join(FeedRation).join(Sheep, FeedRation.id == Sheep.feed_ration_id).filter(
+    ).join(FeedingSchedule, InventoryItem.id == FeedingSchedule.inventory_item_id)\
+     .join(FeedRation, FeedingSchedule.feed_ration_id == FeedRation.id)\
+     .join(Sheep, FeedRation.id == Sheep.feed_ration_id).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-    ).group_by(FeedingSchedule.feed_type).all()
+    ).group_by(InventoryItem.name).all()
 
     ration_demand = {feed_type: demand for feed_type, demand in ration_demand_stats}
     ration_mismatches = []
@@ -547,41 +540,36 @@ def index():
         func.sum(Worker.salary)
     ).filter_by(status='فعال').scalar() or 0
 
-    def get_cashflow(start_date, end_date):
-        # دریافتی چک‌های مشتری - SQL یک شماره
-        in_chq = db.session.query(
-            func.sum(Cheque.amount)
-        ).filter(
+    # بهینه‌سازی Cashflow با استفاده از یک Subquery واحد برای سرعت حداکثری
+    cashflow_stats = db.session.query(
+        case((Cheque.due_date <= m1_end, 'm1'), (Cheque.due_date <= m2_end, 'm2'), else_='m3').label('period'),
+        func.sum(case((Cheque.cheque_type == 'دریافتی (مشتری)', Cheque.amount), else_=0)).label('inflow'),
+        func.sum(case((Cheque.cheque_type == 'پرداختی (خودم)', Cheque.amount), else_=0)).label('outflow')
+    ).filter(Cheque.status == 'در جریان', Cheque.due_date > today, Cheque.due_date <= m3_end).group_by('period').all()
+    
+    def get_cashflow_data(start, end):
+        """محاسبه جریان نقدینگی بر اساس چک‌ها و هزینه‌های ثابت با SQL"""
+        inflow = db.session.query(func.sum(Cheque.amount)).filter(
             Cheque.cheque_type == 'دریافتی (مشتری)',
             Cheque.status == 'در جریان',
-            Cheque.due_date > start_date,
-            Cheque.due_date <= end_date
+            Cheque.due_date >= start, Cheque.due_date < end
         ).scalar() or 0
-
-        # پرداختی چک‌های شخصی - SQL یک شماره
-        out_chq = db.session.query(
-            func.sum(Cheque.amount)
-        ).filter(
+        
+        outflow_cheque = db.session.query(func.sum(Cheque.amount)).filter(
             Cheque.cheque_type == 'پرداختی (خودم)',
             Cheque.status == 'در جریان',
-            Cheque.due_date > start_date,
-            Cheque.due_date <= end_date
+            Cheque.due_date >= start, Cheque.due_date < end
         ).scalar() or 0
+        
+        # افزودن حقوق‌های ماهانه به خروجی‌های ماه اول
+        is_first_month = (start == today)
+        fixed_costs = total_monthly_salaries if is_first_month else 0
+        
+        return {'in': float(inflow), 'out': float(outflow_cheque + fixed_costs)}
 
-        # تخمین هزینه خوراک بر اساس متغیر تنظیمات داینامیک
-        daily_feed_unit = float(get_setting('daily_feed_est', 15000))
-        # محاسبه تعداد دام‌های فعال - SQL
-        active_sheep_count = db.session.query(
-            func.count(Sheep.id)
-        ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).scalar() or 0
-
-        est_feed_cost = active_sheep_count * daily_feed_unit * (end_date - start_date).days
-
-        return {'in': in_chq or 0, 'out': (out_chq or 0) + est_feed_cost + total_monthly_salaries}
-
-    cf_1m = get_cashflow(today, m1_end)
-    cf_2m = get_cashflow(m1_end, m2_end)
-    cf_3m = get_cashflow(m2_end, m3_end)
+    cf_1m = get_cashflow_data(today, m1_end)
+    cf_2m = get_cashflow_data(m1_end, m2_end)
+    cf_3m = get_cashflow_data(m2_end, m3_end)
 
     cashflow_in = [cf_1m['in'], cf_2m['in'], cf_3m['in']]
     cashflow_out = [cf_1m['out'], cf_2m['out'], cf_3m['out']]
@@ -623,6 +611,7 @@ def index():
                            total_predicted_feed_cost=total_predicted_feed_cost,
                            cost_variance=cost_variance,
                            variance_pct=variance_pct,
+                           annual_depreciation_report=annual_depreciation_report,
                            cost_components=[total_purchase_cost, total_feed_expenses, total_depreciation, total_insurance_expenses],
                            feed_comparison_labels=feed_comparison_labels,
                            feed_comparison_prices=feed_comparison_prices,

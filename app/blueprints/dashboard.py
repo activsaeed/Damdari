@@ -120,6 +120,14 @@ def index():
     total_expense = db.session.query(func.sum(Transaction.amount)).filter_by(t_type='هزینه').scalar() or 0
     total_income = db.session.query(func.sum(Transaction.amount)).filter_by(t_type='درآمد').scalar() or 0
 
+    # بهینه‌سازی: محاسبه مجموع ارزش دفتری با یک کوئری واحد (حذف حلقه پایتونی و N+1)
+    from app.models import Equipment, JournalEntryLine
+    total_purchase_price = db.session.query(func.sum(Equipment.purchase_price)).scalar() or 0
+    total_accumulated_depreciation = db.session.query(func.sum(JournalEntryLine.credit)).filter(
+        JournalEntryLine.description.ilike('%ذخیره استهلاک انباشته%')
+    ).scalar() or 0
+    total_assets_book_value = total_purchase_price - total_accumulated_depreciation
+
     # محاسبات سود - استفاده از SQL بجای حلقه
     total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0.0
     total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0.0
@@ -264,6 +272,7 @@ def index():
                            operational_profit=operational_profit, 
                            net_valuation_profit=net_valuation_profit, 
                            curr_month_profit=curr_month_profit,
+                           total_assets_book_value=total_assets_book_value,
                            profit_growth=round(profit_growth, 1),
                            financial_alert=financial_alert,
                            insurance_debt=insurance_debt,
@@ -600,10 +609,9 @@ def run_daily_feed():
     for ration_id, sheep_count in ration_counts:
         schedules = FeedingSchedule.query.filter_by(feed_ration_id=ration_id).all()
         for sched in schedules:
-            item = InventoryItem.query.filter_by(name=sched.feed_type).first()
-            if item:
-                total_needed = sched.amount_kg * sheep_count
-                consumption_map[item.id] = consumption_map.get(item.id, 0) + total_needed
+            item_id = sched.inventory_item_id
+            total_needed = float(sched.amount_kg) * sheep_count
+            consumption_map[item_id] = consumption_map.get(item_id, 0) + total_needed
 
     try:
         total_cost = 0
@@ -631,23 +639,7 @@ def run_daily_feed():
 @dashboard_bp.route('/maintenance/fix_ration_names', methods=['POST'])
 @login_required
 def fix_ration_names():
-    """اصلاح خودکار نام نهاده در جیره‌ها بر اساس نام پیشنهادی انبار"""
-    if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
-    
-    wrong_name = request.form.get('wrong')
-    suggested_name = request.form.get('suggested')
-    
-    if not wrong_name or not suggested_name or 'یافت نشد' in suggested_name:
-        flash('نام پیشنهادی معتبری برای جایگزینی یافت نشد.', 'warning')
-        return redirect(url_for('reports.index'))
-
-    from app.models import FeedingSchedule
-    schedules = FeedingSchedule.query.filter_by(feed_type=wrong_name).all()
-    for s in schedules:
-        s.feed_type = suggested_name
-    
-    db.session.commit()
-    flash(f'تعداد {len(schedules)} برنامه تغذیه اصلاح شد. نام "{wrong_name}" به "{suggested_name}" تغییر یافت.', 'success')
+    # این متد با توجه به جایگزینی FK با String Matching دیگر کاربردی ندارد.
     return redirect(url_for('reports.index'))
 
 @dashboard_bp.route('/maintenance/fix_all_ration_names', methods=['POST'])

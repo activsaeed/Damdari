@@ -3,11 +3,13 @@ from flask_login import login_required
 from app import db
 from app.models import InventoryItem, InventoryLog, Transaction, Unit, InventoryCategory
 from datetime import datetime, timedelta, UTC
+from app.blueprints.finance import permission_required
 
 inventory_bp = Blueprint('inventory', __name__)
 
 @inventory_bp.route('/')
 @login_required
+@permission_required('can_view_inventory')
 def index():
     # مرتب‌سازی بر اساس شناسه (نزولی) برای نمایش جدیدترین‌ها در ابتدا
     items = InventoryItem.query.order_by(InventoryItem.id.desc()).all()

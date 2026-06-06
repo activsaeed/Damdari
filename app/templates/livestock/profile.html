@@ -91,6 +91,7 @@
                     <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#growth"><i class="fa-solid fa-scale-unbalanced me-1"></i> وزن</button></li>
                     <li class="nav-item"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#health"><i class="fa-solid fa-suitcase-medical me-1"></i> پزشکی (گالری)</button></li>
                     <li class="nav-item"><button class="nav-link fw-bold text-info text-dark" data-bs-toggle="tab" data-bs-target="#breed"><i class="fa-solid fa-baby me-1"></i> زایش‌ها</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-warning" data-bs-toggle="tab" data-bs-target="#audit_trail"><i class="fa-solid fa-history me-1"></i> تاریخچه تغییرات</button></li>
                 </ul>
             </div>
             <div class="card-body">
@@ -208,6 +209,34 @@
                         {% else %}
                         <div class="alert alert-warning text-center mt-4">بخش زایش فقط برای "میش" (ماده بالغ) فعال است.</div>
                         {% endif %}
+                    </div>
+
+                    <div class="tab-pane fade p-3" id="audit_trail">
+                        <h5 class="text-muted mb-3"><i class="fa-solid fa-history text-warning"></i> تاریخچه وقایع سیستمی</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>زمان</th>
+                                        <th>کاربر</th>
+                                        <th>عملیات</th>
+                                        <th>IP</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in audit_history %}
+                                    <tr>
+                                        <td>{{ log.timestamp|jalali }}</td>
+                                        <td><span class="badge bg-secondary">{{ log.user_name }}</span></td>
+                                        <td>{{ log.action }}</td>
+                                        <td class="small">{{ log.ip_address }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="text-center">داده‌ای یافت نشد.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
