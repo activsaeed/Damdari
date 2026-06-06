@@ -21,72 +21,69 @@ class AccountingEngine:
     @staticmethod
     def record_sale(transaction, contact_id=None, include_vat=True):
         """ثبت اتوماتیک سند فروش (درآمد)"""
-        # حساب های درگیر: صندوق/بانک/مشتریان (بدهکار) | فروش (بستانکار) | مالیات بر ارزش افزوده پرداختنی (بستانکار)
-        cash_account = AccountingEngine.get_account('1010') # موجودی نقد و بانک
-        receivable_account = AccountingEngine.get_account('1030') # حسابهای دریافتنی
-        sales_account = AccountingEngine.get_account('4010') # درآمد فروش
-        vat_payable = AccountingEngine.get_account('2030') # مالیات پرداختنی
+        try:
+            with db.session.begin_nested():
+                cash_account = AccountingEngine.get_account('1010')
+                receivable_account = AccountingEngine.get_account('1030')
+                sales_account = AccountingEngine.get_account('4010')
+                vat_payable = AccountingEngine.get_account('2030')
 
+                amount = transaction.amount
+                vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
+                total_amount = amount + vat_amount
 
-        amount = transaction.amount
-        vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
-        total_amount = amount + vat_amount
+                entry = JournalEntry(
+                    entry_number=AccountingEngine.generate_entry_number(),
+                    date=transaction.t_date,
+                    description=f"بابت فاکتور فروش شماره {transaction.invoice_number or 'نامشخص'}",
+                    transaction_id=transaction.id
+                )
+                db.session.add(entry)
+                db.session.flush()
 
-        entry = JournalEntry(
-            entry_number=AccountingEngine.generate_entry_number(),
-            date=transaction.t_date,
-            description=f"بابت فاکتور فروش شماره {transaction.invoice_number or 'نامشخص'}",
-            transaction_id=transaction.id
-        )
-        db.session.add(entry)
-        db.session.flush()
+                debit_acc_id = receivable_account.id if contact_id else cash_account.id
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=contact_id, debit=total_amount, credit=0.0))
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
 
-        # اگر شخص مشخص بود، نسیه (حساب دریافتنی) بدهکار میشود، وگرنه نقد (صندوق)
-        debit_acc_id = receivable_account.id if contact_id else cash_account.id
-        
-        # 1. طرف بدهکار (ورود پول یا ایجاد طلب)
-        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=contact_id, debit=total_amount, credit=0.0))
-        
-        # 2. طرف بستانکار (درآمد فروش)
-        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
-        
-        # 3. طرف بستانکار (ارزش افزوده)
-        if vat_amount > 0:
-            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_payable.id, debit=0.0, credit=vat_amount))
+                if vat_amount > 0:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_payable.id, debit=0.0, credit=vat_amount))
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"خطا در ثبت فاکتور فروش: {str(e)}")
 
     @staticmethod
     def record_expense(transaction, contact_id=None, include_vat=True):
         """ثبت اتوماتیک سند خرید / هزینه"""
-        # حساب های درگیر: هزینه/موجودی کالا (بدهکار) | مالیات خرید (بدهکار) | صندوق/تامین کنندگان (بستانکار)
-        cash_account = AccountingEngine.get_account('1010')
-        payable_account = AccountingEngine.get_account('2010') # حسابهای پرداختنی
-        expense_account = AccountingEngine.get_account('5010') # هزینه های عملیاتی
-        vat_receivable = AccountingEngine.get_account('1040') # پیش پرداخت مالیات
+        try:
+            with db.session.begin_nested():
+                cash_account = AccountingEngine.get_account('1010')
+                payable_account = AccountingEngine.get_account('2010')
+                expense_account = AccountingEngine.get_account('5010')
+                vat_receivable = AccountingEngine.get_account('1040')
 
+                amount = transaction.amount
+                vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
+                total_amount = amount + vat_amount
 
-        amount = transaction.amount
-        vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
-        total_amount = amount + vat_amount
+                entry = JournalEntry(
+                    entry_number=AccountingEngine.generate_entry_number(),
+                    date=transaction.t_date,
+                    description=f"بابت فاکتور هزینه/خرید شماره {transaction.invoice_number or 'نامشخص'}",
+                    transaction_id=transaction.id
+                )
+                db.session.add(entry)
+                db.session.flush()
 
-        entry = JournalEntry(
-            entry_number=AccountingEngine.generate_entry_number(),
-            date=transaction.t_date,
-            description=f"بابت فاکتور هزینه/خرید شماره {transaction.invoice_number or 'نامشخص'}",
-            transaction_id=transaction.id
-        )
-        db.session.add(entry)
-        db.session.flush()
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=amount, credit=0.0))
 
-        # 1. طرف بدهکار (شناسایی هزینه)
-        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=amount, credit=0.0))
-        
-        # 2. طرف بدهکار (اعتبار ارزش افزوده خرید)
-        if vat_amount > 0:
-            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
+                if vat_amount > 0:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
 
-        # 3. طرف بستانکار (خروج پول یا ایجاد بدهی)
-        credit_acc_id = payable_account.id if contact_id else cash_account.id
-        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=credit_acc_id, contact_id=contact_id, debit=0.0, credit=total_amount))
+                credit_acc_id = payable_account.id if contact_id else cash_account.id
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=credit_acc_id, contact_id=contact_id, debit=0.0, credit=total_amount))
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"خطا در ثبت فاکتور هزینه: {str(e)}")
 
     @staticmethod
     def record_cheque_clearing(cheque):
@@ -226,7 +223,7 @@ class AccountingEngine:
             
         return entry
 
-        @staticmethod
+    @staticmethod
     def sync_inventory_ledger():
         """
         همگام‌سازی مانده دفتر کل با ارزش واقعی انبار (انبارگردانی پایان سال):
@@ -278,39 +275,39 @@ class AccountingEngine:
 
     @staticmethod
     def record_depreciation(asset_name, amount):
-        """
-        ثبت هزینه استهلاک دارایی‌های ثابت (تجهیزات، ساختمان و ...):
-        بدهکار: هزینه استهلاک (5101 یا 5102)
-        بستانکار: استهلاک انباشته (1204) - به عنوان کاهنده دارایی
-        """
-        description = f"ثبت استهلاک دوره‌ای - {asset_name}"
-        entry = AccountingEngine._create_entry(description)
+        """ثبت هزینه استهلاک دارایی‌های ثابت"""
+        try:
+            with db.session.begin_nested():
+                description = f"ثبت استهلاک دوره‌ای - {asset_name}"
+                entry = JournalEntry(
+                    entry_number=AccountingEngine.generate_entry_number(),
+                    date=datetime.now(UTC).date(),
+                    description=description
+                )
+                db.session.add(entry)
+                db.session.flush()
 
-                # سرفصل هزینه استهلاک (در صورت نبود کد 5020 از کد هزینه عمومی استفاده می‌شود)
-        acc_expense = AccountingEngine.get_account('5020') or AccountingEngine.get_account('5010')
-        # سرفصل استهلاک انباشته (کد استاندارد 1204)
-        acc_accum_dep = AccountingEngine.get_account('1204')
+                acc_expense = AccountingEngine.get_account('5020') or AccountingEngine.get_account('5010')
+                acc_accum_dep = AccountingEngine.get_account('1204')
 
+                if not acc_accum_dep:
+                    acc_accum_dep = AccountingEngine.get_account('1201')
 
-        if not acc_accum_dep:
-            # اگر کد 1204 در دیتابیس نبود، پیغامی برای مدیر صادر شود یا از دارایی مستقیم کسر شود
-            acc_accum_dep = AccountingEngine.get_account('1201') # حساب اثاثه و تجهیزات
+                db.session.add(JournalEntryLine(
+                    journal_entry_id=entry.id, account_id=acc_expense.id,
+                    debit=amount, credit=0.0, description=f"هزینه استهلاک {asset_name}"
+                ))
 
-        # 1. بدهکار: شناسایی هزینه دوره
-        db.session.add(JournalEntryLine(
-            journal_entry_id=entry.id, account_id=acc_expense.id, 
-            debit=amount, credit=0.0, description=f"هزینه استهلاک {asset_name}"
-        ))
+                db.session.add(JournalEntryLine(
+                    journal_entry_id=entry.id, account_id=acc_accum_dep.id,
+                    debit=0.0, credit=amount, description=f"ذخیره استهلاک انباشته {asset_name}"
+                ))
+                return entry
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"خطا در ثبت استهلاک: {str(e)}")
 
-        # 2. بستانکار: افزایش استهلاک انباشته (کاهش ارزش دفتری دارایی)
-        db.session.add(JournalEntryLine(
-            journal_entry_id=entry.id, account_id=acc_accum_dep.id, 
-            debit=0.0, credit=amount, description=f"ذخیره استهلاک انباشته {asset_name}"
-        ))
-        
-        return entry
-
-        @staticmethod
+    @staticmethod
     def record_insurance_payment(amount, description, date):
         """
         ثبت سند واریز حق بیمه به سازمان:
@@ -387,7 +384,7 @@ class AccountingEngine:
         if (payslip.fines or 0) > 0:
             db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=0.0, credit=payslip.fines, description=f"کسر جریمه - {payslip.worker.name}"))
 
-        @staticmethod
+    @staticmethod
     def record_feed_consumption(total_cost):
         """ثبت سند مصرف خوراک (خروج از انبار به سرفصل هزینه)"""
         entry = JournalEntry(

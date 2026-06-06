@@ -1216,6 +1216,8 @@ def contact_export_tx(id):
         query = query.filter(Transaction.invoice_number != None, Transaction.invoice_number != '')
         
     transactions = query.order_by(Transaction.t_date.asc()).all()
+    unit = get_setting('currency_unit', 'تومان')
+    factor = 10 if unit == 'ریال' else 1
     
     html_content = '<html dir="rtl"><head><meta charset="utf-8"><style>table {border-collapse: collapse; width: 100%;} th, td {border: 1px solid black; padding: 8px; text-align: center;} th {background-color: #f2f2f2; font-weight: bold;}</style></head><body>'
     html_content += f'<h2 style="text-align:center;">گزارش ریز تراکنش‌های: {c.name}</h2>'

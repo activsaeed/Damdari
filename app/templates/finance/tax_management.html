@@ -71,8 +71,8 @@
                             <th>تاریخ</th>
                             <th>شماره فاکتور</th>
                             <th>نوع سند</th>
-                            <th>مبلغ خالص ({{ current_currency_unit }})</th>
-                            <th>ارزش افزوده ({{ (AccountingEngine._get_vat_rate() * 100)|int }}%)</th>
+                            <th>مبلغ خالص ({{ get_system_currency_from_settings() }})</th>
+                            <th>ارزش افزوده ({{ (vat_rate * 100)|int }}%)</th>
                             <th>مبلغ کل فاکتور</th>
                             <th>وضعیت سامانه</th>
                         </tr>
@@ -86,8 +86,8 @@
                             <td><span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }} (صورتحساب نوع 1)</span></td>
                             <!-- محاسبه معکوس برای نمایش (چون مبلغ ثبت شده در فرم مبلغ خالص بوده است) -->
                             <td>{{ t.amount|currency }}</td>                            
-                            <td class="text-danger fw-bold">{{ (t.amount * AccountingEngine._get_vat_rate())|currency }}</td>
-                            <td class="fw-bold text-dark fs-6">{{ (t.amount * (1 + AccountingEngine._get_vat_rate()))|currency }}</td>
+                            <td class="text-danger fw-bold">{{ (t.amount * vat_rate)|currency }}</td>
+                            <td class="fw-bold text-dark fs-6">{{ (t.amount * (1 + vat_rate))|currency }}</td>
                             <td><span class="badge bg-secondary"><i class="fa-solid fa-clock"></i> منتظر ارسال</span></td>
                         </tr>
                         {% else %}

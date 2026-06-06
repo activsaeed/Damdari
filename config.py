@@ -18,3 +18,8 @@ class Config:
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '123456')
     ADMIN_NAME = os.getenv('ADMIN_NAME', 'مدیر سیستم')
+
+    # تنظیمات سیستمی
+    VAT_RATE = float(os.getenv('VAT_RATE', '10'))
+    CURRENCY_UNIT = os.getenv('CURRENCY_UNIT', 'تومان')
+

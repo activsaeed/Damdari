@@ -36,61 +36,87 @@ def inject_settings():
 @dashboard_bp.route('/')
 @login_required
 def index():
-    # درخواست 9: عدم نمایش داشبورد به کارگر (انتقال مستقیم به پنل خودش)
     if current_user.role == 'کارگر':
         return redirect(url_for('hr.index'))
 
-    from app.models import Sheep, InventoryItem, Transaction
-    all_sheep = Sheep.query.filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).all()
-    total_sheep = len(all_sheep)
-    total_live_weight = sum(s.weight for s in all_sheep if s.weight)
-    
-    gender_stats = {'میش': {'total':0, 'سالم':0, 'بیمار':0, 'قرنطینه':0, 'آبستن':0}, 'قوچ': {'total':0, 'سالم':0, 'بیمار':0, 'قرنطینه':0}, 'بره': {'total':0, 'سالم':0, 'بیمار':0, 'قرنطینه':0}}
-    for s in all_sheep:
-        g = 'بره' if 'بره' in s.gender else s.gender
-        if g in gender_stats:
-            gender_stats[g]['total'] += 1
-            if s.status == 'زنده و سالم': gender_stats[g]['سالم'] += 1
-            elif s.status == 'بیمار': gender_stats[g]['بیمار'] += 1
-            elif s.status == 'قرنطینه' or 'تحت درمان' in s.status: gender_stats[g]['قرنطینه'] += 1
-            elif s.status == 'آبستن' and g == 'میش': gender_stats[g]['آبستن'] += 1
+    from app.models import Account, JournalEntryLine, JournalEntry
 
-    breed_stats = {}
-    for s in all_sheep:
-        b = s.breed or 'نامشخص'
-        breed_stats[b] = breed_stats.get(b, 0) + 1
+    # استفاده از SQL برای محاسبات بدون بارگذاری تمام دام‌ها
+    gender_stats_raw = db.session.query(
+        func.coalesce(Sheep.gender, 'نامشخص').label('gender'),
+        func.count(Sheep.id).label('total'),
+        func.sum(func.cast(Sheep.status == 'زنده و سالم', db.Integer)).label('سالم'),
+        func.sum(func.cast(Sheep.status == 'بیمار', db.Integer)).label('بیمار'),
+        func.sum(func.cast((Sheep.status.in_(['قرنطینه'])) | (Sheep.status.contains('تحت درمان')), db.Integer)).label('قرنطینه'),
+        func.sum(func.cast((Sheep.status == 'آبستن') & (Sheep.gender.like('%میش%')), db.Integer)).label('آبستن')
+    ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).group_by(Sheep.gender).all()
+
+    gender_stats = {}
+    for gender, total, healthy, sick, quarantine, pregnant in gender_stats_raw:
+        g_name = 'بره' if gender and 'بره' in gender else gender
+        gender_stats[g_name] = {
+            'total': total or 0,
+            'سالم': healthy or 0,
+            'بیمار': sick or 0,
+            'قرنطینه': quarantine or 0,
+            'آبستن': pregnant or 0
+        }
+
+    breed_stats_raw = db.session.query(
+        func.coalesce(Sheep.breed, 'نامشخص').label('breed'),
+        func.count(Sheep.id).label('count')
+    ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).group_by(Sheep.breed).all()
+
+    breed_stats = {b: cnt for b, cnt in breed_stats_raw}
+
+    weight_ranges_data = db.session.query(
+        func.count(Sheep.id).label('cnt'),
+        func.case(
+            (Sheep.weight < 20, '10-20'),
+            (Sheep.weight < 30, '20-30'),
+            (Sheep.weight < 40, '30-40'),
+            (Sheep.weight < 50, '40-50'),
+            (Sheep.weight < 60, '50-60'),
+            (Sheep.weight < 70, '60-70'),
+            (Sheep.weight < 80, '70-80'),
+            (Sheep.weight < 90, '80-90'),
+            (Sheep.weight < 100, '90-100'),
+            (Sheep.weight < 110, '100-110'),
+            (Sheep.weight < 120, '110-120'),
+            else_='120-130'
+        ).label('range')
+    ).filter(Sheep.weight.isnot(None), Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).group_by('range').all()
 
     weight_ranges = {'10-20':0, '20-30':0, '30-40':0, '40-50':0, '50-60':0, '60-70':0, '70-80':0, '80-90':0, '90-100':0, '100-110':0, '110-120':0, '120-130':0}
+    for cnt, rng in weight_ranges_data:
+        weight_ranges[rng] = cnt or 0
+
+    total_sheep = sum(breed_stats.values())
+    total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
+        Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
+        Sheep.weight.isnot(None)
+    ).scalar() or 0
+
+    weight_above_counts = db.session.query(
+        func.count(Sheep.id)
+    ).filter(
+        Sheep.weight >= func.bindparam('threshold'),
+        Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
+    ).all()
+
     weight_above = {'بالای 50':0, 'بالای 60':0, 'بالای 70':0, 'بالای 80':0, 'بالای 90':0, 'بالای 100':0, 'بالای 110':0}
-    for s in all_sheep:
-        w = s.weight or 0
-        if 10 <= w < 20: weight_ranges['10-20'] += 1
-        elif 20 <= w < 30: weight_ranges['20-30'] += 1
-        elif 30 <= w < 40: weight_ranges['30-40'] += 1
-        elif 40 <= w < 50: weight_ranges['40-50'] += 1
-        elif 50 <= w < 60: weight_ranges['50-60'] += 1
-        elif 60 <= w < 70: weight_ranges['60-70'] += 1
-        elif 70 <= w < 80: weight_ranges['70-80'] += 1
-        elif 80 <= w < 90: weight_ranges['80-90'] += 1
-        elif 90 <= w < 100: weight_ranges['90-100'] += 1
-        elif 100 <= w < 110: weight_ranges['100-110'] += 1
-        elif 110 <= w < 120: weight_ranges['110-120'] += 1
-        elif 120 <= w <= 130: weight_ranges['120-130'] += 1
-        if w >= 50: weight_above['بالای 50'] += 1
-        if w >= 60: weight_above['بالای 60'] += 1
-        if w >= 70: weight_above['بالای 70'] += 1
-        if w >= 80: weight_above['بالای 80'] += 1
-        if w >= 90: weight_above['بالای 90'] += 1
-        if w >= 100: weight_above['بالای 100'] += 1
-        if w >= 110: weight_above['بالای 110'] += 1
+    for threshold_label, threshold_val in [(k, int(k.split()[1])) for k in weight_above.keys()]:
+        weight_above[threshold_label] = db.session.query(func.count(Sheep.id)).filter(
+            Sheep.weight >= threshold_val,
+            Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
+        ).scalar() or 0
 
     inventory_items = InventoryItem.query.all()
-    transactions = Transaction.query.order_by(Transaction.t_date.desc()).limit(5).all() # 5 تراکنش آخر
-    total_expense = sum(t.amount for t in Transaction.query.filter_by(t_type='هزینه').all())
-    total_income = sum(t.amount for t in Transaction.query.filter_by(t_type='درآمد').all())
+    transactions = Transaction.query.order_by(Transaction.t_date.desc()).limit(5).all()
+    total_expense = db.session.query(func.sum(Transaction.amount)).filter_by(t_type='هزینه').scalar() or 0
+    total_income = db.session.query(func.sum(Transaction.amount)).filter_by(t_type='درآمد').scalar() or 0
 
-    # محاسبات سود تفکیکی برای نمودار ویجت
-    from app.models import Account, JournalEntryLine, JournalEntry
+    # محاسبات سود - استفاده از SQL بجای حلقه
     total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0.0
     total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0.0
     net_income = total_rev_ledger - total_exp_ledger
@@ -163,24 +189,25 @@ def index():
     if current_user.role == 'مدیر':
         last_stock_rep = get_setting('last_daily_stock_rep', '2000-01-01')
         last_stock_date = datetime.strptime(last_stock_rep, '%Y-%m-%d').date()
-        
+
         if (datetime.now(UTC).date() - last_stock_date).days >= 1:
             low_stock = InventoryItem.query.filter(InventoryItem.quantity <= InventoryItem.min_threshold).all()
             if low_stock:
-                token = get_setting('sms_api_key', "8951875656:AAEicWcnwup00o46y8vCL3nXw_aa1xQXS_w")
-                chat_id = "6690587060"
-                msg = "⚠️ #گزارش_بحرانی_انبار\n\nمدیریت محترم، موجودی اقلام زیر به حداقل مجاز رسیده است:\n\n"
-                for item in low_stock:
-                    msg += f"📦 {item.name}: {item.quantity:,.1f} {item.unit.name if item.unit else ''}\n"
-                msg += "\n🔔 لطفا نسبت به تامین نهاده اقدام فرمایید."
-                
-                try:
-                    requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={'chat_id': chat_id, 'text': msg}, timeout=5)
-                except: pass
-                
-            # آپدیت تاریخ آخرین بررسی (چه کمبود باشد چه نباشد)
+                token = os.getenv('TELEGRAM_API_KEY') or get_setting('sms_api_key', '')
+                chat_id = os.getenv('TELEGRAM_CHAT_ID') or "6690587060"
+
+                if token:
+                    msg = "⚠️ #گزارش_بحرانی_انبار\n\nمدیریت محترم، موجودی اقلام زیر به حداقل مجاز رسیده است:\n\n"
+                    for item in low_stock:
+                        msg += f"📦 {item.name}: {item.quantity:,.1f} {item.unit.name if item.unit else ''}\n"
+                    msg += "\n🔔 لطفا نسبت به تامین نهاده اقدام فرمایید."
+
+                    try:
+                        requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={'chat_id': chat_id, 'text': msg}, timeout=5)
+                    except: pass
+
             setting = SystemSetting.query.filter_by(key='last_daily_stock_rep').first()
-            if not setting: 
+            if not setting:
                 db.session.add(SystemSetting(key='last_daily_stock_rep', value=datetime.now(UTC).strftime('%Y-%m-%d')))
             else:
                 setting.value = datetime.now(UTC).strftime('%Y-%m-%d')
@@ -886,44 +913,45 @@ def chatbot_api():
 
     try:
         import requests
-        
-        # کلید API جدید OpenRouter برای دسترسی به دیپ‌سیک
-        api_key = "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"
-        
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "http://localhost:5000", # مورد نیاز برای OpenRouter
-                "X-Title": "Damdari App", # نام برنامه شما در پنل OpenRouter
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "deepseek/deepseek-chat", # مدل دیپ‌سیک در بستر OpenRouter
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ]
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            answer = response.json()['choices'][0]['message']['content']
+        import os
+
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            answer = "⚠️ خطای پیکربندی: کلید API OpenRouter تنظیم نشده است. لطفاً OPENROUTER_API_KEY را در .env وارد کنید."
         else:
-            try:
-                # استخراج متن دقیق خطا از پاسخ جی‌سون سرور
-                error_data = response.json().get('error', {})
-                error_msg = error_data.get('message', 'نامشخص')
-                if response.status_code == 402:
-                    answer = f"⚠️ خطای اعتبار در OpenRouter (402): {error_msg}. لطفاً موجودی حساب OpenRouter خود را چک کنید."
-                else:
-                    answer = f"ارتباط با OpenRouter برقرار شد، اما سرور این خطا را داد (کد {response.status_code}):\n{error_msg}"
-            except:
-                answer = f"خطای غیرمنتظره در پاسخ هوش مصنوعی (کد {response.status_code})"
-            
+            response = requests.post(
+                url="https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "http://localhost:5000",
+                    "X-Title": "Damdari App",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": os.getenv('DEEPSEEK_MODEL', "deepseek/deepseek-chat"),
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ]
+                },
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                answer = response.json()['choices'][0]['message']['content']
+            else:
+                try:
+                    error_data = response.json().get('error', {})
+                    error_msg = error_data.get('message', 'نامشخص')
+                    if response.status_code == 402:
+                        answer = f"⚠️ خطای اعتبار در OpenRouter (402): {error_msg}"
+                    else:
+                        answer = f"خطای سرور ({response.status_code}): {error_msg}"
+                except:
+                    answer = f"خطای غیرمنتظره ({response.status_code})"
+
     except Exception as e:
-        answer = "خطا: ارتباط اینترنتی سیستم شما با سرور هوش مصنوعی برقرار نشد."
+        answer = f"خطا: اتصال اینترنتی برقرار نشد. {str(e)}"
 
     return jsonify({'reply': answer})
 

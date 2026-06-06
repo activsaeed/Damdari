@@ -15,11 +15,14 @@ from app.models import (User, Sheep, WeightRecord, MedicalRecord, BirthRecord,
 def seed_data():
     app = create_app()
     with app.app_context():
-        print("🚀 شروع عملیات بذرپاشی هوشمند و جامع...")
-        
-        print("🧹 مرحله 1: پاکسازی و نوسازی دیتابیس...")
-        db.drop_all()
-        db.create_all()
+        print("🚀 شروع عملیات بذرپاشی هوشمند...")
+
+        # بررسی هوشمند: اگر دیتابیس خالی نیست، تنها مقادیر پایه را اضافه کنید
+        existing_users = User.query.count()
+        if existing_users > 0:
+            print("⚠️  دیتابیس قبلاً دارای داده است. فقط مقادیر پایه‌ای اضافه می‌شود...")
+        else:
+            print("🧹 دیتابیس خالی است. مقادیر اولیه ایجاد می‌شود...")
 
         today = datetime.now(UTC).date()
         six_months_ago = today - timedelta(days=180)
@@ -119,7 +122,24 @@ def seed_data():
         db.session.add_all([u_kg, u_vial, u_head])
         db.session.commit()
 
-        print("📊 مرحله 3.7: تولید کدینگ استاندارد حسابداری ایران...")
+        print("💰 مرحله 3.10: ساخت دسته‌بندی‌های مالی با تگ سیستمی...")
+        fin_cats = [
+            TransactionCategory(name="فروش دام", t_type="درآمد", system_tag="SYS_LIVESTOCK_SALE"),
+            TransactionCategory(name="فروش شیر", t_type="درآمد", system_tag="SYS_MILK_SALE"),
+            TransactionCategory(name="فروش پشم", t_type="درآمد"),
+            TransactionCategory(name="فروش کود", t_type="درآمد"),
+            TransactionCategory(name="خرید انبار (خودکار)", t_type="هزینه", system_tag="SYS_INVENTORY"),
+            TransactionCategory(name="حقوق و دستمزد", t_type="هزینه", system_tag="SYS_PAYROLL"),
+            TransactionCategory(name="استهلاک", t_type="هزینه", system_tag="SYS_DEPRECIATION"),
+            TransactionCategory(name="تسویه حساب اشخاص", t_type="هزینه", system_tag="SYS_SETTLEMENT"),
+            TransactionCategory(name="خرید علوفه", t_type="هزینه"),
+            TransactionCategory(name="خرید دارو", t_type="هزینه"),
+            TransactionCategory(name="هزینه تعمیرات", t_type="هزینه")
+        ]
+        db.session.add_all(fin_cats)
+        db.session.commit()
+
+        print("� مرحله 3.7: تولید کدینگ استاندارد حسابداری ایران...")
         # ساخت ماهیت حساب ها
         t_asset = AccountType(name="دارایی", nature="بدهکار")
         t_liability = AccountType(name="بدهی", nature="بستانکار")

@@ -121,10 +121,7 @@
                         <th>شرکت/شخص</th>
                         <th>دسته‌بندی</th>
                         <th>مبلغ ({{ get_system_currency_from_settings() }})</th>
-                        <th>
-                            {% if t.is_archived %}<span class="badge bg-dark"><i class="fa-solid fa-archive"></i> بایگانی شده</span>
-                            {% else %}<span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }}</span>{% endif %}
-                        </th>
+                        <th>نوع سند / وضعیت</th>
                         <th>اسناد/فایل</th>
                         <th>عملیات</th>
                     </tr>

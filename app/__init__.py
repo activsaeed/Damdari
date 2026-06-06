@@ -115,71 +115,82 @@ def create_app():
         return f"{formatted} {unit}"
 
     with app.app_context():
-        db.create_all()
-        
-        # --- سیستم انتقال خودکار دیتابیس (Migration) ---
-        # این بخش ستون‌های جدیدی که اضافه کردیم را به دیتابیس فعلی شما تزریق می‌کند
-        inspector = inspect(db.engine)
-        
-        # اصلاح جدول تراکنش‌ها (Transaction)
-        cols_tx = [c['name'] for c in inspector.get_columns('transaction')]
-        if 'contact_id' not in cols_tx:
-            db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN contact_id INTEGER REFERENCES contact(id)'))
-        if 'party_name' not in cols_tx:
-            db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN party_name VARCHAR(150)'))
-        if 'is_starred' not in cols_tx:
-            db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
-        if 'is_archived' not in cols_tx:
-            db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN is_archived BOOLEAN DEFAULT 0'))
-        if 'follow_up_note' not in cols_tx:
-            db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN follow_up_note TEXT'))
-
-        # اصلاح جدول چک‌ها (Cheque)
-        cols_chq = [c['name'] for c in inspector.get_columns('cheque')]
-        if 'is_starred' not in cols_chq:
-            db.session.execute(text('ALTER TABLE "cheque" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
-        if 'contact_id' not in cols_chq:
-            db.session.execute(text('ALTER TABLE "cheque" ADD COLUMN contact_id INTEGER REFERENCES contact(id)'))
-
-        # ایجاد جدول ربات‌های تلگرام در صورت عدم وجود
-        if not inspector.has_table('telegram_bot'):
-            db.session.execute(text('''
-                CREATE TABLE telegram_bot (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bot_name VARCHAR(100) NOT NULL,
-                    bot_token VARCHAR(255) NOT NULL,
-                    chat_id VARCHAR(100) NOT NULL,
-                    is_active BOOLEAN DEFAULT 1
-                )
-            '''))
-
-        # اصلاح جدول دام‌ها (Sheep)
-        cols_sheep = [c['name'] for c in inspector.get_columns('sheep')]
-        if 'is_starred' not in cols_sheep:
-            db.session.execute(text('ALTER TABLE "sheep" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
-            
-        # اصلاح جدول انبار (InventoryItem)
-        cols_inv = [c['name'] for c in inspector.get_columns('inventory_item')]
-        if 'category_id' not in cols_inv:
-            db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN category_id INTEGER REFERENCES inventory_category(id)'))
-        if 'system_tag' not in cols_inv:
-            db.session.execute(text('ALTER TABLE "transaction_category" ADD COLUMN system_tag VARCHAR(50) UNIQUE'))
-        if 'unit_id' not in cols_inv:
-            db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN unit_id INTEGER REFERENCES unit(id)'))
-
-        # اصلاح جدول اشخاص (Contact)
-        cols_contact = [c['name'] for c in inspector.get_columns('contact')]
-        if 'economic_code' not in cols_contact:
-            db.session.execute(text('ALTER TABLE "contact" ADD COLUMN economic_code VARCHAR(50)'))
-        if 'bank_card' not in cols_contact:
-            db.session.execute(text('ALTER TABLE "contact" ADD COLUMN bank_card VARCHAR(30)'))
-
+        # استفاده از db.create_all() تنها برای جداول غیر موجود
+        # ایده‌آل: از Flask-Migrate برای migrations استفاده کنید
         try:
+            inspector = inspect(db.engine)
+            existing_tables = inspector.get_table_names()
+
+            # اگر اساساً دیتابیس خالی است، بسازید
+            if not existing_tables or 'user' not in existing_tables:
+                db.create_all()
+        except Exception as e:
+            print(f"Warning: Could not check existing tables: {e}")
+            db.create_all()
+
+        # --- مایگریشن دستی برای ستون‌های جدید ---
+        try:
+            inspector = inspect(db.engine)
+
+            # اصلاح جدول تراکنش‌ها (Transaction)
+            cols_tx = [c['name'] for c in inspector.get_columns('transaction')]
+            if 'contact_id' not in cols_tx:
+                db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN contact_id INTEGER REFERENCES contact(id)'))
+            if 'party_name' not in cols_tx:
+                db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN party_name VARCHAR(150)'))
+            if 'is_starred' not in cols_tx:
+                db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
+            if 'is_archived' not in cols_tx:
+                db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN is_archived BOOLEAN DEFAULT 0'))
+            if 'follow_up_note' not in cols_tx:
+                db.session.execute(text('ALTER TABLE "transaction" ADD COLUMN follow_up_note TEXT'))
+
+            # اصلاح جدول چک‌ها (Cheque)
+            cols_chq = [c['name'] for c in inspector.get_columns('cheque')]
+            if 'is_starred' not in cols_chq:
+                db.session.execute(text('ALTER TABLE "cheque" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
+            if 'contact_id' not in cols_chq:
+                db.session.execute(text('ALTER TABLE "cheque" ADD COLUMN contact_id INTEGER REFERENCES contact(id)'))
+
+            # ایجاد جدول ربات‌های تلگرام
+            if not inspector.has_table('telegram_bot'):
+                db.session.execute(text('''
+                    CREATE TABLE telegram_bot (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bot_name VARCHAR(100) NOT NULL,
+                        bot_token VARCHAR(255) NOT NULL,
+                        chat_id VARCHAR(100) NOT NULL,
+                        is_active BOOLEAN DEFAULT 1
+                    )
+                '''))
+
+            # اصلاح جدول دام‌ها (Sheep)
+            cols_sheep = [c['name'] for c in inspector.get_columns('sheep')]
+            if 'is_starred' not in cols_sheep:
+                db.session.execute(text('ALTER TABLE "sheep" ADD COLUMN is_starred BOOLEAN DEFAULT 0'))
+
+            # اصلاح جدول انبار (InventoryItem)
+            cols_inv = [c['name'] for c in inspector.get_columns('inventory_item')]
+            if 'category_id' not in cols_inv:
+                db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN category_id INTEGER REFERENCES inventory_category(id)'))
+            if 'unit_id' not in cols_inv:
+                db.session.execute(text('ALTER TABLE "inventory_item" ADD COLUMN unit_id INTEGER REFERENCES unit(id)'))
+
+            cols_tx_cat = [c['name'] for c in inspector.get_columns('transaction_category')]
+            if 'system_tag' not in cols_tx_cat:
+                db.session.execute(text('ALTER TABLE "transaction_category" ADD COLUMN system_tag VARCHAR(50) UNIQUE'))
+
+            # اصلاح جدول اشخاص (Contact)
+            cols_contact = [c['name'] for c in inspector.get_columns('contact')]
+            if 'economic_code' not in cols_contact:
+                db.session.execute(text('ALTER TABLE "contact" ADD COLUMN economic_code VARCHAR(50)'))
+            if 'bank_card' not in cols_contact:
+                db.session.execute(text('ALTER TABLE "contact" ADD COLUMN bank_card VARCHAR(30)'))
+
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            print(f"Database Migration Note: {e}")
-        # ----------------------------------------------
+            print(f"Database migration note: {e}")
         
         # ---> رفع باگ: ساخت ادمین با نقش دقیق "مدیر" و تمام دسترسی‌های True <---
         if not User.query.filter_by(username=app.config['ADMIN_USERNAME']).first():
