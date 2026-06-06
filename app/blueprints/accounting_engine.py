@@ -99,10 +99,19 @@ class AccountingEngine:
             ref_id=transaction.id
         )
 
-        # 1. بدهکار: سرفصل هزینه یا انبار
-        acc_exp_code = "1102" if "انبار" in transaction.category else "5101"
-        acc_exp = Account.query.filter_by(code=acc_exp_code).first()
-        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_exp.id, debit=net_amount, credit=0))
+        # --- استفاده از System Tag برای امنیت حسابداری ---
+        cat = TransactionCategory.query.filter_by(name=transaction.category).first()
+        
+        if cat and cat.system_tag == 'SYS_INVENTORY':
+            expense_account = AccountingEngine.get_account('1102') # موجودی انبار
+        elif cat and cat.system_tag == 'SYS_PAYROLL':
+            expense_account = AccountingEngine.get_account('5102') # هزینه حقوق
+        elif cat and cat.system_tag == 'SYS_DEPRECIATION':
+            expense_account = AccountingEngine.get_account('5103') # استهلاک
+        else:
+            expense_account = AccountingEngine.get_account('5101') # سایر هزینه ها
+
+        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=net_amount, credit=0))
 
         # 2. بدهکار: اعتبار مالیاتی (VAT خرید)
         if vat_amount > 0:

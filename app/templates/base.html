@@ -68,22 +68,18 @@
                 <!-- کنترل دسترسی داینامیک -->
                 {% if current_user.is_authenticated %}
                 
-                    {% if current_user.can_view_livestock or current_user.role == 'مدیر' %}
-                    <a href="#livestockSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}active-sidebar-link{% endif %}" {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}aria-expanded="true"{% endif %}><i class="fa-solid fa-horse-head me-2"></i> مدیریت دام</a>
+                    {% if current_user.can_view_livestock %}
+                    <a href="{{ url_for('livestock.index') }}" class="list-group-item list-group-item-action bg-transparent text-white"><i class="fa-solid fa-horse-head me-2"></i> مدیریت دام</a>
+                    
+                    {% if current_user.role in ['مدیر', 'دامپزشک'] %}
+                    <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی و ژنتیک</a>
                     <div class="collapse ps-3 {% if request.endpoint in ['livestock.index', 'livestock.pen_dashboard', 'livestock.profile', 'livestock.add_sheep'] %}show{% endif %}" id="livestockSubmenu" data-bs-parent="#sidebar-accordion">
-                        <a href="{{ url_for('livestock.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> مشاهده گله</a>
-                        <a href="{{ url_for('livestock.pen_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.pen_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-house-signal"></i> مانیتورینگ بهاربند (IoT)</a>
-                    </div>
-
-                    <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.genetics'] %}active-sidebar-link{% endif %}"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
-                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.genetics'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه روزانه</a>
-                        <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
-                        <a href="{{ url_for('livestock.genetics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.genetics') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-dna"></i> پیشنهاد جفت‌گیری (AI)</a>
                     </div>
                     {% endif %}
+                    {% endif %}
 
-                    {% if current_user.can_view_finance or current_user.role == 'مدیر' %}
+                    {% if current_user.can_view_finance %}
                     <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}" {% if request.blueprint == 'finance' %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری و مالی</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'finance' %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل (نقد/فاکتور)</a>

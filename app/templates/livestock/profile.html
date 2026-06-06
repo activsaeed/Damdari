@@ -5,6 +5,9 @@
     <h2><i class="fa-solid fa-address-card text-primary"></i> پرونده دام - {{ sheep.ear_tag }}</h2>
     <div>
         <a href="javascript:history.back()" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به لیست</a>
+        {% if current_user.can_view_settings or current_user.role == 'مدیر' %}
+        <a href="{{ url_for('dashboard.audit_logs', filter_target=sheep.ear_tag) }}" class="btn btn-dark shadow-sm mx-1"><i class="fa-solid fa-clock-rotate-left"></i> تاریخچه تغییرات</a>
+        {% endif %}
         <button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editModal"><i class="fa-solid fa-pen"></i> ویرایش اطلاعات</button>
         <a href="{{ url_for('livestock.public_passport', ear_tag=sheep.ear_tag) }}" target="_blank" class="btn btn-info shadow-sm mx-1 text-dark fw-bold"><i class="fa-solid fa-passport"></i> پاسپورت دیجیتال</a>
         <a href="{{ url_for('livestock.delete_sheep', id=sheep.id) }}" class="btn btn-danger shadow-sm" onclick="return confirm('آیا از حذف کامل این پرونده از دیتابیس مطمئن هستید؟')"><i class="fa-solid fa-trash"></i> حذف</a>

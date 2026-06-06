@@ -31,26 +31,17 @@ def index():
         born_breeds[s.breed or 'نامشخص'] = born_breeds.get(s.breed or 'نامشخص', 0) + 1
 
     # 2. آمار فروش و سودآوری نژادها (ویژگی پشم‌ریزون 1)
-    sold_sheep = [s for s in all_sheep if s.status == 'فروخته شده']
-    sold_genders, sold_breeds = {}, {}
-    breed_profit_calc = {} # محاسبه سود خالص هر نژاد
-    
-    for s in sold_sheep: 
-        sold_genders[s.gender] = sold_genders.get(s.gender, 0) + 1
-        b = s.breed or 'نامشخص'
-        sold_breeds[b] = sold_breeds.get(b, 0) + 1
-        
-        # محاسبه سود این دام
-        days_alive = max((s.sale_date - (s.birth_date or s.entry_date.date())).days, 1) if s.sale_date else 1
-        daily_cost = s.ration.daily_cost if s.ration else 0
-        profit = (s.sale_price or 0) - ((s.purchase_price or 0) + (days_alive * daily_cost))
-        
-        if b not in breed_profit_calc: breed_profit_calc[b] = {'profit': 0, 'count': 0}
-        breed_profit_calc[b]['profit'] += profit
-        breed_profit_calc[b]['count'] += 1
+    breed_profits = db.session.query(
+        Sheep.breed,
+        func.count(Sheep.id).label('count'),
+        func.sum(Sheep.sale_price - Sheep.purchase_price).label('total_profit')
+    ).filter(Sheep.status == 'فروخته شده').group_by(Sheep.breed).all()
 
-    # میانگین سود هر نژاد
-    avg_breed_profit = {b: data['profit']/data['count'] for b, data in breed_profit_calc.items() if data['count'] > 0}
+    avg_breed_profit = {}
+    for breed, count, total_profit in breed_profits:
+        b_name = breed or 'نامشخص'
+        avg_breed_profit[b_name] = (total_profit / count) if count > 0 else 0
+
     avg_profit_labels = list(avg_breed_profit.keys())
     avg_profit_data = list(avg_breed_profit.values())
 

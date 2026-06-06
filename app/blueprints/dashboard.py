@@ -554,59 +554,43 @@ def sync_inventory():
 @dashboard_bp.route('/run_daily_feed', methods=['POST'])
 @login_required
 def run_daily_feed():
-    """ثبت خودکار مصرف خوراک بر اساس جیره فعال دام‌ها"""
+    """ثبت خودکار مصرف خوراک بر اساس برنامه تغذیه (FeedingSchedule)"""
     if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
     
-    active_sheep = Sheep.query.filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).all()
-    consumption_map = {} # item_id -> total_qty
-    total_cost = 0
-    
-    # محاسبه مجموع نیاز خوراک (تطبیق نام کالا در جیره با موجودی انبار)
-    # ۳. بهینه‌سازی وحشتناک سرعت (رفع Timeout حلقه ۷۰۰۰ دام)
-    # کد جدید (اجرا در ۰.۰۱ ثانیه با Group By مستقیماً در دیتابیس):
-    feed_summary = db.session.query(
-        FeedRation.daily_cost, func.count(Sheep.id)
-    ).join(Sheep, Sheep.feed_ration_id == FeedRation.id)\
-     .filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']))\
-     .group_by(FeedRation.id, FeedRation.daily_cost).all()
+    today = datetime.now(UTC).date()
 
-    total_cost = sum((cost * count) for cost, count in feed_summary)
-    
-    if not consumption_map:
-        flash('هیچ جیره تعریف شده یا کالای متناظری در انبار یافت نشد.', 'warning')
-        return redirect(url_for('dashboard.index'))
+    # 1. دریافت تعداد دام‌های متصل به هر جیره با یک کوئری بهینه
+    ration_counts = db.session.query(
+        Sheep.feed_ration_id, func.count(Sheep.id)
+    ).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']), Sheep.feed_ration_id.isnot(None))\
+     .group_by(Sheep.feed_ration_id).all()
+
+    consumption_map = {}
+    for ration_id, sheep_count in ration_counts:
+        schedules = FeedingSchedule.query.filter_by(feed_ration_id=ration_id).all()
+        for sched in schedules:
+            item = InventoryItem.query.filter_by(name=sched.feed_type).first()
+            if item:
+                total_needed = sched.amount_kg * sheep_count
+                consumption_map[item.id] = consumption_map.get(item.id, 0) + total_needed
 
     try:
+        total_cost = 0
         for item_id, qty in consumption_map.items():
             item = InventoryItem.query.get(item_id)
-            actual_qty = qty
-            
-            if item.quantity < qty:
-                flash(f'هشدار: موجودی {item.name} کافی نیست. کل موجودی مصرف شد.', 'danger')
-                actual_qty = item.quantity
-            
-            if actual_qty <= 0: continue
-
-            item.quantity -= actual_qty
-            cost = actual_qty * (item.unit_price or 0)
-            total_cost += cost
-            
-            db.session.add(InventoryLog(
-                item_id=item.id, action_type='خروج', 
-                amount=actual_qty, transaction_price=item.unit_price, 
-                notes="ثبت خودکار جیره روزانه"
-            ))
+            if item and item.quantity >= qty:
+                item.quantity -= qty
+                total_cost += qty * (item.unit_price or 0)
+                db.session.add(InventoryLog(
+                    item_id=item.id, action_type='خروج', amount=qty, 
+                    transaction_price=item.unit_price, date=today, 
+                    notes="کسر اتوماتیک جیره روزانه سیستم"
+                ))
         
         if total_cost > 0:
-            unit = get_system_setting('currency_unit', 'تومان')
-            factor = 10 if unit == 'ریال' else 1
-            display_cost = total_cost * factor
-
             AccountingEngine.record_feed_consumption(total_cost)
             db.session.commit()
-            flash(f'سند مصرف خوراک صادر شد. ارزش نهاده‌های مصرفی: {display_cost:,.0f} {unit}', 'success')
-        else:
-            flash('موردی برای ثبت یافت نشد.', 'info')
+            flash('مصرف روزانه بر اساس برنامه تغذیه با موفقیت کسر شد.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'خطا در ثبت خودکار: {str(e)}', 'danger')
@@ -834,11 +818,15 @@ def backup_restore():
 @login_required
 def audit_logs():
     from app.models import AuditLog
-    # فقط مدیر حق دیدن لاگ های امنیتی را دارد
-    if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
+    if not current_user.can_view_settings and current_user.role != 'مدیر': 
+        return redirect(url_for('dashboard.index'))
     
-    # دریافت 200 لاگ آخر
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(200).all()
+    target = request.args.get('filter_target')
+    query = AuditLog.query
+    if target:
+        query = query.filter(AuditLog.action.ilike(f"%{target}%"))
+        
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(200).all()
     return render_template('dashboard/audit.html', logs=logs)
 
 @dashboard_bp.route('/maintenance/cleanup_logs', methods=['POST'])
