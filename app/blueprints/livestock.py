@@ -28,6 +28,7 @@ def log_audit(action):
         current_app.logger.error(f"Audit log failed: {e}")
 
 @livestock_bp.route('/')
+@login_required
 def index():
     today = datetime.now(UTC).date()
     maturity_days = int(get_setting('maturity_days', 240))
@@ -79,6 +80,7 @@ def index():
                            current_min_w=min_w, current_max_w=max_w, current_starred=starred_q)
 
 @livestock_bp.route('/export')
+@login_required
 def export_sheep():
     query = Sheep.query
     search_q = request.args.get('search', '').strip()
@@ -132,6 +134,7 @@ def export_sheep():
     )
 
 @livestock_bp.route('/print')
+@login_required
 def print_sheep():
     query = Sheep.query
     search_q = request.args.get('search', '').strip()
@@ -159,6 +162,7 @@ def print_sheep():
 
 
 @livestock_bp.route('/quick_weight', methods=['POST'])
+@login_required
 def quick_weight():
     sheep = Sheep.query.filter_by(ear_tag=request.form.get('ear_tag').strip()).first()
     if sheep:
@@ -169,6 +173,7 @@ def quick_weight():
     return redirect(url_for('livestock.index'))
 
 @livestock_bp.route('/bulk_action', methods=['POST'])
+@login_required
 def bulk_action():
     sheep_ids = request.form.getlist('sheep_ids')
     action_type = request.form.get('bulk_action_type')
@@ -228,6 +233,7 @@ def bulk_action():
     return redirect(url_for('livestock.index'))
 
 @livestock_bp.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_sheep():
     if request.method == 'POST':
         ear_tag = request.form.get('ear_tag').strip()
@@ -263,7 +269,9 @@ def add_sheep():
     return render_template('livestock/add.html', rations=FeedRation.query.all(), pens=Pen.query.all(), breeds=BreedCategory.query.all(), purposes=PurposeCategory.query.all(), statuses=StatusCategory.query.all())
 
 @livestock_bp.route('/profile/<int:id>')
+@login_required
 def profile(id):
+    today = datetime.now(UTC).date()
     sheep = Sheep.query.get_or_404(id)
     weight_history = WeightRecord.query.filter_by(sheep_id=id).order_by(WeightRecord.record_date.asc()).all()
     medical_history = MedicalRecord.query.filter_by(sheep_id=id).order_by(MedicalRecord.record_date.desc()).all()
@@ -298,53 +306,34 @@ def profile(id):
             
     offsprings = Sheep.query.filter_by(mother_id=id).all()
     age_in_months = int((datetime.now(UTC).date() - sheep.birth_date).days / 30) if sheep.birth_date else 0
-    
-    # استخراج تاریخچه تغییرات مخصوص این دام (Audit Trail)
-    audit_history = AuditLog.query.filter_by(
-        target_id=id, 
-        target_type='Sheep'
-    ).order_by(AuditLog.timestamp.desc()).all()
 
-    days_alive = max((datetime.now(UTC).date() - (sheep.birth_date or sheep.entry_date.date())).days, 1)
-    daily_feed_cost = sheep.ration.daily_cost if sheep.ration else 0
-    estimated_feed_cost = days_alive * daily_feed_cost
-
-    # ---> فاز 3: هوش مصنوعی نقطه سربه سر (Marginal Profit) و FCR <---
-    fcr_cost = 0
-    b_weight = float(get_setting('birth_weight', 3.5))
-    weight_gained = (sheep.weight or 0) - b_weight
-    if weight_gained > 0:
-        fcr_cost = estimated_feed_cost / weight_gained # هزینه به ازای هر کیلوگرم رشد
-        
-    smart_alerts = []
-    
-    # الگوریتم سیگنال فروش
-    market_price_per_kg = float(get_setting('market_price', 250000))
-    daily_value_gain = (adg / 1000) * market_price_per_kg if adg > 0 else 0
-    
-    if sheep.purpose == 'پرواربندی' and sheep.status not in ['تلف شده', 'فروخته شده', 'مرده']:
-        if daily_feed_cost > 0:
-            if daily_value_gain < daily_feed_cost and adg > 0:
-                smart_alerts.append(f"🔴 سیگنال فروش فوری: هزینه روزانه خوراک این دام ({daily_feed_cost:,.0f} ت) از ارزش رشد روزانه آن ({daily_value_gain:,.0f} ت) بیشتر شده است! نگهداری این دام ضررده است.")
-            elif daily_value_gain < (daily_feed_cost * 1.2) and adg > 0:
-                smart_alerts.append(f"🟠 هشدار سربه سر: رشد دام در حال توقف است. به زودی هزینه خوراک از سود رشد بیشتر خواهد شد.")
-
-    if adg < 0: smart_alerts.append(f"🔴 هشدار بحرانی: کاهش وزن روزانه {abs(adg):.0f} گرم!")
-
-    # هشدار هم خونی
-    today = datetime.now(UTC).date()
     mother = Sheep.query.get(sheep.mother_id) if sheep.mother_id else None
     father = Sheep.query.get(sheep.father_id) if sheep.father_id else None
-    if mother and father:
-        if (mother.father_id and father.father_id and mother.father_id == father.father_id) or (mother.mother_id and father.mother_id and mother.mother_id == father.mother_id):
-            smart_alerts.append("⚠️ هشدار ژنتیکی (هم‌خونی): پدر و مادر این دام نسبت فامیلی نزدیک دارند!")
 
-    import jdatetime
+    # --- محاسبات اقتصادی و هشدارهای هوشمند (رفع نقص متغیرهای قالب) ---
+    birth_weight = float(get_setting('birth_weight', 3.5))
+    weight_gained = float(sheep.weight or 0) - birth_weight
+    days_alive = max((today - (sheep.birth_date or sheep.entry_date.date())).days, 1)
+    daily_feed_cost = float(sheep.ration.daily_cost or 0) if sheep.ration else 0.0
+    estimated_feed_cost = days_alive * daily_feed_cost
+    
+    # محاسبه بهای هر کیلو رشد (FCR Cost)
+    fcr_cost = estimated_feed_cost / weight_gained if weight_gained > 0 else 0
+    
+    smart_alerts = []
+    if adg < 0: 
+        smart_alerts.append(f"🔴 هشدار بحرانی: این دام در بازه اخیر {abs(adg):.0f} گرم کاهش وزن روزانه داشته است!")
+    
+    # بررسی پرهیز دارویی
     for med in medical_history:
-        if med.withdrawal_end_date and med.withdrawal_end_date > today: 
-            smart_alerts.append(f"پرهیز دارویی تا {jdatetime.date.fromgregorian(date=med.withdrawal_end_date).strftime('%Y/%m/%d')} ({med.medicine_name}).")
-        if med.next_date and today <= med.next_date <= today + timedelta(days=5): 
-            smart_alerts.append(f"نوبت بعدی {med.medicine_name}: {jdatetime.date.fromgregorian(date=med.next_date).strftime('%Y/%m/%d')}.")
+        if med.withdrawal_end_date and med.withdrawal_end_date > today:
+            smart_alerts.append(f"⚠️ پرهیز دارویی: ذبح یا مصرف شیر تا {med.withdrawal_end_date} ممنوع است ({med.medicine_name}).")
+
+    # استخراج تاریخچه تغییرات مخصوص این دام (Audit Trail)
+    # اصلاح باگ target_id: جستجو بر اساس شماره پلاک در متن عملیات
+    audit_history = AuditLog.query.filter(
+        AuditLog.action.ilike(f"%{sheep.ear_tag}%")
+    ).order_by(AuditLog.timestamp.desc()).all()
 
     timeline_events = []
     if sheep.birth_date: timeline_events.append({'date': sheep.birth_date, 'title': 'تولد', 'desc': 'تولد دام', 'icon': 'fa-baby', 'color': 'success'})
@@ -359,7 +348,7 @@ def profile(id):
                            sheep=sheep, chart_labels=chart_labels, chart_data=chart_data, adg=adg,
                            medical_history=medical_history, birth_history=birth_history, timeline_events=timeline_events,
                            total_lambs=total_lambs_born, successful_lambs=successful_lambs, dead_lambs=dead_lambs, twins_count=twins_count,
-                           birth_stats=birth_stats, offsprings=offsprings, fcr_cost=fcr_cost, # fcr اضافه شد
+                           birth_stats=birth_stats, offsprings=offsprings, fcr_cost=fcr_cost,
                            estimated_feed_cost=estimated_feed_cost, smart_alerts=smart_alerts, age_in_months=age_in_months,
                            days_to_target=days_to_target, next_heat_date=next_heat_date,
                            rams=Sheep.query.filter_by(gender='قوچ').all(), rations=FeedRation.query.all(),
@@ -370,6 +359,7 @@ def profile(id):
                            mother=mother, father=father, today_str=today.strftime('%Y-%m-%d'))
 
 @livestock_bp.route('/edit/<int:id>', methods=['POST'])
+@login_required
 def edit_sheep(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.ear_tag = request.form.get('ear_tag', sheep.ear_tag)
@@ -451,6 +441,7 @@ def edit_sheep(id):
     return redirect(url_for('livestock.profile', id=id))
 
 @livestock_bp.route('/add_weight/<int:id>', methods=['POST'])
+@login_required
 def add_weight(id):
     sheep = Sheep.query.get_or_404(id)
     new_weight = float(request.form.get('weight'))
@@ -472,10 +463,8 @@ def add_weight(id):
     return redirect(url_for('livestock.profile', id=id))
 
 @livestock_bp.route('/add_medical/<int:id>', methods=['POST'])
+@login_required
 def add_medical(id):
-    r_date = datetime.strptime(request.form.get('record_date'), '%Y-%m-%d').date() if request.form.get('record_date') else datetime.now(UTC).date()
-    n_date = datetime.strptime(request.form.get('next_date'), '%Y-%m-%d').date() if request.form.get('next_date') else None
-    w_date = datetime.strptime(request.form.get('withdrawal_end_date'), '%Y-%m-%d').date() if request.form.get('withdrawal_end_date') else None
     r_date = datetime.strptime(request.form.get('record_date'), '%Y-%m-%d').date() if request.form.get('record_date') else datetime.now(UTC).date()
     n_date = datetime.strptime(request.form.get('next_date'), '%Y-%m-%d').date() if request.form.get('next_date') else None
     w_date = datetime.strptime(request.form.get('withdrawal_end_date'), '%Y-%m-%d').date() if request.form.get('withdrawal_end_date') else None
@@ -502,6 +491,7 @@ def add_medical(id):
     return redirect(url_for('livestock.profile', id=id))
 
 @livestock_bp.route('/add_birth/<int:id>', methods=['POST'])
+@login_required
 def add_birth(id):
     r_date = datetime.strptime(request.form.get('record_date'), '%Y-%m-%d').date() if request.form.get('record_date') else datetime.utcnow().date()
     father_id = request.form.get('father_id')
@@ -529,6 +519,7 @@ def delete_sheep(id):
     return redirect(url_for('livestock.index'))
 
 @livestock_bp.route('/vet_queue')
+@login_required
 def vet_queue():
     today = datetime.now(UTC).date()
     today = datetime.now(UTC).date()
@@ -540,6 +531,7 @@ def vet_queue():
     return render_template('livestock/vet_queue.html', sick_sheep=sick_sheep, med_sheep=med_sheep, newborns=newborns, templates=TreatmentTemplate.query.all(), today=today)
 
 @livestock_bp.route('/apply_protocol/<int:id>', methods=['POST'])
+@login_required
 def apply_protocol(id):
     template = TreatmentTemplate.query.get_or_404(request.form.get('template_id'))
     today = datetime.now(UTC).date()
@@ -552,6 +544,7 @@ def apply_protocol(id):
     return redirect(request.referrer)
 
 @livestock_bp.route('/medical')
+@login_required
 def medical_overview():
     today = datetime.now(UTC).date()
     sick_sheep = Sheep.query.filter_by(status='بیمار').all()
@@ -559,6 +552,7 @@ def medical_overview():
     return render_template('livestock/medical.html', sick_sheep=sick_sheep, upcoming_meds=upcoming_meds, today=today)
 
 @livestock_bp.route('/mark_healthy/<int:id>')
+@login_required
 def mark_healthy(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.status = 'زنده و سالم'
@@ -567,6 +561,7 @@ def mark_healthy(id):
     return redirect(request.referrer)
 
 @livestock_bp.route('/mark_med_done/<int:med_id>')
+@login_required
 def mark_med_done(med_id):
     old_med = MedicalRecord.query.get_or_404(med_id)
     db.session.add(MedicalRecord(sheep_id=old_med.sheep_id, action_type=old_med.action_type, medicine_name=old_med.medicine_name, record_date=datetime.now(UTC).date(), operator="سیستم", notes="تکرار نوبت قبلی انجام شد."))
@@ -576,6 +571,7 @@ def mark_med_done(med_id):
     return redirect(request.referrer)
 
 @livestock_bp.route('/mark_newborn_checked/<int:id>')
+@login_required
 def mark_newborn_checked(id):
     db.session.add(MedicalRecord(sheep_id=id, action_type="ویزیت", medicine_name="چکاپ سلامت نوزاد", record_date=datetime.now(UTC).date(), operator="سیستم", notes="ویزیت اولیه ثبت شد."))
     db.session.commit()
@@ -605,62 +601,11 @@ def public_passport(ear_tag):
     return render_template('livestock/passport.html', sheep=sheep, age=age, settings=settings)
 
 
-from flask import jsonify
-# ==========================================
-# سیستم هوش مصنوعی پیشنهاد جفت‌گیری (Genetics)
-# ==========================================
-@livestock_bp.route('/genetics')
-def genetics():
-    # 1. بهینه‌سازی کوئری قوچ‌ها (محاسبه تجمعی در سطح دیتابیس)
-    offspring_sub = db.session.query(
-        Sheep.father_id, 
-        func.count(Sheep.id).label('offspring_count')
-    ).filter(Sheep.father_id.isnot(None)).group_by(Sheep.father_id).subquery()
-
-    birth_sub = db.session.query(
-        BirthRecord.father_id,
-        func.sum(case((BirthRecord.lambs_count == 2, 1), else_=0)).label('twins'),
-        func.sum(case((BirthRecord.lambs_count >= 3, 1), else_=0)).label('triplets')
-    ).filter(BirthRecord.father_id.isnot(None)).group_by(BirthRecord.father_id).subquery()
-
-    top_rams_data = db.session.query(
-        Sheep,
-        offspring_sub.c.offspring_count,
-        birth_sub.c.twins,
-        birth_sub.c.triplets
-    ).join(offspring_sub, Sheep.id == offspring_sub.c.father_id)\
-     .outerjoin(birth_sub, Sheep.id == birth_sub.c.father_id)\
-     .filter(Sheep.gender == 'قوچ', Sheep.status == 'زنده و سالم').all()
-
-    top_rams = []
-    for r, o_count, twins, triplets in top_rams_data:
-        twins_val = int(twins or 0)
-        triplets_val = int(triplets or 0)
-        score = (twins_val * 2) + (triplets_val * 3) + o_count
-        top_rams.append({'ram': r, 'offsprings': o_count, 'twins': twins_val, 'score': score})
-        
-    top_rams.sort(key=lambda x: x['score'], reverse=True)
-
-    # 2. بهینه‌سازی کوئری میش‌ها (استفاده از Join و Limit در SQL)
-    top_ewes_data = db.session.query(
-        Sheep,
-        func.count(BirthRecord.id).label('successful_births')
-    ).join(BirthRecord, Sheep.id == BirthRecord.mother_id)\
-     .filter(Sheep.gender == 'میش', Sheep.status == 'زنده و سالم', BirthRecord.status == 'موفق')\
-     .group_by(Sheep.id)\
-     .order_by(func.count(BirthRecord.id).desc())\
-     .limit(5).all()
-
-    top_ewes = [{'ewe': e, 'successful_births': count} for e, count in top_ewes_data]
-
-    return render_template('livestock/genetics.html', top_rams=top_rams[:5], top_ewes=top_ewes)
-
-
-
 # ==========================================
 # مانیتورینگ هوشمند و اینترنت اشیا (IoT) بهاربندها
 # ==========================================
 @livestock_bp.route('/pens')
+@login_required
 def pen_dashboard():
     from app.models import Pen, SensorData
     pens = Pen.query.all()

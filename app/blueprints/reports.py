@@ -1,6 +1,10 @@
 from flask import Blueprint, render_template, request, jsonify, Response
+import logging
+import functools
+import traceback
 import difflib
 from app import db
+from app.accounting_engine import AccountingEngine
 from app.models import (
     Sheep, Transaction, BirthRecord, LactationRecord, InventoryLog, InventoryItem,
     JournalEntry, JournalEntryLine, Account, BreedCategory, FeedingSchedule, Worker,
@@ -14,10 +18,34 @@ import jdatetime
 
 reports_bp = Blueprint('reports', __name__)
 
+# پیکربندی لاگر اختصاصی برای ثبت خطاهای کوئری و منطق گزارشات
+reports_logger = logging.getLogger('reports_errors')
+reports_logger.setLevel(logging.ERROR)
+if not reports_logger.handlers:
+    # ذخیره در فایل reports_errors.log در پوشه اصلی پروژه با پشتیبانی از UTF-8
+    file_handler = logging.FileHandler('reports_errors.log', encoding='utf-8')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    reports_logger.addHandler(file_handler)
+
+def log_report_errors(f):
+    """دکوراتور برای لاگ کردن خطاهای احتمالی در توابع گزارش‌گیری"""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            func_name = f.__name__
+            error_msg = str(e)
+            reports_logger.error(f"Function: {func_name} | Error: {error_msg}\n{traceback.format_exc()}")
+            # اجازه می‌دهیم خطا بالا برود تا Flask آن را مدیریت کند
+            raise e
+    return wrapper
+
 @reports_bp.route('/')
 @permission_required('can_view_reports')
+@log_report_errors
 def index():
-    from app.models import Pen
     today = datetime.now(UTC).date()
     now_j = jdatetime.datetime.now()
     month_ago = today - timedelta(days=30)
@@ -25,7 +53,7 @@ def index():
     year_ago = today - timedelta(days=365)
 
     all_breeds = BreedCategory.query.all()
-    ai_insights = []
+    ai_insights = [] # بازگردانی لیست برای جلوگیری از خطای NameError و TypeError
 
     # 1. آمار زایش و فرزندان - استفاده از SQL
     born_stats = db.session.query(
@@ -33,14 +61,14 @@ def index():
         func.count(Sheep.id).label('count')
     ).filter(Sheep.mother_id != None).group_by(Sheep.gender).all()
 
-    born_genders = {g: cnt for g, cnt in born_stats}
+    born_genders = {row[0]: row[1] for row in born_stats} if born_stats else {}
 
     breed_birth_stats = db.session.query(
         func.coalesce(Sheep.breed, 'نامشخص').label('breed'),
         func.count(Sheep.id).label('count')
     ).filter(Sheep.mother_id != None).group_by(Sheep.breed).all()
 
-    born_breeds = {b: cnt for b, cnt in breed_birth_stats}
+    born_breeds = {row[0]: row[1] for row in breed_birth_stats} if breed_birth_stats else {}
 
     # 2. آمار فروش و سودآوری نژادها + sold_genders و sold_breeds
     breed_profits = db.session.query(
@@ -50,9 +78,9 @@ def index():
     ).filter(Sheep.status == 'فروخته شده').group_by(Sheep.breed).all()
 
     avg_breed_profit = {}
-    for breed, count, total_profit in breed_profits:
-        b_name = breed or 'نامشخص'
-        avg_breed_profit[b_name] = (total_profit / count) if count > 0 else 0
+    for row in breed_profits:
+        b_name = row[0] or 'نامشخص'
+        avg_breed_profit[b_name] = (row[2] / row[1]) if (row[1] and row[1] > 0) else 0
 
     avg_profit_labels = list(avg_breed_profit.keys())
     avg_profit_data = list(avg_breed_profit.values())
@@ -63,14 +91,14 @@ def index():
         func.count(Sheep.id).label('count')
     ).filter(Sheep.status == 'فروخته شده').group_by(Sheep.gender).all()
 
-    sold_genders = {g: cnt for g, cnt in sold_gender_stats}
+    sold_genders = {row[0]: row[1] for row in sold_gender_stats} if sold_gender_stats else {}
 
     sold_breed_stats = db.session.query(
         func.coalesce(Sheep.breed, 'نامشخص').label('breed'),
         func.count(Sheep.id).label('count')
     ).filter(Sheep.status == 'فروخته شده').group_by(Sheep.breed).all()
 
-    sold_breeds = {b: cnt for b, cnt in sold_breed_stats}
+    sold_breeds = {row[0]: row[1] for row in sold_breed_stats} if sold_breed_stats else {}
 
     # 3. آمار تلفات - استفاده از SQL (بدون حلقه)
     death_causes = {}
@@ -83,7 +111,7 @@ def index():
         func.count(Sheep.id).label('count')
     ).filter(Sheep.status.in_(['تلف شده', 'مرده'])).group_by(Sheep.death_reason).all()
 
-    death_causes = {reason: cnt for reason, cnt in dead_reason_stats}
+    death_causes = {row[0]: row[1] for row in dead_reason_stats} if dead_reason_stats else {}
 
     dead_sheep_count = db.session.query(func.count(Sheep.id)).filter(
         Sheep.status.in_(['تلف شده', 'مرده'])
@@ -94,23 +122,27 @@ def index():
 
     # بهینه‌سازی: تجمیع تمام آمارهای دوره‌ای در دو کوئری واحد (حذف ۹ کوئری مجزا)
     sheep_agg = db.session.query(
-        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= month_ago)), 1)).label('d1m'),
-        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= six_months_ago)), 1)).label('d6m'),
-        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= year_ago)), 1)).label('d1y'),
-        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= month_ago)), 1)).label('s1m'),
-        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= six_months_ago)), 1)).label('s6m'),
-        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= year_ago)), 1)).label('s1y')
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= month_ago), 1))).label('d1m'),
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= six_months_ago), 1))).label('d6m'),
+        func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= year_ago), 1))).label('d1y'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= month_ago), 1))).label('s1m'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= six_months_ago), 1))).label('s6m'),
+        func.count(case((and_(Sheep.status == 'فروخته شده', Sheep.entry_date >= year_ago), 1))).label('s1y')
     ).first()
+
+    # جلوگیری از کرش در صورت خالی بودن دیتابیس
+    s_agg = sheep_agg if (sheep_agg and len(sheep_agg) >= 6) else (0,0,0,0,0,0)
 
     birth_agg = db.session.query(
         func.sum(case((BirthRecord.birth_date >= month_ago, BirthRecord.lambs_count), else_=0)).label('b1m'),
         func.sum(case((BirthRecord.birth_date >= six_months_ago, BirthRecord.lambs_count), else_=0)).label('b6m'),
         func.sum(case((BirthRecord.birth_date >= year_ago, BirthRecord.lambs_count), else_=0)).label('b1y')
     ).first()
+    b_agg = birth_agg if (birth_agg and len(birth_agg) >= 3) else (0,0,0)
 
-    stats_1m = {'dead': sheep_agg.d1m or 0, 'sold': sheep_agg.s1m or 0, 'born': birth_agg.b1m or 0}
-    stats_6m = {'dead': sheep_agg.d6m or 0, 'sold': sheep_agg.s6m or 0, 'born': birth_agg.b6m or 0}
-    stats_1y = {'dead': sheep_agg.d1y or 0, 'sold': sheep_agg.s1y or 0, 'born': birth_agg.b1y or 0}
+    stats_1m = {'dead': s_agg[0] or 0, 'sold': s_agg[3] or 0, 'born': b_agg[0] or 0}
+    stats_6m = {'dead': s_agg[1] or 0, 'sold': s_agg[4] or 0, 'born': b_agg[1] or 0}
+    stats_1y = {'dead': s_agg[2] or 0, 'sold': s_agg[5] or 0, 'born': b_agg[2] or 0}
 
     # 4. تفکیک دقیق درآمد و هزینه
     income_transactions = db.session.query(
@@ -122,8 +154,8 @@ def index():
         ~Transaction.category.ilike('%هزینه%')
     ).group_by(Transaction.category).all()
 
-    income_breakdown = {cat: amt for cat, amt in income_transactions}
-    total_income_val = sum(amt for _, amt in income_transactions)
+    income_breakdown = {row[0]: row[1] for row in income_transactions} if income_transactions else {}
+    total_income_val = sum(row[1] for row in income_transactions) if income_transactions else 0
 
     milk_income = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.t_type == 'درآمد',
@@ -137,7 +169,7 @@ def index():
         (Transaction.t_type == 'هزینه') | (Transaction.category.ilike('%خرید%'))
     ).group_by(Transaction.category).all()
 
-    expense_breakdown = {cat: amt for cat, amt in expense_transactions}
+    expense_breakdown = {row[0]: row[1] for row in expense_transactions} if expense_transactions else {}
 
     # 5. گزارش مصرف انبار (رفع باگ صفر بودن نمودار) - استفاده از SQL بجای حلقه
     date_filter = request.args.get('date_filter', '30')
@@ -166,14 +198,14 @@ def index():
     feed_consumption = {}
     total_feed_expenses = 0
 
-    for item_name, unit_id, total_amount, avg_price in feed_logs:
-        cost = (total_amount or 0) * (avg_price or 0)
+    for row in feed_logs:
+        cost = float(row[2] or 0) * float(row[3] or 0)
         total_feed_expenses += cost
-        unit_obj = db.session.query(Unit).filter_by(id=unit_id).first() if unit_id else None
+        unit_obj = db.session.query(Unit).filter_by(id=row[1]).first() if row[1] else None
         unit_name = unit_obj.name if unit_obj else '-'
 
-        feed_consumption[item_name] = {
-            'amount': total_amount or 0,
+        feed_consumption[row[0]] = {
+            'amount': row[2] or 0,
             'unit': unit_name,
             'cost': cost
         }
@@ -185,6 +217,7 @@ def index():
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntry.description.ilike('%استهلاک%')
     ).scalar() or 0.0
+    total_depreciation = float(total_depreciation)
 
     # گزارش سالانه استهلاک برای نمودار یا جدول
     annual_depreciation_report = db.session.query(
@@ -199,15 +232,18 @@ def index():
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
         Sheep.weight.isnot(None)
     ).scalar() or 0
+    total_live_weight = float(total_live_weight)
 
     total_purchase_cost = db.session.query(func.sum(Sheep.purchase_price)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
     ).scalar() or 0
+    total_purchase_cost = float(total_purchase_cost)
 
     total_insurance_expenses = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntryLine.description.ilike('%بیمه سهم کارفرما%')
     ).scalar() or 0.0
+    total_insurance_expenses = float(total_insurance_expenses)
 
     insurance_cost_per_kg = (total_insurance_expenses / total_live_weight) if total_live_weight > 0 else 0
     cost_per_kg = ((0 + total_purchase_cost + total_depreciation + total_insurance_expenses) / total_live_weight) if total_live_weight > 0 else 0
@@ -223,11 +259,13 @@ def index():
     ).group_by(Sheep.breed).all()
 
     breed_cost_analysis = []
-    for breed_name, breed_weights, b_purchase in breed_weights_stats:
+    for row in breed_weights_stats:
+        b_purchase = float(row[2] or 0)
+        breed_weights = float(row[1] or 0)
         if breed_weights and breed_weights > 0:
             b_cost_per_kg = (b_purchase + total_depreciation) / breed_weights
             breed_cost_analysis.append({
-                'name': breed_name or 'نامشخص',
+                'name': row[0] or 'نامشخص',
                 'cost': b_cost_per_kg,
                 'weight': breed_weights
             })
@@ -258,7 +296,7 @@ def index():
         JournalEntry.date >= six_months_ago
     ).group_by('month_key').order_by('month_key').all()
 
-    trend_map = {r[0]: float(r[1]) for r in trend_data_raw}
+    trend_map = {row[0]: float(row[1]) for row in trend_data_raw} if trend_data_raw else {}
     trend_labels, trend_values = [], []
     running_val = 0 # در صورت نیاز به مانده تجمعی
     
@@ -279,7 +317,7 @@ def index():
      .filter(JournalEntry.date >= six_months_ago)\
      .group_by('month_key').all()
 
-    pnl_map = {r.month_key: (float(r.rev), float(r.exp)) for r in pnl_data_raw}
+    pnl_map = {row[0]: (float(row[1]), float(row[2])) for row in pnl_data_raw} if pnl_data_raw else {}
     monthly_pnl_labels, monthly_pnl_rev, monthly_pnl_exp = [], [], []
     for i in range(5, -1, -1):
         d = today - timedelta(days=i*30)
@@ -297,7 +335,7 @@ def index():
     ).join(InventoryItem).filter(InventoryLog.action_type == 'ورود', InventoryLog.date >= six_months_ago)\
      .group_by('month_key').all()
     
-    p_map = {r.month_key: (r.barley or 0, r.corn or 0) for r in purchase_data_raw}
+    p_map = {row[0]: (row[1] or 0, row[2] or 0) for row in purchase_data_raw} if purchase_data_raw else {}
     purchase_trend_labels, barley_trend, corn_trend = [], [], []
     for i in range(5, -1, -1):
         d = today - timedelta(days=i*30)
@@ -368,7 +406,7 @@ def index():
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
     ).group_by(InventoryItem.name).all()
 
-    ration_demand = {feed_type: demand for feed_type, demand in ration_demand_stats}
+    ration_demand = {row[0]: row[1] for row in ration_demand_stats} if ration_demand_stats else {}
     ration_mismatches = []
 
     # چک کردن تطابق نام‌ها بدون حلقه اضافی - استفاده از set difference
@@ -392,7 +430,7 @@ def index():
         InventoryLog.date >= month_ago
     ).group_by(InventoryItem.id, InventoryItem.name).all()
 
-    actual_purchases = {name: amount for name, amount in actual_purchases_stats}
+    actual_purchases = {row[0]: row[1] for row in actual_purchases_stats} if actual_purchases_stats else {}
 
     supply_demand_labels = list(ration_demand.keys())
     supply_data = [actual_purchases.get(label, 0) for label in supply_demand_labels]
@@ -421,21 +459,6 @@ def index():
     cost_variance = total_feed_expenses - total_predicted_feed_cost
     variance_pct = (cost_variance / total_predicted_feed_cost * 100) if total_predicted_feed_cost > 0 else 0
 
-    if cost_variance > 0:
-        ai_insights.append({
-            'icon': 'fa-money-bill-trend-up',
-            'color': 'danger',
-            'title': 'انحراف هزینه خوراک',
-            'text': f'هزینه واقعی خوراک در این بازه {abs(variance_pct):.1f}% بالاتر از پیش‌بینی جیره‌نویسی بوده است. علت را در قیمت خرید یا هدررفت جستجو کنید.'
-        })
-    elif cost_variance < 0:
-        ai_insights.append({
-            'icon': 'fa-sack-arrow-trend-up',
-            'color': 'success',
-            'title': 'صرفه‌جویی در هزینه',
-            'text': f'هزینه خرید نهاده‌ها {abs(variance_pct):.1f}% کمتر از بودجه پیش‌بینی شده بوده است.'
-        })
-
     # --- 6.10. مقایسه قیمت واحد نهاده‌های اصلی (جو، ذرت، یونجه) ---
     feed_comparison_labels = ['جو', 'ذرت', 'یونجه']
     feed_comparison_prices = []
@@ -454,53 +477,18 @@ def index():
     ).outerjoin(Sheep, Pen.id == Sheep.pen_id).group_by(Pen.id, Pen.name).all()
 
     pen_risks = []
-    for pen_name, total_in_pen, sick_count in pen_risks_stats:
-        if total_in_pen and total_in_pen > 0:
-            risk_percent = (float(sick_count or 0) / float(total_in_pen)) * 100
-            pen_risks.append({'name': pen_name, 'risk': risk_percent})
+    for row in pen_risks_stats:
+        if row[1] and row[1] > 0:
+            risk_percent = (float(row[2] or 0) / float(row[1])) * 100
+            pen_risks.append({'name': row[0], 'risk': risk_percent})
 
     pen_risks.sort(key=lambda x: x['risk'], reverse=True)
-
-    # 8. هوش مصنوعی و محاسبات آماری - SQL بهینه شده
-
-    # دریافت تعداد کل دام‌ها
-    total_sheep_count = db.session.query(func.count(Sheep.id)).scalar() or 1
-
-    # محاسبه نرخ تلفات - SQL بدون حلقه
-    mortality_rate = (dead_sheep_count / total_sheep_count * 100) if total_sheep_count > 0 else 0
-
-    if mortality_rate > 5:
-        ai_insights.append({
-            'icon': 'fa-skull-crossbones',
-            'color': 'danger',
-            'title': 'هشدار بحران سلامت',
-            'text': f'نرخ تلفات ({mortality_rate:.1f}%) بالا است! تاکنون مبلغ {"{:,.0f}".format(total_financial_loss)} تومان سرمایه از بین رفته است.'
-        })
 
     # دریافت برترین دام‌ها بر اساس وزن
     top_sheep = Sheep.query.filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
         Sheep.weight > 0
     ).order_by(Sheep.weight.desc()).limit(5).all()
-    # 8.1. بهای تمام شده واقعی
-    if cost_per_kg > 0:
-        ai_insights.append({
-            'icon': 'fa-scale-balanced',
-            'color': 'info',
-            'title': 'بهای تمام‌شده واقعی',
-            'text': f'بهای تمام‌شده تولید هر کیلوگرم وزن زنده با احتساب هزینه‌های جانبی و بیمه {"{:,.0f}".format(cost_per_kg)} تومان است.'
-        })
-
-    if insurance_cost_per_kg > 0:
-        share_pct = (insurance_cost_per_kg / cost_per_kg * 100) if cost_per_kg > 0 else 0
-        ai_insights.append({
-            'icon': 'fa-shield-heart',
-            'color': 'primary',
-            'title': 'آنالیز سهم بیمه',
-            'text': f'هزینه بیمه سهم کارفرما به ازای هر کیلوگرم گوشت تولیدی {"{:,.0f}".format(insurance_cost_per_kg)} تومان ({share_pct:.1f}% از کل) می‌باشد.'
-        })
-
-    # ==========================================
     # ---> 1. تولید دیتای نقشه گرمایی زایش ها (Heatmap) - SQL بهینه شده <---
     # ==========================================
 
@@ -512,9 +500,9 @@ def index():
     ).group_by('j_month').all()
 
     heatmap_data = {str(i): 0 for i in range(1, 13)}
-    for m, lambs in birth_by_month_stats:
-        if m and int(m) <= 12:
-            heatmap_data[str(int(m))] = lambs or 0
+    for row in birth_by_month_stats:
+        if row[0] and int(row[0]) <= 12:
+            heatmap_data[str(int(row[0]))] = row[1] or 0
 
     heatmap_series = [{
         "name": "تعداد بره متولد شده",
@@ -571,7 +559,7 @@ def index():
 
     # هشدار کمبود نقدینگی در ماه اول
     if cf_1m['out'] > cf_1m['in']:
-        ai_insights.insert(0, {
+        ai_insights.append({
             'icon': 'fa-triangle-exclamation',
             'color': 'danger',
             'title': 'هشدار کسری نقدینگی',
@@ -615,10 +603,12 @@ def index():
                            corn_trend=corn_trend)
 
 @reports_bp.route('/sales')
+@log_report_errors
 def sales_report():
     return render_template('reports/sales.html')
 
 @reports_bp.route('/api/sales_data')
+@log_report_errors
 def api_sales_data():
     sold_sheep = Sheep.query.filter_by(status='فروخته شده').all()
     data = []
@@ -644,6 +634,7 @@ def api_sales_data():
     return jsonify(data)
 
 @reports_bp.route('/export_monthly_tx')
+@log_report_errors
 def export_monthly_tx():
     """خروجی اکسل تراکنش‌های ماه جاری (شمسی)"""
     today = datetime.utcnow().date()

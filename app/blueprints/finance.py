@@ -171,8 +171,8 @@ def add_transaction():
         party_name = request.form.get('party_name') # فیلد جدید شخص/شرکت
         contact_id = request.form.get('contact_id')
         
-        date_str = request.form.get('t_date')
-        t_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.now(UTC).date()
+        # استفاده از تابع پارسر هوشمند برای جلوگیری از خطا در تاریخ‌های شمسی/خالی
+        t_date = parse_smart_date(request.form.get('t_date'), datetime.now(UTC).date())
         
         existing_cat = TransactionCategory.query.filter_by(name=category_name, t_type=t_type).first()
         if not existing_cat:
@@ -183,18 +183,17 @@ def add_transaction():
         linked_contact = None        
         amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
 
-        # استفاده از تراکنش اتمیک برای تضمین سلامت داده‌های مالی
-        with db.session.begin_nested():
-            try:
-                if contact_id:
-                    linked_contact = Contact.query.get(contact_id)
-                elif party_name:
-                    linked_contact = Contact.query.filter_by(name=party_name).first()
-                    if not linked_contact:
-                        linked_contact = Contact(name=party_name, contact_type='عمومی', balance=0.0)
-                        db.session.add(linked_contact)
-                        db.session.flush()
+        try:
+            if contact_id:
+                linked_contact = Contact.query.get(contact_id)
+            elif party_name:
+                linked_contact = Contact.query.filter_by(name=party_name).first()
+                if not linked_contact:
+                    linked_contact = Contact(name=party_name, contact_type='عمومی', balance=0.0)
+                    db.session.add(linked_contact)
+                    db.session.flush()
 
+            with db.session.begin_nested():
                 new_transaction = Transaction(
                     t_type=t_type, category=category_name, amount=amount_val,
                     invoice_number=invoice_number, t_date=t_date, description=description,
@@ -205,17 +204,19 @@ def add_transaction():
                 db.session.flush()
 
                 if linked_contact:
-                    if t_type == 'درآمد': linked_contact.balance += amount_val
-                    else: linked_contact.balance -= amount_val
+                    # جلوگیری از Race Condition با استفاده از Update مستقیم SQL
+                    change = amount_val if t_type == 'درآمد' else -amount_val
+                    db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance + change})
+                    db.session.flush()
 
                 if t_type == 'درآمد':
                     AccountingEngine.record_sale(new_transaction, include_vat=True)
                 elif t_type == 'هزینه':
                     AccountingEngine.record_expense(new_transaction, include_vat=True)
-            except Exception as e:
-                db.session.rollback()
-                flash(f'خطا در صدور سند حسابداری: {str(e)}', 'danger')
-                return redirect(url_for('finance.index'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'خطای بحرانی در ثبت مالی: {str(e)}', 'danger')
+            return redirect(url_for('finance.index'))
 
         documents = request.files.getlist('documents')
         upload_folder = os.path.join('app', 'static', 'uploads', 'documents')
@@ -783,11 +784,15 @@ def contact_add_tx(id):
 
     new_tx = None
     if tx_type == 'پرداخت به شخص (تسویه بدهی)':
-        c.balance += amount # تراز منفی اش به سمت صفر یا مثبت میرود
+        db.session.query(Contact).filter_by(id=c.id).update({Contact.balance: Contact.balance + amount})
+        db.session.flush()
+        db.session.refresh(c) # همگام‌سازی شیء با مقدار جدید دیتابیس
         new_tx = Transaction(t_type='هزینه', category='تسویه حساب اشخاص', amount=amount, party_name=c.name, t_date=t_date, description=f"تسویه بدهی به {c.name}", contact_id=c.id, is_archived=False)
         AccountingEngine.record_contact_settlement(c, amount, "پرداخت وجه", t_date)
     else:
-        c.balance -= amount 
+        db.session.query(Contact).filter_by(id=c.id).update({Contact.balance: Contact.balance - amount})
+        db.session.flush()
+        db.session.refresh(c)
         new_tx = Transaction(t_type='درآمد', category='تسویه حساب اشخاص', amount=amount, party_name=c.name, t_date=t_date, description=f"دریافت مطالبات از {c.name}", contact_id=c.id, is_archived=False)
         AccountingEngine.record_contact_settlement(c, amount, "دریافت وجه", t_date)
         

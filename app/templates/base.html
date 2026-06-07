@@ -77,11 +77,10 @@
                     </div>
                     
                     {% if current_user.role in ['مدیر', 'دامپزشک'] %}
-                    <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی و ژنتیک</a>
-                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.genetics'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
+                    <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
+                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه روزانه</a>
                         <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
-                        <a href="{{ url_for('livestock.genetics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.genetics') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-dna"></i> پیشنهاد جفت‌گیری (AI)</a>
                     </div>
                     {% endif %}
                     {% endif %}
@@ -94,6 +93,7 @@
                         <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> تنخواه‌گردان کارگران</a>
                         <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book"></i> دفتر حساب اشخاص (نسیه)</a>
                         <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه و سود و زیان</a>
+                        <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor"></i> مدیریت دارایی و استهلاک</a>
                         <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات و سامانه مودیان</a>
                     </div>
                     {% endif %}
@@ -175,27 +175,24 @@
                     }
                 });
             });
+
             // نمایش تاریخ امروز در سایدبار
             $('#jalali-sidebar-date').text(new persianDate().format('dddd DD MMMM YYYY'));
-        });
 
-        // تزریق خودکار توکن CSRF به تمام فرم‌ها
-        var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        document.querySelectorAll('form').forEach(function(form) {
-            if (form.method.toUpperCase() === 'POST') {
-                var input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'csrf_token';
-                input.value = csrfToken;
-                form.appendChild(input);
-            }
-        });
-
-        const persianToEnglishNumbers = str => str.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
-        document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', function() {
-                this.querySelectorAll('input[type="text"], input[type="hidden"]').forEach(input => {
-                    input.value = persianToEnglishNumbers(input.value);
+            // تزریق هوشمند توکن CSRF
+            $(document).on('submit', 'form', function(e) {
+                const token = $('meta[name="csrf-token"]').attr('content');
+                const $form = $(this);
+                if ($form.attr('method') && $form.attr('method').toUpperCase() === 'POST') {
+                    if ($form.find('input[name="csrf_token"]').length === 0) {
+                        $form.append($('<input>', {type: 'hidden', name: 'csrf_token', value: token}));
+                    }
+                }
+                
+                // تبدیل اعداد فارسی به انگلیسی قبل از ارسال فرم
+                const persianToEnglishNumbers = str => str.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+                $(this).find('input[type="text"], input[type="hidden"]').each(function() {
+                    $(this).val(persianToEnglishNumbers($(this).val()));
                 });
             });
         });
@@ -211,119 +208,5 @@
 
 
     
-    <!-- ========================================== -->
-    <!-- سیستم دستیار هوشمند هوش مصنوعی (Chatbot UI) -->
-    <!-- ========================================== -->
-    {% if current_user.is_authenticated and current_user.role in ['مدیر', 'دامپزشک'] %}
-    
-    <!-- دکمه شناور پایین صفحه -->
-    <button id="chatbot-btn" class="btn btn-primary rounded-circle shadow-lg d-flex justify-content-center align-items-center" style="position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px; z-index: 1050; transition: transform 0.3s;">
-        <i class="fa-solid fa-robot fa-2x"></i>
-    </button>
-
-    <!-- پنجره چت (مخفی به صورت پیش فرض) -->
-    <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; left: 20px; width: 350px; max-width: 90vw; height: 450px; z-index: 1050; border-radius: 15px; overflow: hidden;">
-        <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center py-3">
-            <span><i class="fa-solid fa-robot"></i> دستیار هوشمند دامداری</span>
-            <button id="chatbot-close" class="btn-close btn-close-white"></button>
-        </div>
-        
-        <div id="chatbot-messages" class="card-body bg-light" style="overflow-y: auto; flex-grow: 1; padding: 15px;">
-            <!-- پیام خوشامدگویی پیش فرض -->
-            <div class="d-flex mb-3">
-                <div class="bg-white p-2 rounded-3 shadow-sm border" style="max-width: 85%; font-size: 0.9rem;">
-                    سلام! من هوش مصنوعی سیستم هستم. چطور می‌تونم کمکت کنم؟ 🐑
-                </div>
-            </div>
-        </div>
-
-        <div class="card-footer bg-white p-2 border-top">
-            <form id="chatbot-form" class="input-group">
-                <input type="text" id="chatbot-input" class="form-control border-0 bg-light" placeholder="سوال خود را بپرسید..." required autocomplete="off" style="box-shadow: none;">
-                <button type="submit" class="btn btn-primary rounded-circle ms-1" style="width: 40px; height: 40px; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        const chatBtn = document.getElementById('chatbot-btn');
-        const chatWindow = document.getElementById('chatbot-window');
-        const chatClose = document.getElementById('chatbot-close');
-        const chatForm = document.getElementById('chatbot-form');
-        const chatInput = document.getElementById('chatbot-input');
-        const chatMessages = document.getElementById('chatbot-messages');
-
-        // باز و بسته کردن پنجره چت
-        chatBtn.addEventListener('click', () => {
-            chatWindow.classList.toggle('d-none');
-            if(!chatWindow.classList.contains('d-none')) chatInput.focus();
-        });
-        chatClose.addEventListener('click', () => chatWindow.classList.add('d-none'));
-
-        // ارسال پیام به سرور
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const message = chatInput.value.trim();
-            if (!message) return;
-
-            appendMessage(message, 'user');
-            chatInput.value = '';
-
-            const typingId = 'typing-' + Date.now();
-            appendMessage('<i class="fa-solid fa-ellipsis fa-fade"></i> در حال تایپ...', 'bot', typingId);
-
-            var submitBtn = chatForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-
-            fetch("{{ url_for('dashboard.chatbot_api') }}", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                body: JSON.stringify({ message: message })
-            })
-            .then(res => {
-                if (!res.ok) throw new Error('خطای سرور');
-                return res.json();
-            })
-            .then(data => {
-                var typingElem = document.getElementById(typingId);
-                if (typingElem) typingElem.remove();
-
-                if (!data || !data.reply) {
-                    appendMessage('متاسفانه در حال حاضر پاسخی دریافت نکردم. لطفا دوباره امتحان کنید.', 'bot text-warning');
-                    return;
-                }
-                appendMessage(data.reply, 'bot');
-            })
-            .catch(function() {
-                var typingElem = document.getElementById(typingId);
-                if (typingElem) typingElem.remove();
-                appendMessage('خطا در ارتباط با سرور!', 'bot text-danger');
-            })
-            .finally(function() { submitBtn.disabled = false; });
-        });
-
-        function appendMessage(text, sender, id) {
-            var div = document.createElement('div');
-            div.className = sender === 'user' ? 'd-flex justify-content-end mb-3' : 'd-flex mb-3';
-            if (id) div.id = id;
-            
-            var bubble = document.createElement('div');
-            bubble.className = sender === 'user' ? 'bg-primary text-white p-2 rounded-3 shadow-sm' : 'bg-white text-dark p-2 rounded-3 shadow-sm border';
-            bubble.style.maxWidth = '85%';
-            bubble.style.fontSize = '0.9rem';
-            if (sender !== 'user' && text.indexOf('<i ') !== 0) {
-                bubble.textContent = text;
-            } else {
-                bubble.innerHTML = text;
-            }
-            
-            div.appendChild(bubble);
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-    </script>
-    {% endif %}
-
-
 </body>
 </html>

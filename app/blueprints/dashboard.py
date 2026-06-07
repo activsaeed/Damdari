@@ -232,10 +232,11 @@ def index():
                 setting.value = datetime.now(UTC).strftime('%Y-%m-%d')
             db.session.commit()
 
+    today_str = jdatetime.date.today().strftime('%Y/%m/%d')
+
     return render_template('dashboard/index.html', 
                            total_sheep=total_sheep, total_live_weight=total_live_weight,
-                           gender_stats=gender_stats, breed_stats=breed_stats,
-                           weight_ranges=weight_ranges, weight_above=weight_above,
+                           gender_stats=gender_stats, breed_stats=breed_stats, weight_ranges=weight_ranges, weight_above=weight_above,
                            inventory_items=inventory_items, total_expense=total_expense, total_income=total_income,
                            transactions=transactions, 
                            operational_profit=operational_profit, 
@@ -245,7 +246,8 @@ def index():
                            profit_growth=round(profit_growth, 1),
                            financial_alert=financial_alert,
                            insurance_debt=insurance_debt,
-                           feed_days_left=days_until_empty)
+                           feed_days_left=days_until_empty,
+                           today_str=today_str)
 
 
 @dashboard_bp.route('/warnings')
@@ -423,6 +425,26 @@ def settings():
                     can_view_reports='reports' in perms, can_view_settings='settings' in perms
                 ))
                 flash('کاربر جدید با دسترسی‌های تعیین شده ساخته شد.', 'success')
+
+        elif action == 'edit_user':
+            user_id = request.form.get('user_id')
+            u = User.query.get_or_404(user_id)
+            u.name = request.form.get('name')
+            u.role = request.form.get('role')
+            
+            # بروزرسانی رمز عبور فقط در صورت وارد کردن مقدار جدید
+            new_password = request.form.get('password')
+            if new_password:
+                u.password_hash = generate_password_hash(new_password)
+                
+            perms = request.form.getlist('permissions')
+            u.can_view_livestock = 'livestock' in perms
+            u.can_view_finance = 'finance' in perms
+            u.can_view_inventory = 'inventory' in perms
+            u.can_view_hr = 'hr' in perms
+            u.can_view_reports = 'reports' in perms
+            u.can_view_settings = 'settings' in perms
+            flash(f'اطلاعات کاربر {u.username} بروزرسانی شد.', 'info')
                 
         db.session.commit()
         return redirect(url_for('dashboard.settings'))
@@ -462,11 +484,16 @@ def run_valuation():
         flash('دسترسی محدود است.', 'danger')
         return redirect(url_for('dashboard.index'))
     
-    # دریافت قیمت بازار از تنظیمات
-    market_price = float(get_setting('market_price', 0))
+    # دریافت قیمت جدید از فرم ارسالی کاربر
+    raw_price = request.form.get('market_price', '0').replace(',', '')
+    try:
+        market_price = float(raw_price)
+    except ValueError:
+        market_price = 0.0
+
     if market_price <= 0:
-        flash('ابتدا قیمت روز گوشت (هر کیلو) را در تنظیمات وارد کنید.', 'warning')
-        return redirect(url_for('dashboard.settings'))
+        flash('لطفاً قیمت معتبری برای هر کیلوگرم وارد کنید.', 'warning')
+        return redirect(url_for('dashboard.index'))
     
     # محاسبه کل وزن زنده گله فعلی (بدون حذف شده‌ها)
     total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
@@ -476,13 +503,15 @@ def run_valuation():
     total_fair_value = total_live_weight * market_price
     
     try:
+        # بروزرسانی آخرین قیمت در تنظیمات جهت استفاده‌های بعدی
+        set_system_setting('market_price', str(int(market_price)))
+        
         unit = get_system_setting('currency_unit', 'تومان')
         factor = 10 if unit == 'ریال' else 1
         display_total = total_fair_value * factor
 
-        AccountingEngine.record_livestock_valuation(total_fair_value)
         db.session.commit()
-        flash(f'ارزیابی گله با موفقیت انجام شد. ارزش کل بازار: {display_total:,.0f} {unit}', 'success')
+        flash(f'قیمت روز بازار بروزرسانی شد. ارزش برآوردی کل گله: {display_total:,.0f} {unit}', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'خطا در ثبت سند ارزیابی: {str(e)}', 'danger')
@@ -821,89 +850,6 @@ def cleanup_audit_logs():
     flash(f'عملیات سبک‌سازی لاگ‌ها انجام شد. {deleted_count} مورد قدیمی حذف گردید.', 'success')
     return redirect(url_for('dashboard.settings'))
 
-
-# ==========================================
-# دستیار هوش مصنوعی واقعی متصل به دیتابیس (DeepSeek AI)
-# ==========================================
-@dashboard_bp.route('/api/chatbot', methods=['POST'])
-@login_required
-def chatbot_api():
-    if current_user.role not in ['مدیر', 'دامپزشک']:
-        return jsonify({'reply': 'دسترسی شما محدود است.'})
-
-    user_message = request.json.get('message', '').strip()
-    
-    # --- 1. استخراج دیتای واقعی و لحظه‌ای از دیتابیس ---
-    total_sheep = Sheep.query.filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).count()
-    sick_sheep = Sheep.query.filter_by(status='بیمار').count()
-    pregnant = Sheep.query.filter_by(status='آبستن').count()
-    
-    low_stock = InventoryItem.query.filter(InventoryItem.quantity <= InventoryItem.min_threshold).all()
-    low_stock_names = ", ".join([i.name for i in low_stock]) if low_stock else "هیچ کمبودی نداریم"
-    
-    incomes = sum(t.amount for t in Transaction.query.filter_by(t_type='درآمد').all())
-    expenses = sum(t.amount for t in Transaction.query.filter_by(t_type='هزینه').all())
-    net_profit = incomes - expenses
-    
-    system_prompt = f"""تو یک مدیر مالی، دامپزشک و دستیار هوشمند بسیار حرفه‌ای برای نرم‌افزار 'دامداری من' در ایران هستی.
-    تو به اصول حسابداری، قوانین مالیاتی ایران، داروها و جیره‌نویسی تسلط کامل داری.
-    اطلاعات لحظه‌ای این دامداری در این ثانیه به این شکل است:
-    - کل گله زنده: {total_sheep} رأس
-    - دام‌های بیمار: {sick_sheep} رأس
-    - میش‌های آبستن: {pregnant} رأس
-    - وضعیت انبار (کالاهای رو به اتمام): {low_stock_names}
-    - مجموع درآمدها تا امروز: {incomes:,.0f} تومان
-    - مجموع هزینه‌ها تا امروز: {expenses:,.0f} تومان
-    - تراز مالی (سود/زیان خالص): {net_profit:,.0f} تومان
-    
-    کاربر اکنون یک سوال از تو می‌پرسد. 
-    1. با لحنی دوستانه، حرفه‌ای و کوتاه (مثل یک مشاور) به فارسی جواب بده. 
-    2. اگر آمار دامداری را خواست، از اطلاعات بالا استفاده کن. 
-    3. اگر سوال تخصصی حسابداری یا دامپزشکی پرسید، با دانش خودت راهنمایی کن."""
-
-    try:
-        import requests
-        import os
-
-        api_key = os.getenv('OPENROUTER_API_KEY')
-        if not api_key:
-            answer = "⚠️ خطای پیکربندی: کلید API OpenRouter تنظیم نشده است. لطفاً OPENROUTER_API_KEY را در .env وارد کنید."
-        else:
-            response = requests.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": "http://localhost:5000",
-                    "X-Title": "Damdari App",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": os.getenv('DEEPSEEK_MODEL', "deepseek/deepseek-chat"),
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ]
-                },
-                timeout=30
-            )
-
-            if response.status_code == 200:
-                answer = response.json()['choices'][0]['message']['content']
-            else:
-                try:
-                    error_data = response.json().get('error', {})
-                    error_msg = error_data.get('message', 'نامشخص')
-                    if response.status_code == 402:
-                        answer = f"⚠️ خطای اعتبار در OpenRouter (402): {error_msg}"
-                    else:
-                        answer = f"خطای سرور ({response.status_code}): {error_msg}"
-                except:
-                    answer = f"خطای غیرمنتظره ({response.status_code})"
-
-    except Exception as e:
-        answer = f"خطا: اتصال اینترنتی برقرار نشد. {str(e)}"
-
-    return jsonify({'reply': answer})
 
 @dashboard_bp.route('/toggle_currency')
 @login_required

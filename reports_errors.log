@@ -1,0 +1,73 @@
+2026-06-07 15:48:28,932 - ERROR - Function: index | Error: cannot unpack non-iterable int object
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 124, in index
+    func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= month_ago)), 1)).label('d1m'),
+               ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\_elements_constructors.py", line 853, in case
+    return Case(*whens, value=value, else_=else_)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\elements.py", line 3366, in __init__
+    for (c, r) in new_whens
+        ^^^^^^
+TypeError: cannot unpack non-iterable int object
+
+2026-06-07 15:51:19,993 - ERROR - Function: index | Error: cannot unpack non-iterable int object
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 124, in index
+    func.count(case((and_(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date >= month_ago), 1))).label('d1m'),
+               ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\_elements_constructors.py", line 853, in case
+    return Case(*whens, value=value, else_=else_)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\elements.py", line 3366, in __init__
+    for (c, r) in new_whens
+        ^^^^^^
+TypeError: cannot unpack non-iterable int object
+
+2026-06-07 15:51:35,632 - ERROR - Function: index | Error: name 'AccountingEngine' is not defined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 289, in index
+    livestock_acc = AccountingEngine.get_account('1200')
+                    ^^^^^^^^^^^^^^^^
+NameError: name 'AccountingEngine' is not defined
+
+2026-06-07 15:52:17,636 - ERROR - Function: index | Error: name 'AccountingEngine' is not defined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 289, in index
+    livestock_acc = AccountingEngine.get_account('1200')
+                    ^^^^^^^^^^^^^^^^
+NameError: name 'AccountingEngine' is not defined
+
+2026-06-07 15:52:36,520 - ERROR - Function: index | Error: name 'AccountingEngine' is not defined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 289, in index
+    livestock_acc = AccountingEngine.get_account('1200')
+                    ^^^^^^^^^^^^^^^^
+NameError: name 'AccountingEngine' is not defined
+
+2026-06-07 15:54:38,379 - ERROR - Function: index | Error: name 'AccountingEngine' is not defined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    try:
+    
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 289, in index
+    # بهینه‌سازی: استفاده از یک کوئری واحد با گروه‌بندی ماهانه برای روند ۶ ماهه
+NameError: name 'AccountingEngine' is not defined
+
+2026-06-07 15:54:40,001 - ERROR - Function: index | Error: name 'AccountingEngine' is not defined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 35, in wrapper
+    try:
+    
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 289, in index
+    # بهینه‌سازی: استفاده از یک کوئری واحد با گروه‌بندی ماهانه برای روند ۶ ماهه
+NameError: name 'AccountingEngine' is not defined
+

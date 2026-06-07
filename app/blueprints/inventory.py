@@ -143,9 +143,18 @@ def transaction():
         transaction_price = item.unit_price
         
     elif action_type == 'خروج':
-        item.quantity -= amount
-        transaction_price = item.unit_price # قفل کردن قیمت در لحظه مصرف (ضد تورم)
-        flash('مصرف روزانه ثبت شد.', 'info')
+        if item.quantity >= amount:
+            item.quantity -= amount
+            transaction_price = item.unit_price
+            # صدور سند هزینه در لحظه مصرف (ضد فاجعه حسابداری)
+            from app.accounting_engine import AccountingEngine
+            total_cost = amount * (transaction_price or 0)
+            if total_cost > 0:
+                AccountingEngine.record_feed_consumption(total_cost)
+            flash('مصرف ثبت و هزینه آن در دفاتر لحاظ شد.', 'info')
+        else:
+            flash('خطا: موجودی انبار کافی نیست!', 'danger')
+            return redirect(url_for('inventory.index'))
         
     db.session.add(InventoryLog(item_id=item_id, action_type=action_type, amount=amount, transaction_price=transaction_price, notes=notes))
     db.session.commit()

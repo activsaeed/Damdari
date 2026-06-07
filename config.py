@@ -6,7 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / '.env')
 
 class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', 'damdari_super_secret_key_2025')
+    SECRET_KEY = os.getenv('SECRET_KEY', '9b7f8e2d3c4b5a6f7e8d9c0b1a2f3e4d') # کلید ثابت و قوی
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'sqlite:///' + str(BASE_DIR / 'app' / 'damdari.db'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
@@ -22,4 +22,3 @@ class Config:
     # تنظیمات سیستمی
     VAT_RATE = float(os.getenv('VAT_RATE', '10'))
     CURRENCY_UNIT = os.getenv('CURRENCY_UNIT', 'تومان')
-

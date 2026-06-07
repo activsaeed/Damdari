@@ -302,13 +302,13 @@ def generate_payslip():
     
     from app.blueprints.dashboard import get_setting
     working_hours = float(get_setting('working_hours', 220))
-    hourly_rate = worker.salary / working_hours if worker.salary > 0 else 0
+    hourly_rate = float(worker.salary or 0) / working_hours if (worker.salary and worker.salary > 0) else 0
     overtime_pay = overtime_hours * (hourly_rate * overtime_rate)
     night_shift_pay = night_shift_hours * (hourly_rate * night_shift_rate)
     
     # پیدا کردن اقساط وام های فعال
     active_loans = WorkerLoan.query.filter_by(worker_id=worker.id, status='در حال پرداخت').all()
-    loan_deduction = sum(l.installment_amount for l in active_loans if l.installment_amount)
+    loan_deduction = float(sum(l.installment_amount for l in active_loans if l.installment_amount) or 0)
     
     # محاسبه پاداش هوشمند (بر اساس وظایف انجام شده در 30 روز اخیر)
     today = datetime.now(UTC).date()
@@ -318,7 +318,12 @@ def generate_payslip():
     fines = float(request.form.get('fines') or 0)
     
     # محاسبه ناخالص و خالص
-    gross_pay = worker.salary + worker.housing_allowance + worker.food_allowance + worker.family_allowance + overtime_pay + night_shift_pay + transportation + kpi_bonus + eydi
+    base_pay = float(worker.salary or 0)
+    housing = float(worker.housing_allowance or 0)
+    food = float(worker.food_allowance or 0)
+    family = float(worker.family_allowance or 0)
+    
+    gross_pay = base_pay + housing + food + family + overtime_pay + night_shift_pay + transportation + kpi_bonus + eydi
     net_pay = gross_pay - (loan_deduction + fines)
     
     new_payslip = Payslip(
