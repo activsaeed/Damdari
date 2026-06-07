@@ -169,23 +169,14 @@ def add_transaction():
         raw_amount = request.form.get('amount', '0')
         invoice_number = request.form.get('invoice_number')
         description = request.form.get('description')
+        follow_up_note = request.form.get('follow_up_note')
         party_name = request.form.get('party_name') # فیلد جدید شخص/شرکت
         contact_id = request.form.get('contact_id')
         payment_method = request.form.get('payment_method', 'نقدی')
         cost_center = request.form.get('cost_center')
         due_date = parse_smart_date(request.form.get('due_date'))
         discount_val = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
-        
-        amount_val = normalize_amount_to_toman(raw_amount)
-        
-        # منطق نهایی مالیات: اولویت با عدد وارد شده در فرم (حتی اگر صفر باشد)
-        form_vat = request.form.get('vat_amount')
-        if form_vat is not None and form_vat.strip() != "":
-            vat_val = Decimal(form_vat.replace(',', ''))
-        else:
-            # اگر فیلد کلا خالی بود (مثلا در نسخه های قدیمی فرانت)، طبق تنظیمات حساب کن
-            vat_rate_setting = Decimal(get_setting('vat_rate', '10'))
-            vat_val = (amount_val - discount_val) * (vat_rate_setting / Decimal('100'))
+        vat_val = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
         
         # استفاده از تابع پارسر هوشمند برای جلوگیری از خطا در تاریخ‌های شمسی/خالی
         t_date = parse_smart_date(request.form.get('t_date'), datetime.now(UTC).date())
@@ -197,6 +188,7 @@ def add_transaction():
 
         # --- منطق هوشمند اتصال یا ساخت حساب شخص ---
         linked_contact = None        
+        amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
 
         try:
             if contact_id:
@@ -212,6 +204,7 @@ def add_transaction():
                 new_transaction = Transaction(
                     t_type=t_type, category=category_name, amount=amount_val,
                     invoice_number=invoice_number, t_date=t_date, description=description,
+                    follow_up_note=follow_up_note,
                     party_name=linked_contact.name if linked_contact else party_name,
                     contact_id=linked_contact.id if linked_contact else None,
                     payment_method=payment_method,
@@ -223,9 +216,10 @@ def add_transaction():
                 db.session.add(new_transaction)
                 db.session.flush()
 
-                # فقط در معاملات نسیه تراز حساب شخص تغییر می‌کند
+                # اصلاح باگ: تراز شخص باید بر اساس "مبلغ نهایی فاکتور" تغییر کند
                 if linked_contact and payment_method == 'نسیه':
-                    change = amount_val if t_type == 'درآمد' else -amount_val
+                    final_val = (amount_val - discount_val) + vat_val
+                    change = final_val if t_type == 'درآمد' else -final_val
                     db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance + change})
                     db.session.flush()
 
@@ -256,9 +250,7 @@ def add_transaction():
     expense_cats = TransactionCategory.query.filter_by(t_type='هزینه').all()
     all_contacts = Contact.query.order_by(Contact.name).all()
     today_str = datetime.now(UTC).strftime('%Y-%m-%d')
-    vat_rate = get_setting('vat_rate', '10')
-    return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, 
-                           contacts=all_contacts, today_str=today_str, vat_rate=vat_rate)
+    return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, contacts=all_contacts, today_str=today_str)
 
 @finance_bp.route('/toggle_star_tx/<int:id>', methods=['POST'])
 @login_required
@@ -631,6 +623,12 @@ def edit_tx(id):
     tx.invoice_number = request.form.get('invoice_number')
     tx.party_name = request.form.get('party_name')
     tx.description = request.form.get('description')
+    tx.payment_method = request.form.get('payment_method', 'نقدی')
+    tx.cost_center = request.form.get('cost_center')
+    tx.due_date = parse_smart_date(request.form.get('due_date'))
+    tx.discount_amount = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
+    tx.vat_amount = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
+    
     # افزودن عکس جدید به فاکتور قبلی
     documents = request.files.getlist('documents')
     upload_folder = os.path.join('app', 'static', 'uploads', 'documents')

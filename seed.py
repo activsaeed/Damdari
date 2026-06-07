@@ -149,8 +149,10 @@ def seed_data():
             {'code': "1010", 'name': "موجودی نقد و بانک", 'account_type_id': t_asset.id},
             {'code': "1020", 'name': "موجودی کالا و انبار", 'account_type_id': t_asset.id},
             {'code': "1030", 'name': "حساب‌های دریافتنی", 'account_type_id': t_asset.id},
+            {'code': "1040", 'name': "اعتبار مالیاتی (مالیات خرید)", 'account_type_id': t_asset.id},
             {'code': "1200", 'name': "دارایی‌های زیستی (گله)", 'account_type_id': t_asset.id},
             {'code': "2010", 'name': "حساب‌های پرداختنی", 'account_type_id': t_liability.id},
+            {'code': "2030", 'name': "مالیات پرداختنی (مالیات فروش)", 'account_type_id': t_liability.id},
             {'code': "4010", 'name': "درآمد عملیاتی", 'account_type_id': t_revenue.id},
             {'code': "5010", 'name': "هزینه‌های عملیاتی", 'account_type_id': t_expense.id}
         ]

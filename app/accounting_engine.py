@@ -30,13 +30,14 @@ class AccountingEngine:
                 vat_payable = AccountingEngine.get_account('2030')
 
                 if not all([cash_account, receivable_account, sales_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account)] if not acc]
+                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account), ('2030', vat_payable)] if not acc]
                     raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
                 # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
                 amount = transaction.amount  # مبلغ پایه
                 vat_amount = transaction.vat_amount or Decimal('0')
-                total_amount = amount + vat_amount
+                discount_amount = transaction.discount_amount or Decimal('0')
+                total_amount = (amount - discount_amount) + vat_amount
 
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
@@ -51,7 +52,10 @@ class AccountingEngine:
                 effective_contact_id = contact_id or transaction.contact_id
                 
                 # اگر نسیه بود به حساب دریافتنی و اگر نقدی بود به بانک/صندوق سند می‌خورد
-                debit_acc_id = receivable_account.id if (effective_contact_id and transaction.payment_method == 'نسیه') else cash_account.id
+                if transaction.payment_method == 'نسیه' and effective_contact_id:
+                    debit_acc_id = receivable_account.id
+                else:
+                    debit_acc_id = cash_account.id
                 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=effective_contact_id, debit=total_amount, credit=0.0))
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
@@ -73,13 +77,14 @@ class AccountingEngine:
                 vat_receivable = AccountingEngine.get_account('1040')
 
                 if not all([cash_account, payable_account, expense_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account)] if not acc]
+                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account), ('1040', vat_receivable)] if not acc]
                     raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
                 # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
                 amount = transaction.amount  # مبلغ پایه
                 vat_amount = transaction.vat_amount or Decimal('0')
-                total_amount = amount + vat_amount
+                discount_amount = transaction.discount_amount or Decimal('0')
+                total_amount = (amount - discount_amount) + vat_amount
 
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
@@ -95,10 +100,13 @@ class AccountingEngine:
                 if vat_amount > 0:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
 
-                # اولویت با contact_id تراکنش اگر ورودی تابع خالی بود
                 effective_contact_id = contact_id or transaction.contact_id
+                
                 # اگر نسیه بود به حساب پرداختنی و اگر نقدی بود از بانک/صندوق کسر می‌شود
-                credit_acc_id = payable_account.id if (effective_contact_id and transaction.payment_method == 'نسیه') else cash_account.id
+                if transaction.payment_method == 'نسیه' and effective_contact_id:
+                    credit_acc_id = payable_account.id
+                else:
+                    credit_acc_id = cash_account.id
                 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=credit_acc_id, contact_id=effective_contact_id, debit=0.0, credit=total_amount))
         except Exception as e:
