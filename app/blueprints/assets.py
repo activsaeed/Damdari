@@ -1,3 +1,4 @@
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
@@ -24,8 +25,8 @@ def index():
 @login_required
 def add_asset():
     name = request.form.get('name')
-    price = float(request.form.get('purchase_price', 0).replace(',', ''))
-    scrap = float(request.form.get('scrap_value', 0).replace(',', ''))
+    price = Decimal(request.form.get('purchase_price', '0').replace(',', ''))
+    scrap = Decimal(request.form.get('scrap_value', '0').replace(',', ''))
     lifespan = int(request.form.get('lifespan_years', 10))
     purchase_date_str = request.form.get('purchase_date')
     transaction_id = request.form.get('transaction_id')
@@ -75,8 +76,8 @@ def edit_asset(id):
     asset = Equipment.query.get_or_404(id)
     try:
         asset.name = request.form.get('name')
-        asset.purchase_price = float(request.form.get('purchase_price', 0).replace(',', ''))
-        asset.scrap_value = float(request.form.get('scrap_value', 0).replace(',', ''))
+        asset.purchase_price = Decimal(request.form.get('purchase_price', '0').replace(',', ''))
+        asset.scrap_value = Decimal(request.form.get('scrap_value', '0').replace(',', ''))
         asset.lifespan_years = int(request.form.get('lifespan_years', 10))
         
         transaction_id = request.form.get('transaction_id')

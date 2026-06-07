@@ -1,3 +1,4 @@
+from decimal import Decimal
 from flask import Flask, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -38,6 +39,37 @@ def set_system_setting(key, value):
     else:
         s.value = str(value)
     db.session.commit()
+
+def auto_repair_db(app):
+    """مکانیزم هوشمند برای افزودن خودکار ستون‌های جدید به دیتابیس SQLite"""
+    with app.app_context():
+        inspector = inspect(db.engine)
+        # دریافت لیست تمام جداول موجود در دیتابیس
+        existing_tables = inspector.get_table_names()
+        
+        for table_name, table_obj in db.metadata.tables.items():
+            if table_name in existing_tables:
+                # دریافت ستون‌های فعلی دیتابیس
+                db_columns = [c['name'] for c in inspector.get_columns(table_name)]
+                
+                for column in table_obj.columns:
+                    if column.name not in db_columns:
+                        # ستون در دیتابیس نیست، پس باید اضافه شود
+                        column_type = column.type.compile(db.engine.dialect)
+                        # تعیین مقدار پیش‌فرض ساده
+                        default_clause = ""
+                        if column.default is not None:
+                            default_clause = f" DEFAULT {column.default.arg}"
+                        elif not column.nullable:
+                            default_clause = " DEFAULT 0"
+                            
+                        sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{column.name}" {column_type}{default_clause}'
+                        try:
+                            db.session.execute(text(sql))
+                            print(f"✅ ستون جدید '{column.name}' به جدول '{table_name}' اضافه شد.")
+                        except Exception as e:
+                            print(f"⚠️ خطا در افزودن ستون {column.name}: {e}")
+        db.session.commit()
 
 def create_app():
     app = Flask(__name__)
@@ -138,6 +170,8 @@ def create_app():
         # این خط باعث می‌شود کوئری‌های بعدی با خطای "no such table" مواجه نشوند
         try:
             db.create_all()
+            # اجرای مکانیزم خودکار برای ستون‌های جدید (مثل is_deleted)
+            auto_repair_db(app)
         except Exception as e:
             app.logger.error(f"Database creation failed: {e}")
 
@@ -170,12 +204,18 @@ def create_app():
                 match = re.search(r"خرید ([\d.]+) .* (.*)$", obj.description)
                 if match:
                     try:
-                        amount = float(match.group(1))
+                        amount = Decimal(match.group(1))
                         item_name = match.group(2).strip()
                         item = InventoryItem.query.filter_by(name=item_name).first()
                         if item:
-                            item.quantity -= amount
-                    except Exception: pass
+                            # جلوگیری از منفی شدن موجودی در صورت حذف اشتباه
+                            if item.quantity >= amount:
+                                item.quantity -= amount
+                                # نکته حسابرسی: در سیستم‌های پیشرفته اینجا باید Recalculate Unit Price فراخوانی شود
+                            else:
+                                raise Exception(f"خطای حسابرسی: حذف این فاکتور باعث منفی شدن موجودی {item.name} می‌شود.")
+                    except Exception as e:
+                        if "خطای حسابرسی" in str(e): raise e
 
     # ---> سیستم بک آپ گیری اتوماتیک ساعت 12 شب <---
     def scheduled_telegram_backup_task():

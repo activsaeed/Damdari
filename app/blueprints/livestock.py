@@ -1,3 +1,4 @@
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, current_app
 from werkzeug.utils import secure_filename
 from app import db
@@ -166,7 +167,7 @@ def print_sheep():
 def quick_weight():
     sheep = Sheep.query.filter_by(ear_tag=request.form.get('ear_tag').strip()).first()
     if sheep:
-        new_weight = float(request.form.get('weight'))
+        new_weight = Decimal(request.form.get('weight') or '0')
         sheep.weight = new_weight
         db.session.add(WeightRecord(sheep_id=sheep.id, weight=new_weight, notes="ثبت سریع"))
         db.session.commit()
@@ -188,7 +189,7 @@ def bulk_action():
                 if new_status == 'فروخته شده':
                     bulk_sale_price = request.form.get('bulk_sale_price', '0').replace(',', '').strip()
                     bulk_sale_date = request.form.get('bulk_sale_date')
-                    sale_price = float(bulk_sale_price) if bulk_sale_price else 0.0
+                    sale_price = Decimal(bulk_sale_price) if bulk_sale_price else Decimal('0')
                     sale_date = datetime.strptime(bulk_sale_date, '%Y-%m-%d').date() if bulk_sale_date else datetime.now(UTC).date()
 
                     selected_sheeps = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
@@ -243,7 +244,7 @@ def add_sheep():
             flash(f'خطا! پلاک {ear_tag} قبلاً در سیستم ثبت شده است.', 'danger')
             return redirect(url_for('livestock.add_sheep'))
             
-        weight = float(request.form.get('weight')) if request.form.get('weight') else 0.0
+        weight = Decimal(request.form.get('weight') or '0')
         purchase_price = request.form.get('purchase_price')
         b_date_str = request.form.get('birth_date')
         
@@ -258,7 +259,7 @@ def add_sheep():
             weight=weight, purpose=request.form.get('purpose'), status=request.form.get('status'),
             feed_ration_id=request.form.get('feed_ration_id') or None, pen_id=request.form.get('pen_id') or None, 
             birth_date=datetime.strptime(b_date_str, '%Y-%m-%d').date() if b_date_str else None,
-            qr_code_path=qr_path, purchase_price=float(purchase_price) if purchase_price else 0.0
+            qr_code_path=qr_path, purchase_price=Decimal(purchase_price or '0')
         )
         db.session.add(new_sheep)
         db.session.commit()
@@ -372,7 +373,7 @@ def edit_sheep(id):
     sheep.pen_id = request.form.get('pen_id') or None
     
     t_weight = request.form.get('target_weight')
-    sheep.target_weight = float(t_weight) if t_weight else None
+    sheep.target_weight = Decimal(t_weight) if t_weight else None
     
     heat_str = request.form.get('last_heat_date')
     sheep.last_heat_date = datetime.strptime(heat_str, '%Y-%m-%d').date() if heat_str else None
@@ -382,9 +383,9 @@ def edit_sheep(id):
         if sheep.status == 'فروخته شده':
             raw_price = request.form.get('sale_price', '0').replace(',', '').strip()
             try:
-                sheep.sale_price = float(raw_price) if raw_price else 0.0
+                sheep.sale_price = Decimal(raw_price) if raw_price else Decimal('0')
             except ValueError:
-                sheep.sale_price = 0.0
+                sheep.sale_price = Decimal('0')
 
             s_date_str = request.form.get('sale_date')
             try:
@@ -403,8 +404,10 @@ def edit_sheep(id):
                     bc = db.session.get(BuyerCategory, sheep.buyer_category_id)
                     if bc: buyer_name = bc.name
 
+                # بهبود شناسایی فاکتور با تطبیق دقیق شرح
+                search_desc = f"فروش سیستمی - پلاک: {sheep.ear_tag}"
                 existing_tx = Transaction.query.filter(
-                    Transaction.description.ilike(f"%پلاک: {sheep.ear_tag}%"),
+                    Transaction.description.ilike(f"{search_desc}%"),
                     Transaction.category == 'فروش دام'
                 ).first()
 
@@ -430,9 +433,20 @@ def edit_sheep(id):
 
             s_weight = request.form.get('sale_weight')
             if s_weight:
-                sheep.weight = float(s_weight)
-                db.session.add(WeightRecord(sheep_id=sheep.id, weight=float(s_weight), notes="وزن زمان فروش"))
+                sheep.weight = Decimal(s_weight)
+                db.session.add(WeightRecord(sheep_id=sheep.id, weight=Decimal(s_weight), notes="وزن زمان فروش"))
         else:
+            # سناریوی حیاتی: اگر دام قبلاً فروخته شده بود و حالا وضعیت تغییر کرد، فاکتور ابطال شود
+            search_desc = f"فروش سیستمی - پلاک: {sheep.ear_tag}"
+            old_tx = Transaction.query.filter(
+                Transaction.description.ilike(f"{search_desc}%"),
+                Transaction.category == 'فروش دام',
+                Transaction.is_deleted == False
+            ).first()
+            if old_tx:
+                old_tx.is_deleted = True
+                flash(f'فاکتور فروش قبلی پلاک {sheep.ear_tag} به دلیل تغییر وضعیت دام ابطال شد.', 'info')
+
             sheep.sale_price = 0.0
             sheep.sale_date = None
      

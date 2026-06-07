@@ -1,3 +1,4 @@
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
@@ -91,10 +92,10 @@ def add_worker():
         address=request.form.get('address'),
         bank_account=request.form.get('bank_account'),
         
-        salary=float(request.form.get('salary') or 0),
-        housing_allowance=float(request.form.get('housing_allowance') or 0),
-        food_allowance=float(request.form.get('food_allowance') or 0),
-        family_allowance=float(request.form.get('family_allowance') or 0),
+        salary=Decimal(request.form.get('salary') or '0'),
+        housing_allowance=Decimal(request.form.get('housing_allowance') or '0'),
+        food_allowance=Decimal(request.form.get('food_allowance') or '0'),
+        family_allowance=Decimal(request.form.get('family_allowance') or '0'),
         
         insurance_status=request.form.get('insurance_status'),
         status=request.form.get('status'),
@@ -149,10 +150,10 @@ def edit_worker(id):
     w.address = request.form.get('address')
     w.bank_account = request.form.get('bank_account')
     
-    w.salary = float(request.form.get('salary') or 0)
-    w.housing_allowance = float(request.form.get('housing_allowance') or 0)
-    w.food_allowance = float(request.form.get('food_allowance') or 0)
-    w.family_allowance = float(request.form.get('family_allowance') or 0)
+    w.salary = Decimal(request.form.get('salary') or '0')
+    w.housing_allowance = Decimal(request.form.get('housing_allowance') or '0')
+    w.food_allowance = Decimal(request.form.get('food_allowance') or '0')
+    w.family_allowance = Decimal(request.form.get('family_allowance') or '0')
     
     w.insurance_status = request.form.get('insurance_status')
     w.status = request.form.get('status')
@@ -177,7 +178,7 @@ def edit_worker(id):
 def add_loan(id):
     from app.models import WorkerLoan, WorkerEvent, Transaction
     if current_user.role != 'مدیر': return redirect(url_for('hr.profile', id=id))
-    amount = float(request.form.get('amount') or 0)
+    amount = Decimal(request.form.get('amount') or '0')
     loan_type = request.form.get('loan_type')
     i_date = parse_smart_date(request.form.get('issue_date'))
     
@@ -190,7 +191,7 @@ def add_loan(id):
         photo.save(os.path.join(upload_folder, filename))
         doc_img = f"uploads/hr/{filename}"
         
-    db.session.add(WorkerLoan(worker_id=id, loan_type=loan_type, amount=amount, issue_date=i_date, installment_amount=float(request.form.get('installment_amount') or 0), status="در حال پرداخت", description=request.form.get('description'), document_image=doc_img))
+    db.session.add(WorkerLoan(worker_id=id, loan_type=loan_type, amount=amount, issue_date=i_date, installment_amount=Decimal(request.form.get('installment_amount') or '0'), status="در حال پرداخت", description=request.form.get('description'), document_image=doc_img))
     db.session.add(WorkerEvent(worker_id=id, event_type="مالی", event_date=i_date, description=f"پرداخت {loan_type} به مبلغ {amount:,.0f} تومان."))
     db.session.add(Transaction(t_type='هزینه', category=f"پرداخت {loan_type} پرسنل", amount=amount, t_date=i_date, description=f"پرداخت {loan_type} به پرسنل ({request.form.get('description')})"))
     db.session.commit()
@@ -292,39 +293,42 @@ def generate_payslip():
     worker = Worker.query.get_or_404(worker_id)
     
     # دریافت نرخ‌ها از تنظیمات (رفع هاردکد نرخ اضافه کار و شب کاری)
-    overtime_rate = float(get_setting('overtime_rate', 1.4))
-    night_shift_rate = float(get_setting('night_shift_rate', 0.35))
+    overtime_rate = Decimal(get_setting('overtime_rate', '1.4'))
+    night_shift_rate = Decimal(get_setting('night_shift_rate', '0.35'))
     
-    overtime_hours = float(request.form.get('overtime_hours') or 0)
-    night_shift_hours = float(request.form.get('night_shift_hours') or 0)
-    transportation = float(request.form.get('transportation_pay') or 0)
-    eydi = float(request.form.get('eydi_sanavat') or 0)
+    overtime_hours = Decimal(request.form.get('overtime_hours') or '0')
+    night_shift_hours = Decimal(request.form.get('night_shift_hours') or '0')
+    transportation = Decimal(request.form.get('transportation_pay') or '0')
+    eydi = Decimal(request.form.get('eydi_sanavat') or '0')
     
     from app.blueprints.dashboard import get_setting
-    working_hours = float(get_setting('working_hours', 220))
-    hourly_rate = float(worker.salary or 0) / working_hours if (worker.salary and worker.salary > 0) else 0
+    working_hours = Decimal(get_setting('working_hours', '220'))
+    hourly_rate = Decimal(worker.salary or '0') / working_hours if (worker.salary and worker.salary > 0) else Decimal('0')
     overtime_pay = overtime_hours * (hourly_rate * overtime_rate)
     night_shift_pay = night_shift_hours * (hourly_rate * night_shift_rate)
     
     # پیدا کردن اقساط وام های فعال
     active_loans = WorkerLoan.query.filter_by(worker_id=worker.id, status='در حال پرداخت').all()
-    loan_deduction = float(sum(l.installment_amount for l in active_loans if l.installment_amount) or 0)
+    loan_deduction = Decimal(sum(l.installment_amount for l in active_loans if l.installment_amount) or 0)
     
     # محاسبه پاداش هوشمند (بر اساس وظایف انجام شده در 30 روز اخیر)
     today = datetime.now(UTC).date()
     done_tasks = Task.query.filter_by(worker_id=worker.id, is_done=True).filter(Task.task_date >= today - timedelta(days=30)).count()
-    kpi_bonus = 500000 if done_tasks > 10 else 0
+    kpi_bonus = Decimal('500000') if done_tasks > 10 else Decimal('0')
     
-    fines = float(request.form.get('fines') or 0)
+    fines = Decimal(request.form.get('fines') or '0')
     
     # محاسبه ناخالص و خالص
-    base_pay = float(worker.salary or 0)
-    housing = float(worker.housing_allowance or 0)
-    food = float(worker.food_allowance or 0)
-    family = float(worker.family_allowance or 0)
+    base_pay = Decimal(worker.salary or '0')
+    # کسر بیمه سهم کارگر (۷ درصد) - الزامی قانون کار برای واریز خالص حقوق
+    insurance_worker_share = base_pay * Decimal('0.07') if (worker.insurance_status == 'بیمه اجباری' or worker.insurance_status == 'فعال') else Decimal('0')
+    
+    housing = Decimal(worker.housing_allowance or '0')
+    food = Decimal(worker.food_allowance or '0')
+    family = Decimal(worker.family_allowance or '0')
     
     gross_pay = base_pay + housing + food + family + overtime_pay + night_shift_pay + transportation + kpi_bonus + eydi
-    net_pay = gross_pay - (loan_deduction + fines)
+    net_pay = gross_pay - (loan_deduction + fines + insurance_worker_share)
     
     new_payslip = Payslip(
         worker_id=worker.id, month_name=month_name, base_salary=worker.salary,
@@ -456,7 +460,7 @@ def pay_insurance():
     """ثبت سند واریز بیمه در دفتر کل"""
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
     
-    amount = float(request.form.get('amount', '0').replace(',', ''))
+    amount = Decimal(request.form.get('amount', '0').replace(',', ''))
     description = request.form.get('description')
     pay_date = parse_smart_date(request.form.get('pay_date'))
 

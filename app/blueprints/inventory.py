@@ -1,3 +1,4 @@
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from app import db
@@ -106,21 +107,25 @@ def delete_item(id):
 def transaction():
     item_id = request.form.get('item_id')
     action_type = request.form.get('action_type')
-    amount = float(request.form.get('amount') or 0)
+    amount = Decimal(request.form.get('amount') or '0')
     notes = request.form.get('notes')
     today = datetime.now(UTC).date()
-    
-    item = InventoryItem.query.get_or_404(item_id)
+
+    # Concurrency Protection: قفل کردن ردیف کالا در دیتابیس تا پایان محاسبات
+    item = db.session.query(InventoryItem).filter_by(id=item_id).with_for_update().first()
+    if not item:
+        flash('کالا یافت نشد.', 'danger')
+        return redirect(url_for('inventory.index'))
     
     if action_type == 'ورود':
         total_price_str = request.form.get('total_price')
-        if total_price_str and float(total_price_str) > 0:
-            total_price = float(total_price_str)
+        if total_price_str and Decimal(total_price_str) > 0:
+            total_price = Decimal(total_price_str)
             
             # تراکنش اتمیک برای شارژ انبار و ثبت سند مالی بصورت همزمان
             with db.session.begin_nested():
-                current_qty = item.quantity if item.quantity else 0
-                current_price = item.unit_price if item.unit_price else 0
+                current_qty = item.quantity if item.quantity else Decimal('0')
+                current_price = item.unit_price if item.unit_price else Decimal('0')
                 current_value = current_qty * current_price
                 
                 # فرمول دقیق میانگین موزون با جلوگیری از ریسک تقسیم بر صفر

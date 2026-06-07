@@ -199,16 +199,21 @@ class Transaction(db.Model):
     t_type = db.Column(db.String(20), nullable=False) 
     category = db.Column(db.String(50), nullable=False) 
     amount = db.Column(Numeric(18, 2), nullable=False) 
+    discount_amount = db.Column(Numeric(18, 2), default=0.0) # مبلغ تخفیف
+    vat_amount = db.Column(Numeric(18, 2), default=0.0) # مبلغ مالیات دقیق
     t_date = db.Column(db.Date, default=datetime.utcnow) 
+    due_date = db.Column(db.Date, nullable=True) # تاریخ سررسید برای نسیه
     description = db.Column(db.String(255), nullable=True)
     invoice_number = db.Column(db.String(100), nullable=True)
     
     # ---> فیلدهای جدید فاکتور <---
     party_name = db.Column(db.String(150), nullable=True) # نام شرکت/شخص/فروشگاه
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
+    payment_method = db.Column(db.String(50), default='نقدی') # نقدی یا نسیه
+    cost_center = db.Column(db.String(100), nullable=True) # مرکز هزینه (پرواری، داشتی و...)
     is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن فاکتور
+    is_deleted = db.Column(db.Boolean, default=False) # ابطال منطقی فاکتور (Soft Delete)
     is_archived = db.Column(db.Boolean, default=False) # وضعیت بایگانی
-    follow_up_note = db.Column(db.Text, nullable=True) # یادداشت پیگیری (جدید)
     
     documents = db.relationship('TransactionDocument', backref='transaction', lazy=True, cascade="all, delete-orphan")
 

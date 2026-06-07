@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, make_response, current_app
 from flask_login import login_required, current_user
@@ -62,13 +63,13 @@ def normalize_amount_to_toman(amount_str):
         english_digits = '0123456789'
         translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
         clean_str = str(amount_str).translate(translation_table).replace(',', '').strip()
-        
-        amount = float(clean_str)
+
+        amount = Decimal(clean_str)
         if get_setting('currency_unit', 'تومان') == 'ریال':
-            return amount / 10.0
+            return amount / Decimal('10')
         return amount
-    except (ValueError, TypeError):
-        return 0.0
+    except Exception:
+        return Decimal('0')
 
 def parse_smart_date(date_str, default_val=None):
     """تبدیل هوشمند تاریخ شمسی/میلادی با پشتیبانی از اعداد فارسی و مقادیر خالی"""
@@ -109,7 +110,7 @@ def index():
     starred_q = request.args.get('starred')
     show_archived = request.args.get('archived') == '1'
 
-    query = Transaction.query.filter_by(is_archived=show_archived)
+    query = Transaction.query.filter_by(is_archived=show_archived, is_deleted=False)
     
     if search_q:
         query = query.filter(
@@ -137,8 +138,8 @@ def index():
 
     # بهینه‌سازی آمار: استفاده از ساب‌کوئری برای سرعت بیشتر در دیتای حجیم
     tx_ids = query.with_entities(Transaction.id).subquery()
-    total_income = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar() or 0
-    total_expense = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar() or 0
+    total_income = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar() or Decimal('0')
+    total_expense = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar() or Decimal('0')
     net_profit = total_income - total_expense
     
     # صفحه‌بندی بر اساس تنظیمات مدیر
@@ -170,6 +171,21 @@ def add_transaction():
         description = request.form.get('description')
         party_name = request.form.get('party_name') # فیلد جدید شخص/شرکت
         contact_id = request.form.get('contact_id')
+        payment_method = request.form.get('payment_method', 'نقدی')
+        cost_center = request.form.get('cost_center')
+        due_date = parse_smart_date(request.form.get('due_date'))
+        discount_val = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
+        
+        amount_val = normalize_amount_to_toman(raw_amount)
+        
+        # منطق نهایی مالیات: اولویت با عدد وارد شده در فرم (حتی اگر صفر باشد)
+        form_vat = request.form.get('vat_amount')
+        if form_vat is not None and form_vat.strip() != "":
+            vat_val = Decimal(form_vat.replace(',', ''))
+        else:
+            # اگر فیلد کلا خالی بود (مثلا در نسخه های قدیمی فرانت)، طبق تنظیمات حساب کن
+            vat_rate_setting = Decimal(get_setting('vat_rate', '10'))
+            vat_val = (amount_val - discount_val) * (vat_rate_setting / Decimal('100'))
         
         # استفاده از تابع پارسر هوشمند برای جلوگیری از خطا در تاریخ‌های شمسی/خالی
         t_date = parse_smart_date(request.form.get('t_date'), datetime.now(UTC).date())
@@ -181,7 +197,6 @@ def add_transaction():
 
         # --- منطق هوشمند اتصال یا ساخت حساب شخص ---
         linked_contact = None        
-        amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
 
         try:
             if contact_id:
@@ -198,13 +213,18 @@ def add_transaction():
                     t_type=t_type, category=category_name, amount=amount_val,
                     invoice_number=invoice_number, t_date=t_date, description=description,
                     party_name=linked_contact.name if linked_contact else party_name,
-                    contact_id=linked_contact.id if linked_contact else None
+                    contact_id=linked_contact.id if linked_contact else None,
+                    payment_method=payment_method,
+                    cost_center=cost_center,
+                    due_date=due_date if payment_method == 'نسیه' else None,
+                    discount_amount=discount_val,
+                    vat_amount=vat_val
                 )
                 db.session.add(new_transaction)
                 db.session.flush()
 
-                if linked_contact:
-                    # جلوگیری از Race Condition با استفاده از Update مستقیم SQL
+                # فقط در معاملات نسیه تراز حساب شخص تغییر می‌کند
+                if linked_contact and payment_method == 'نسیه':
                     change = amount_val if t_type == 'درآمد' else -amount_val
                     db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance + change})
                     db.session.flush()
@@ -213,6 +233,7 @@ def add_transaction():
                     AccountingEngine.record_sale(new_transaction, include_vat=True)
                 elif t_type == 'هزینه':
                     AccountingEngine.record_expense(new_transaction, include_vat=True)
+                db.session.flush() # اطمینان از صحت اسناد قبل از اتمام بلاک
         except Exception as e:
             db.session.rollback()
             flash(f'خطای بحرانی در ثبت مالی: {str(e)}', 'danger')
@@ -235,7 +256,9 @@ def add_transaction():
     expense_cats = TransactionCategory.query.filter_by(t_type='هزینه').all()
     all_contacts = Contact.query.order_by(Contact.name).all()
     today_str = datetime.now(UTC).strftime('%Y-%m-%d')
-    return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, contacts=all_contacts, today_str=today_str)
+    vat_rate = get_setting('vat_rate', '10')
+    return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, 
+                           contacts=all_contacts, today_str=today_str, vat_rate=vat_rate)
 
 @finance_bp.route('/toggle_star_tx/<int:id>', methods=['POST'])
 @login_required
@@ -258,9 +281,9 @@ def archive_tx(id):
 @login_required
 def delete_tx(id):
     tx = Transaction.query.get_or_404(id)
-    db.session.delete(tx)
+    tx.is_deleted = True # جایگزینی حذف فیزیکی
     db.session.commit()
-    flash('فاکتور کاملاً حذف شد.', 'danger')
+    flash('فاکتور ابطال شد. سند از محاسبات خارج شد اما در تاریخچه باقی ماند.', 'warning')
     return redirect(request.referrer)
 
 @finance_bp.route('/export_tx')
@@ -608,7 +631,6 @@ def edit_tx(id):
     tx.invoice_number = request.form.get('invoice_number')
     tx.party_name = request.form.get('party_name')
     tx.description = request.form.get('description')
-    
     # افزودن عکس جدید به فاکتور قبلی
     documents = request.files.getlist('documents')
     upload_folder = os.path.join('app', 'static', 'uploads', 'documents')

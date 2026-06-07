@@ -1,3 +1,4 @@
+from decimal import Decimal
 from app import db
 from app.models import Account, JournalEntry, JournalEntryLine, InventoryItem, Equipment
 from datetime import datetime, UTC
@@ -12,7 +13,7 @@ class AccountingEngine:
     @staticmethod
     def get_vat_rate():
         from app.blueprints.dashboard import get_setting
-        return float(get_setting('vat_rate', 10)) / 100
+        return Decimal(get_setting('vat_rate', '10')) / Decimal('100')
 
     @staticmethod
     def generate_entry_number():
@@ -28,8 +29,13 @@ class AccountingEngine:
                 sales_account = AccountingEngine.get_account('4010')
                 vat_payable = AccountingEngine.get_account('2030')
 
-                amount = transaction.amount
-                vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
+                if not all([cash_account, receivable_account, sales_account]):
+                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account)] if not acc]
+                    raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
+
+                # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
+                amount = transaction.amount  # مبلغ پایه
+                vat_amount = transaction.vat_amount or Decimal('0')
                 total_amount = amount + vat_amount
 
                 entry = JournalEntry(
@@ -41,8 +47,13 @@ class AccountingEngine:
                 db.session.add(entry)
                 db.session.flush()
 
-                debit_acc_id = receivable_account.id if contact_id else cash_account.id
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=contact_id, debit=total_amount, credit=0.0))
+                # اولویت با contact_id تراکنش اگر ورودی تابع خالی بود
+                effective_contact_id = contact_id or transaction.contact_id
+                
+                # اگر نسیه بود به حساب دریافتنی و اگر نقدی بود به بانک/صندوق سند می‌خورد
+                debit_acc_id = receivable_account.id if (effective_contact_id and transaction.payment_method == 'نسیه') else cash_account.id
+                
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=effective_contact_id, debit=total_amount, credit=0.0))
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
 
                 if vat_amount > 0:
@@ -61,8 +72,13 @@ class AccountingEngine:
                 expense_account = AccountingEngine.get_account('5010')
                 vat_receivable = AccountingEngine.get_account('1040')
 
-                amount = transaction.amount
-                vat_amount = amount * AccountingEngine.get_vat_rate() if include_vat else 0
+                if not all([cash_account, payable_account, expense_account]):
+                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account)] if not acc]
+                    raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
+
+                # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
+                amount = transaction.amount  # مبلغ پایه
+                vat_amount = transaction.vat_amount or Decimal('0')
                 total_amount = amount + vat_amount
 
                 entry = JournalEntry(
@@ -79,8 +95,12 @@ class AccountingEngine:
                 if vat_amount > 0:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
 
-                credit_acc_id = payable_account.id if contact_id else cash_account.id
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=credit_acc_id, contact_id=contact_id, debit=0.0, credit=total_amount))
+                # اولویت با contact_id تراکنش اگر ورودی تابع خالی بود
+                effective_contact_id = contact_id or transaction.contact_id
+                # اگر نسیه بود به حساب پرداختنی و اگر نقدی بود از بانک/صندوق کسر می‌شود
+                credit_acc_id = payable_account.id if (effective_contact_id and transaction.payment_method == 'نسیه') else cash_account.id
+                
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=credit_acc_id, contact_id=effective_contact_id, debit=0.0, credit=total_amount))
         except Exception as e:
             db.session.rollback()
             raise Exception(f"خطا در ثبت فاکتور هزینه: {str(e)}")
@@ -347,8 +367,8 @@ class AccountingEngine:
                 acc_payable = AccountingEngine.get_account('2010')
                 acc_receivable = AccountingEngine.get_account('1030')
 
-                insurance_employer = (payslip.base_salary or 0) * 0.23
-                insurance_total = (payslip.base_salary or 0) * 0.30
+                insurance_employer = (payslip.base_salary or Decimal('0')) * Decimal('0.23')
+                insurance_total = (payslip.base_salary or Decimal('0')) * Decimal('0.30')
 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=payslip.gross_pay, credit=0.0, description=f"هزینه حقوق و مزایای ناخالص - {payslip.worker.name}"))
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=insurance_employer, credit=0.0, description=f"بیمه سهم کارفرما (23%) - {payslip.worker.name}"))
