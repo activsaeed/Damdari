@@ -56,10 +56,15 @@ def auto_repair_db(app):
                     if column.name not in db_columns:
                         # ستون در دیتابیس نیست، پس باید اضافه شود
                         column_type = column.type.compile(db.engine.dialect)
-                        # تعیین مقدار پیش‌فرض ساده
                         default_clause = ""
                         if column.default is not None:
-                            default_clause = f" DEFAULT {column.default.arg}"
+                            val = column.default.arg
+                            if isinstance(val, str):
+                                default_clause = f" DEFAULT '{val}'"
+                            elif isinstance(val, bool):
+                                default_clause = f" DEFAULT {1 if val else 0}"
+                            else:
+                                default_clause = f" DEFAULT {val}"
                         elif not column.nullable:
                             default_clause = " DEFAULT 0"
                             

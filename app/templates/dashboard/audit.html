@@ -2,13 +2,46 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fa-solid fa-user-secret text-dark"></i> سیستم حسابرسی و لاگ امنیت (Audit Trail)</h2>
-    <a href="{{ url_for('dashboard.settings') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به تنظیمات</a>
+    <h2><i class="fa-solid fa-user-secret text-dark"></i> لاگ امنیت (Audit Trail)</h2>
+    <a href="{{ url_for('dashboard.settings') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت</a>
 </div>
 
 <div class="alert alert-dark border-0 shadow-sm mb-4 border-end border-dark border-5">
     <h6 class="fw-bold"><i class="fa-solid fa-shield-halved"></i> سیستم نظارت نامرئی:</h6>
-    <p class="mb-0 small">این سیستم تمامی تغییرات، ویرایش‌ها و حذف‌هایی که توسط پرسنل (حتی مدیران) در سیستم انجام می‌شود را به همراه تاریخ و آدرس IP ثبت می‌کند. این اطلاعات غیرقابل حذف هستند.</p>
+    <p class="mb-0 small">این سیستم تمامی تغییرات، ویرایش‌ها و حذف‌هایی که توسط پرسنل انجام می‌شود را ثبت می‌کند.</p>
+</div>
+
+<div class="d-flex gap-2 mb-4">
+    <button class="btn btn-dark shadow-sm" data-bs-toggle="offcanvas" data-bs-target="#auditFilterOffcanvas"><i class="fa-solid fa-filter"></i> فیلترها</button>
+    <a href="{{ url_for('dashboard.audit_logs') }}" class="btn btn-outline-danger shadow-sm"><i class="fa-solid fa-eraser"></i> حذف فیلترها</a>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="auditFilterOffcanvas">
+    <div class="offcanvas-header bg-dark text-white">
+        <h5 class="offcanvas-title"><i class="fa-solid fa-filter"></i> فیلتر لاگ‌ها</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form method="GET" action="{{ url_for('dashboard.audit_logs') }}">
+            <div class="mb-3">
+                <label class="form-label small fw-bold">جستجو در شرح عملیات</label>
+                <input type="text" name="search" class="form-control" placeholder="مثلاً: حذف، ویرایش، ثبت..." value="{{ search_q or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">نام کاربر</label>
+                <input type="text" name="user" class="form-control" placeholder="مثلاً: سعید" value="{{ user_filter or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">از تاریخ</label>
+                <input type="text" class="form-control jalali-datepicker"><input type="hidden" name="date_from" class="gregorian-hidden-field" value="{{ date_from or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">تا تاریخ</label>
+                <input type="text" class="form-control jalali-datepicker"><input type="hidden" name="date_to" class="gregorian-hidden-field" value="{{ date_to or '' }}">
+            </div>
+            <button type="submit" class="btn btn-dark w-100"><i class="fa-solid fa-filter"></i> اعمال فیلتر</button>
+        </form>
+    </div>
 </div>
 
 <div class="card border-0 shadow-sm">
@@ -18,10 +51,10 @@
                 <thead class="table-dark">
                     <tr>
                         <th>ردیف</th>
-                        <th>کاربر انجام‌دهنده</th>
-                        <th>شرح عملیات / تغییرات</th>
-                        <th>تاریخ و زمان (سیستم)</th>
-                        <th>آدرس IP</th>
+                        <th>کاربر</th>
+                        <th>شرح عملیات</th>
+                        <th>تاریخ و زمان</th>
+                        <th>IP</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -29,12 +62,12 @@
                     <tr>
                         <td>{{ loop.index + (logs.page - 1) * logs.per_page }}</td>
                         <td class="fw-bold text-primary"><i class="fa-solid fa-user-tie"></i> {{ log.user_name }}</td>
-                        <td class="text-start">{{ log.action }}</td>
-                        <td dir="ltr" class="text-muted small fw-bold">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="text-start"><small>{{ log.action }}</small></td>
+                        <td dir="ltr" class="text-muted small fw-bold">{{ log.timestamp|jalali }} {{ log.timestamp.strftime('%H:%M:%S') }}</td>
                         <td dir="ltr" class="small">{{ log.ip_address or 'Localhost' }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="text-center py-5 text-muted">هنوز هیچ لاگ امنیتی در سیستم ثبت نشده است.</td></tr>
+                    <tr><td colspan="5" class="text-center py-5 text-muted">هیچ لاگی یافت نشد.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -42,5 +75,5 @@
     </div>
 </div>
 
-<nav class="mt-3" aria-label="Page navigation"><ul class="pagination justify-content-center">{% if logs.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=logs.prev_num) }}">قبلی</a></li>{% endif %}{% for p in logs.iter_pages() %}{% if p %}<li class="page-item {% if p == logs.page %}active{% endif %}"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=p) }}">{{ p }}</a></li>{% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}{% endfor %}{% if logs.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=logs.next_num) }}">بعدی</a></li>{% endif %}</ul></nav>
+<nav class="mt-3" aria-label="Page navigation"><ul class="pagination justify-content-center">{% if logs.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=logs.prev_num, search=search_q, user=user_filter, date_from=date_from, date_to=date_to) }}">قبلی</a></li>{% endif %}{% for p in logs.iter_pages() %}{% if p %}<li class="page-item {% if p == logs.page %}active{% endif %}"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=p, search=search_q, user=user_filter, date_from=date_from, date_to=date_to) }}">{{ p }}</a></li>{% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}{% endfor %}{% if logs.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('dashboard.audit_logs', page=logs.next_num, search=search_q, user=user_filter, date_from=date_from, date_to=date_to) }}">بعدی</a></li>{% endif %}</ul></nav>
 {% endblock %}

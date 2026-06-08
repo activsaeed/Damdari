@@ -206,9 +206,9 @@ class AccountingEngine:
                 acc_revenue = AccountingEngine.get_account('4010')
                 acc_expense = AccountingEngine.get_account('5010')
 
-                debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc_livestock.id).scalar() or 0.0
-                credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc_livestock.id).scalar() or 0.0
-                current_book_value = debits - credits
+                raw_d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc_livestock.id).scalar()
+                raw_c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc_livestock.id).scalar()
+                current_book_value = (Decimal(str(raw_d)) if raw_d is not None else Decimal('0')) - (Decimal(str(raw_c)) if raw_c is not None else Decimal('0'))
 
                 adjustment = total_fair_value - current_book_value
                 if abs(adjustment) < 1: return
@@ -302,9 +302,9 @@ class AccountingEngine:
                 all_items = InventoryItem.query.all()
                 actual_warehouse_value = sum((item.quantity or 0) * (item.unit_price or 0) for item in all_items)
 
-                debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc_inventory.id).scalar() or 0.0
-                credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc_inventory.id).scalar() or 0.0
-                book_value = debits - credits
+                raw_d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc_inventory.id).scalar()
+                raw_c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc_inventory.id).scalar()
+                book_value = (Decimal(str(raw_d)) if raw_d is not None else Decimal('0')) - (Decimal(str(raw_c)) if raw_c is not None else Decimal('0'))
 
                 consumption_value = book_value - actual_warehouse_value
 

@@ -174,9 +174,9 @@
 
                     <h6 class="fw-bold text-success mb-3 border-bottom pb-2">۲. اطلاعات حقوق و مزایای ثابت (ماهانه)</h6>
                     <div class="row g-3 mb-4">
-                        <div class="col-md-3"><label class="small text-muted fw-bold">پایه حقوق (تومان)</label><input type="text" class="form-control fw-bold text-success" dir="ltr" onkeyup="formatCurrency(this, 'raw_s1')"><input type="hidden" name="salary" id="raw_s1"></div>
-                        <div class="col-md-3"><label class="small text-muted fw-bold">حق مسکن (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s2')"><input type="hidden" name="housing_allowance" id="raw_s2"></div>
-                        <div class="col-md-3"><label class="small text-muted fw-bold">حق بن/خواربار (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s3')"><input type="hidden" name="food_allowance" id="raw_s3"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">پایه حقوق ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control fw-bold text-success" dir="ltr" onkeyup="formatCurrency(this, 'raw_s1')"><input type="hidden" name="salary" id="raw_s1"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق مسکن ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s2')"><input type="hidden" name="housing_allowance" id="raw_s2"></div>
+                        <div class="col-md-3"><label class="small text-muted fw-bold">حق بن/خواربار ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s3')"><input type="hidden" name="food_allowance" id="raw_s3"></div>
                         <div class="col-md-3"><label class="small text-muted fw-bold">حق اولاد/عائله‌مندی</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_s4')"><input type="hidden" name="family_allowance" id="raw_s4"></div>
                         <div class="col-md-6"><label class="small text-muted fw-bold">شماره کارت / شبا برای واریز حقوق</label><input type="text" name="bank_account" class="form-control" dir="ltr" placeholder="IR..."></div>
                     </div>

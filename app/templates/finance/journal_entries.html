@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2><i class="fa-solid fa-journal-whills text-primary"></i> دفتر روزنامه (اسناد حسابداری)</h2>
+    <button class="btn btn-outline-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#jeFilterOffcanvas">
+        <i class="fa-solid fa-filter"></i> فیلترها
+    </button>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
@@ -23,9 +26,9 @@
                     {% for e in entries.items %}
                     <tr>
                         <td class="fw-bold text-primary"><small>{{ e.entry_number }}</small></td>
-                        <td dir="ltr"><small>{{ e.date.strftime('%Y-%m-%d') }}</small></td>
+                        <td><small>{{ e.date|jalali }}</small></td>
                         <td class="text-start">{{ e.description }}</td>
-                        <td>{{ e.lines.count() }}</td>
+                        <td>{{ e.lines|length }}</td>
                         <td>
                             <button class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" data-bs-target="#entryLines{{ e.id }}"><i class="fa-solid fa-list"></i> آرتیکل‌ها</button>
                         </td>
@@ -35,7 +38,10 @@
                             <table class="table table-sm table-striped mb-0">
                                 <thead class="table-light"><tr><th>کد حساب</th><th>حساب</th><th>بدهکار</th><th>بستانکار</th><th>شرح</th></tr></thead>
                                 <tbody>
-                                    {% for line in e.lines.all() %}
+                                    {% set ns = namespace(debit_sum=0, credit_sum=0) %}
+                                    {% for line in e.lines %}
+                                    {% set ns.debit_sum = ns.debit_sum + (line.debit or 0) %}
+                                    {% set ns.credit_sum = ns.credit_sum + (line.credit or 0) %}
                                     <tr>
                                         <td><code>{{ line.account.code if line.account else '-' }}</code></td>
                                         <td class="fw-bold">{{ line.account.name if line.account else 'نامشخص' }}</td>
@@ -45,22 +51,66 @@
                                     </tr>
                                     {% endfor %}
                                 </tbody>
-                                <tfoot class="table-light">
+                                <tfoot class="table-warning">
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted small"><i class="fa-solid fa-check-circle text-success"></i> اسناد حسابداری دوطرفه (بدهکار = بستانکار)</td>
+                                        <td colspan="2" class="fw-bold text-start">جمع این سند:</td>
+                                        <td class="fw-bold text-danger">{{ ns.debit_sum|currency }}</td>
+                                        <td class="fw-bold text-success">{{ ns.credit_sum|currency }}</td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="py-5 text-muted">هیچ سند حسابداری ثبت نشده است.</td></tr>
+                    <tr><td colspan="5" class="py-5 text-muted">هیچ سندی با فیلترهای انتخاب شده یافت نشد.</td></tr>
                     {% endfor %}
                 </tbody>
+            </table>
+            <div class="d-flex justify-content-between px-3 py-2 bg-light border-top border-2 fw-bold">
+                <span>جمع کل صفحه:</span>
+                <span class="text-danger">بدهکار: {{ totals.debit|currency }}</span>
+                <span class="text-success">بستانکار: {{ totals.credit|currency }}</span>
+            </div>
             </table>
         </div>
     </div>
 </div>
 
-<nav class="mt-3" aria-label="Page navigation"><ul class="pagination justify-content-center">{% if entries.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.prev_num) }}">قبلی</a></li>{% endif %}{% for p in entries.iter_pages() %}{% if p %}<li class="page-item {% if p == entries.page %}active{% endif %}"><a class="page-link" href="{{ url_for('finance.journal_entries', page=p) }}">{{ p }}</a></li>{% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}{% endfor %}{% if entries.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.next_num) }}">بعدی</a></li>{% endif %}</ul></nav>
+<nav class="mt-3" aria-label="Page navigation"><ul class="pagination justify-content-center">{% if entries.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.prev_num, date_from=date_from, date_to=date_to, search_desc=search_desc, account_code=account_code) }}">قبلی</a></li>{% endif %}{% for p in entries.iter_pages() %}{% if p %}<li class="page-item {% if p == entries.page %}active{% endif %}"><a class="page-link" href="{{ url_for('finance.journal_entries', page=p, date_from=date_from, date_to=date_to, search_desc=search_desc, account_code=account_code) }}">{{ p }}</a></li>{% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}{% endfor %}{% if entries.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.next_num, date_from=date_from, date_to=date_to, search_desc=search_desc, account_code=account_code) }}">بعدی</a></li>{% endif %}</ul></nav>
+
+<!-- منوی کشویی فیلترها -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="jeFilterOffcanvas">
+    <div class="offcanvas-header bg-light border-bottom">
+        <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-filter text-primary"></i> فیلتر دفتر روزنامه</h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form method="GET" action="{{ url_for('finance.journal_entries') }}">
+            <div class="mb-3">
+                <label class="form-label fw-bold">از تاریخ (شمسی)</label>
+                <input type="text" class="form-control jalali-datepicker"><input type="hidden" name="date_from" class="gregorian-hidden-field" value="{{ date_from or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">تا تاریخ (شمسی)</label>
+                <input type="text" class="form-control jalali-datepicker"><input type="hidden" name="date_to" class="gregorian-hidden-field" value="{{ date_to or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">جستجوی شرح سند</label>
+                <input type="text" name="search_desc" class="form-control" placeholder="مثلاً: خرید، فروش، تسویه..." value="{{ search_desc or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">کد حساب (در آرتیکل‌ها)</label>
+                <select name="account_code" class="form-select select2">
+                    <option value="">همه حساب‌ها</option>
+                    {% for a in accounts %}
+                    <option value="{{ a.code }}" {% if account_code == a.code %}selected{% endif %}>{{ a.code }} - {{ a.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="fa-solid fa-check"></i> اعمال فیلتر</button>
+            <a href="{{ url_for('finance.journal_entries') }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
+        </form>
+    </div>
+</div>
 {% endblock %}

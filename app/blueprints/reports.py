@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, Response
+from flask_login import login_required
 import logging
 import functools
 import traceback
@@ -600,11 +601,14 @@ def index():
                            corn_trend=corn_trend)
 
 @reports_bp.route('/sales')
+@login_required
+@permission_required('can_view_reports')
 @log_report_errors
 def sales_report():
     return render_template('reports/sales.html')
 
 @reports_bp.route('/api/sales_data')
+@login_required
 @log_report_errors
 def api_sales_data():
     sold_sheep = Sheep.query.filter_by(status='فروخته شده').options(
@@ -633,6 +637,8 @@ def api_sales_data():
     return jsonify(data)
 
 @reports_bp.route('/export_monthly_tx')
+@login_required
+@permission_required('can_view_reports')
 @log_report_errors
 def export_monthly_tx():
     """خروجی اکسل تراکنش‌های ماه جاری (شمسی)"""

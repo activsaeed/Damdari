@@ -449,7 +449,8 @@ def settings():
             flash(f'اطلاعات کاربر {u.username} بروزرسانی شد.', 'info')
                 
         db.session.commit()
-        return redirect(url_for('dashboard.settings'))
+        active_tab = request.form.get('_active_tab', '')
+        return redirect(url_for('dashboard.settings', _anchor=active_tab) if active_tab else url_for('dashboard.settings'))
         
     return render_template('dashboard/settings.html', 
                            units=Unit.query.all(),
@@ -498,9 +499,10 @@ def run_valuation():
         return redirect(url_for('dashboard.index'))
     
     # محاسبه کل وزن زنده گله فعلی (بدون حذف شده‌ها)
-    total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
+    raw_lw = db.session.query(func.sum(Sheep.weight)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-    ).scalar() or 0
+    ).scalar()
+    total_live_weight = Decimal(str(raw_lw)) if raw_lw is not None else Decimal('0')
     
     total_fair_value = total_live_weight * market_price
     
@@ -773,6 +775,7 @@ def delete_unit(id):
 
 
 @dashboard_bp.route('/delete_user/<int:id>')
+@login_required
 def delete_user(id):
     from app.models import User
     if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
@@ -845,14 +848,32 @@ def audit_logs():
         return redirect(url_for('dashboard.index'))
     
     page = request.args.get('page', 1, type=int)
-    target = request.args.get('filter_target')
+    search_q = request.args.get('search', '').strip()
+    user_filter = request.args.get('user', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    
     query = AuditLog.query
-    if target:
-        query = query.filter(AuditLog.action.ilike(f"%{target}%"))
+    
+    if search_q:
+        query = query.filter(AuditLog.action.ilike(f"%{search_q}%"))
+    if user_filter:
+        query = query.filter(AuditLog.user_name.ilike(f"%{user_filter}%"))
+    if date_from:
+        try:
+            from_f = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(AuditLog.timestamp >= from_f)
+        except: pass
+    if date_to:
+        try:
+            to_f = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(AuditLog.timestamp < to_f)
+        except: pass
     
     page_size = int(get_setting('page_size', 50))    
     logs = query.order_by(AuditLog.timestamp.desc()).paginate(page=page, per_page=page_size, error_out=False)
-    return render_template('dashboard/audit.html', logs=logs)
+    return render_template('dashboard/audit.html', logs=logs, search_q=search_q, user_filter=user_filter,
+                           date_from=date_from, date_to=date_to)
 
 @dashboard_bp.route('/maintenance/cleanup_logs', methods=['POST'])
 @login_required

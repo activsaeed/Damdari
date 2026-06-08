@@ -12,8 +12,14 @@ inventory_bp = Blueprint('inventory', __name__)
 @login_required
 @permission_required('can_view_inventory')
 def index():
-    # مرتب‌سازی بر اساس شناسه (نزولی) برای نمایش جدیدترین‌ها در ابتدا
-    items = InventoryItem.query.order_by(InventoryItem.id.desc()).all()
+    search_q = request.args.get('search', '').strip()
+    cat_q = request.args.get('category_id', type=int)
+    query = InventoryItem.query
+    if search_q:
+        query = query.filter(InventoryItem.name.ilike(f"%{search_q}%"))
+    if cat_q:
+        query = query.filter(InventoryItem.category_id == cat_q)
+    items = query.order_by(InventoryItem.id.desc()).all()
     units = Unit.query.all()
     categories = InventoryCategory.query.order_by(InventoryCategory.name).all()
     
@@ -30,10 +36,12 @@ def index():
     return render_template('inventory/index.html', 
                            items=items, categories=categories, units=units,
                            low_stock_count=low_stock_count, total_feed=total_feed, total_value=total_value,
-                           expiring_items=expiring_items, today=today)
+                           expiring_items=expiring_items, today=today,
+                           current_search=search_q, current_cat=cat_q)
 
 @inventory_bp.route('/add_item', methods=['POST'])
 @login_required
+@permission_required('can_view_inventory')
 def add_item():
     name = request.form.get('name', '').strip()
     cat_name = request.form.get('category', 'عمومی').strip()
@@ -72,6 +80,7 @@ def add_item():
 
 @inventory_bp.route('/edit_item/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_inventory')
 def edit_item(id):
     item = InventoryItem.query.get_or_404(id)
     unit_id = request.form.get('unit_id')
@@ -102,6 +111,7 @@ def edit_item(id):
 
 @inventory_bp.route('/delete_item/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_inventory')
 def delete_item(id):
     item = InventoryItem.query.get_or_404(id)
     db.session.delete(item)
@@ -110,6 +120,7 @@ def delete_item(id):
 
 @inventory_bp.route('/transaction', methods=['POST'])
 @login_required
+@permission_required('can_view_inventory')
 def transaction():
     item_id = request.form.get('item_id')
     action_type = request.form.get('action_type')
@@ -179,12 +190,15 @@ def transaction():
 # سیستم ماشین‌حساب جیره‌نویس هوشمند
 # ==========================================
 @inventory_bp.route('/smart_ration', endpoint='smart_ration')
+@login_required
+@permission_required('can_view_inventory')
 def smart_ration():
-    # استخراج تمام خوراک های موجود در انبار به همراه قیمتشان
     feed_items = InventoryItem.query.join(InventoryCategory).filter(InventoryCategory.name == 'خوراک').all()
     return render_template('inventory/smart_ration.html', feed_items=feed_items)
 
 @inventory_bp.route('/kardex/<int:id>')
+@login_required
+@permission_required('can_view_inventory')
 def kardex(id):
     """گزارش ریز گردش انبار (کاردکس کالا) با محاسبات مانده لحظه‌ای"""
     item = InventoryItem.query.get_or_404(id)

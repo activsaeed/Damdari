@@ -29,8 +29,22 @@
                     <h5 class="fw-bold text-primary">مدیریت حساب‌های کاربری</h5>
                     <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="fa-solid fa-plus"></i> اکانت جدید</button>
                 </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <input type="text" id="userSearchInput" class="form-control" placeholder="جستجوی کاربر...">
+                    </div>
+                    <div class="col-md-3">
+                        <select id="userRoleFilter" class="form-select">
+                            <option value="">همه نقش‌ها</option>
+                            <option value="مدیر">مدیر</option>
+                            <option value="دامپزشک">دامپزشک</option>
+                            <option value="تنخواه‌دار">تنخواه‌دار</option>
+                            <option value="کارگر">کارگر</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="table-responsive bg-white rounded border">
-                    <table class="table table-hover text-center align-middle mb-0">
+                    <table class="table table-hover text-center align-middle mb-0" id="usersTable">
                         <thead class="table-light"><tr><th>نام کاربری</th><th>نام</th><th>نقش</th><th>دسترسی‌ها</th><th>عملیات</th></tr></thead>
                         <tbody>
                             {% for u in users %}
@@ -674,4 +688,59 @@ http.end();</pre>
         <div class="modal-footer"><button type="submit" class="btn btn-warning text-dark w-100">ذخیره</button></div>
     </form></div></div>
 </div>
+
+<script>
+function testIotConnection() {
+    const penId = document.getElementById('test_pen_id').value;
+    const temp = document.getElementById('test_temp').value;
+    const hum = document.getElementById('test_hum').value;
+    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const el = document.getElementById('test_result');
+    el.classList.remove('d-none');
+    el.innerHTML = '<div class="alert alert-info mb-0">در حال ارسال...</div>';
+    fetch('/finance/api/sensors/update', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': token},
+        body: JSON.stringify({pen_id: parseInt(penId), temperature: parseFloat(temp), humidity: parseFloat(hum)})
+    })
+    .then(r => r.json())
+    .then(d => {
+        el.innerHTML = d.status === 'success'
+            ? '<div class="alert alert-success mb-0"><i class="fa-solid fa-check-circle"></i> سیگنال دما/رطوبت با موفقیت ارسال شد.</div>'
+            : '<div class="alert alert-danger mb-0"><i class="fa-solid fa-circle-exclamation"></i> خطا: ' + d.message + '</div>';
+    })
+    .catch(e => { el.innerHTML = '<div class="alert alert-danger mb-0"><i class="fa-solid fa-circle-exclamation"></i> خطای شبکه: ' + e.message + '</div>'; });
+}
+function testIotWeightConnection() {
+    const earTag = document.getElementById('test_ear_tag').value;
+    const weight = document.getElementById('test_weight').value;
+    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const el = document.getElementById('test_result');
+    el.classList.remove('d-none');
+    el.innerHTML = '<div class="alert alert-info mb-0">در حال ارسال...</div>';
+    fetch('/finance/api/iot/weight', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': token},
+        body: JSON.stringify({ear_tag: earTag, weight: parseFloat(weight)})
+    })
+    .then(r => r.json())
+    .then(d => {
+        el.innerHTML = d.status === 'success'
+            ? '<div class="alert alert-success mb-0"><i class="fa-solid fa-check-circle"></i> وزن با موفقیت ثبت شد.</div>'
+            : '<div class="alert alert-danger mb-0"><i class="fa-solid fa-circle-exclamation"></i> خطا: ' + d.message + '</div>';
+    })
+    .catch(e => { el.innerHTML = '<div class="alert alert-danger mb-0"><i class="fa-solid fa-circle-exclamation"></i> خطای شبکه: ' + e.message + '</div>'; });
+}
+$(document).ready(function() {
+    function filterUsers() {
+        var q = $('#userSearchInput').val().toLowerCase();
+        var role = $('#userRoleFilter').val();
+        $('#usersTable tbody tr').each(function() {
+            var name = $(this).find('td:first').text().toLowerCase();
+            var userRole = $(this).find('.badge').text();
+            var match = (!q || name.includes(q)) && (!role || userRole === role);
+            $(this).toggle(match);
+        });
+    }
+    $('#userSearchInput, #userRoleFilter').on('change keyup', filterUsers);
+});
+</script>
 {% endblock %}

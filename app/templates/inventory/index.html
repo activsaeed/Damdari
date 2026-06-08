@@ -16,6 +16,30 @@
   {% endif %}
 {% endwith %}
 
+<!-- نوار فیلتر جستجو و دسته‌بندی -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('inventory.index') }}" class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label fw-bold small">جستجوی کالا</label>
+                <input type="text" name="search" class="form-control" placeholder="نام کالا..." value="{{ current_search or '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold small">دسته‌بندی</label>
+                <select name="category_id" class="form-select">
+                    <option value="">همه دسته‌ها</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if current_cat == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fa-solid fa-filter"></i> اعمال فیلتر</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- کارتهای آماری هوشمند انبار -->
 <div class="row g-4 mb-4">
     <div class="col-md-4">

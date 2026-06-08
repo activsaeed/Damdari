@@ -15,6 +15,7 @@ import xlsxwriter
 import time
 import random
 from flask_login import current_user, login_required
+from app.blueprints.finance import permission_required, normalize_amount_to_toman
 from app.blueprints.dashboard import get_setting
 
 livestock_bp = Blueprint('livestock', __name__)
@@ -48,6 +49,7 @@ def log_audit(action):
 
 @livestock_bp.route('/')
 @login_required
+@permission_required('can_view_livestock')
 def index():
     today = datetime.now(UTC).date()
     maturity_days = int(get_setting('maturity_days', 240))
@@ -106,6 +108,7 @@ def index():
 
 @livestock_bp.route('/export')
 @login_required
+@permission_required('can_view_livestock')
 def export_sheep():
     query = Sheep.query.filter(Sheep.is_deleted == False)
     search_q = request.args.get('search', '').strip()
@@ -160,6 +163,7 @@ def export_sheep():
 
 @livestock_bp.route('/print')
 @login_required
+@permission_required('can_view_livestock')
 def print_sheep():
     query = Sheep.query.filter(Sheep.is_deleted == False)
     search_q = request.args.get('search', '').strip()
@@ -188,6 +192,7 @@ def print_sheep():
 
 @livestock_bp.route('/quick_weight', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def quick_weight():
     sheep = Sheep.query.filter_by(ear_tag=request.form.get('ear_tag').strip()).first()
     if sheep:
@@ -199,6 +204,7 @@ def quick_weight():
 
 @livestock_bp.route('/bulk_action', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def bulk_action():
     sheep_ids = request.form.getlist('sheep_ids')
     action_type = request.form.get('bulk_action_type')
@@ -211,9 +217,9 @@ def bulk_action():
                 Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.status: new_status}, synchronize_session=False)
 
                 if new_status == 'فروخته شده':
-                    bulk_sale_price = request.form.get('bulk_sale_price', '0').replace(',', '').strip()
+                    bulk_sale_price = normalize_amount_to_toman(request.form.get('bulk_sale_price'))
                     bulk_sale_date = request.form.get('bulk_sale_date')
-                    sale_price = Decimal(bulk_sale_price) if bulk_sale_price else Decimal('0')
+                    sale_price = bulk_sale_price
                     sale_date = parse_smart_date(bulk_sale_date, datetime.now(UTC).date())
 
                     selected_sheeps = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
@@ -249,7 +255,7 @@ def bulk_action():
                 Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.feed_ration_id: request.form.get('new_ration_id')}, synchronize_session=False)
             
             elif action_type == 'change_pen':
-                Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.pen_id: request.form.get('new_pen_id')}, synchronize_session=False)
+                Sheep.query.filter(Sheep.id.in_(sheep_ids)).update({Sheep.pen_id: request.form.get('new_pen_id')}, synchronize_session='fetch')
 
         db.session.commit()
         log_audit(f"عملیات گروهی {action_type} روی {len(sheep_ids)} دام")
@@ -259,6 +265,7 @@ def bulk_action():
 
 @livestock_bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('can_view_livestock')
 def add_sheep():
     if request.method == 'POST':
         ear_tag = request.form.get('ear_tag').strip()
@@ -269,7 +276,7 @@ def add_sheep():
             return redirect(url_for('livestock.add_sheep'))
             
         weight = Decimal(request.form.get('weight') or '0')
-        purchase_price = request.form.get('purchase_price')
+        purchase_price = normalize_amount_to_toman(request.form.get('purchase_price'))
         b_date_str = request.form.get('birth_date')
         
         qr = qrcode.make(f"پلاک: {ear_tag}")
@@ -283,7 +290,7 @@ def add_sheep():
             weight=weight, purpose=request.form.get('purpose'), status=request.form.get('status'),
             feed_ration_id=request.form.get('feed_ration_id') or None, pen_id=request.form.get('pen_id') or None, 
             birth_date=parse_smart_date(b_date_str),
-            qr_code_path=qr_path, purchase_price=Decimal(purchase_price or '0')
+            qr_code_path=qr_path,             purchase_price=purchase_price
         )
         db.session.add(new_sheep)
         db.session.commit()
@@ -295,6 +302,7 @@ def add_sheep():
 
 @livestock_bp.route('/profile/<int:id>')
 @login_required
+@permission_required('can_view_livestock')
 def profile(id):
     today = datetime.now(UTC).date()
     sheep = Sheep.query.get_or_404(id)
@@ -385,8 +393,10 @@ def profile(id):
 
 @livestock_bp.route('/edit/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def edit_sheep(id):
     sheep = Sheep.query.get_or_404(id)
+    old_status = sheep.status  # ذخیره وضعیت قبلی قبل از تغییر
     sheep.ear_tag = request.form.get('ear_tag', sheep.ear_tag)
     sheep.breed = request.form.get('breed', sheep.breed)
     sheep.gender = request.form.get('gender', sheep.gender)
@@ -405,11 +415,7 @@ def edit_sheep(id):
     with db.session.begin_nested():
         # منطق ثبت خودکار فاکتور فروش در دفتر کل
         if sheep.status == 'فروخته شده':
-            raw_price = request.form.get('sale_price', '0').replace(',', '').strip()
-            try:
-                sheep.sale_price = Decimal(raw_price) if raw_price else Decimal('0')
-            except ValueError:
-                sheep.sale_price = Decimal('0')
+            sheep.sale_price = normalize_amount_to_toman(request.form.get('sale_price'))
 
             s_date_str = request.form.get('sale_date')
             try:
@@ -475,7 +481,6 @@ def edit_sheep(id):
             sheep.sale_date = None
      
     # ثبت سند حسابداری تلفات دام (کاهش دارایی زیستی)
-    old_status = Sheep.query.filter_by(id=sheep.id).with_for_update().first().status if hasattr(sheep, 'id') and sheep.id else sheep.status
     if sheep.status in ['تلف شده', 'مرده'] and old_status not in ['تلف شده', 'مرده', 'فروخته شده']:
         from app.accounting_engine import AccountingEngine
         from app.models import JournalEntry, JournalEntryLine, Account
@@ -499,6 +504,7 @@ def edit_sheep(id):
 
 @livestock_bp.route('/add_weight/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def add_weight(id):
     sheep = Sheep.query.get_or_404(id)
     new_weight = float(request.form.get('weight'))
@@ -521,6 +527,7 @@ def add_weight(id):
 
 @livestock_bp.route('/add_medical/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def add_medical(id):
     r_date = parse_smart_date(request.form.get('record_date'), datetime.now(UTC).date())
     n_date = parse_smart_date(request.form.get('next_date'))
@@ -549,6 +556,7 @@ def add_medical(id):
 
 @livestock_bp.route('/add_birth/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def add_birth(id):
     r_date = parse_smart_date(request.form.get('record_date'), datetime.now(UTC).date())
     father_id = request.form.get('father_id')
@@ -587,6 +595,7 @@ def add_birth(id):
 
 @livestock_bp.route('/delete/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def delete_sheep(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.is_deleted = True
@@ -597,6 +606,7 @@ def delete_sheep(id):
 
 @livestock_bp.route('/vet_queue')
 @login_required
+@permission_required('can_view_livestock')
 def vet_queue():
     today = datetime.now(UTC).date()
     today = datetime.now(UTC).date()
@@ -609,6 +619,7 @@ def vet_queue():
 
 @livestock_bp.route('/apply_protocol/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def apply_protocol(id):
     template = TreatmentTemplate.query.get_or_404(request.form.get('template_id'))
     today = datetime.now(UTC).date()
@@ -622,6 +633,7 @@ def apply_protocol(id):
 
 @livestock_bp.route('/medical')
 @login_required
+@permission_required('can_view_livestock')
 def medical_overview():
     today = datetime.now(UTC).date()
     sick_sheep = Sheep.query.filter_by(status='بیمار').all()
@@ -630,6 +642,7 @@ def medical_overview():
 
 @livestock_bp.route('/mark_healthy/<int:id>')
 @login_required
+@permission_required('can_view_livestock')
 def mark_healthy(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.status = 'زنده و سالم'
@@ -639,6 +652,7 @@ def mark_healthy(id):
 
 @livestock_bp.route('/mark_med_done/<int:med_id>')
 @login_required
+@permission_required('can_view_livestock')
 def mark_med_done(med_id):
     old_med = MedicalRecord.query.get_or_404(med_id)
     db.session.add(MedicalRecord(sheep_id=old_med.sheep_id, action_type=old_med.action_type, medicine_name=old_med.medicine_name, record_date=datetime.now(UTC).date(), operator="سیستم", notes="تکرار نوبت قبلی انجام شد."))
@@ -649,6 +663,7 @@ def mark_med_done(med_id):
 
 @livestock_bp.route('/mark_newborn_checked/<int:id>')
 @login_required
+@permission_required('can_view_livestock')
 def mark_newborn_checked(id):
     db.session.add(MedicalRecord(sheep_id=id, action_type="ویزیت", medicine_name="چکاپ سلامت نوزاد", record_date=datetime.now(UTC).date(), operator="سیستم", notes="ویزیت اولیه ثبت شد."))
     db.session.commit()
@@ -657,6 +672,7 @@ def mark_newborn_checked(id):
 
 @livestock_bp.route('/toggle_star/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def toggle_star(id):
     sheep = Sheep.query.get_or_404(id)
     sheep.is_starred = not sheep.is_starred
@@ -688,6 +704,7 @@ def public_passport(ear_tag):
 # ==========================================
 @livestock_bp.route('/pens')
 @login_required
+@permission_required('can_view_livestock')
 def pen_dashboard():
     from app.models import Pen, SensorData
     pens = Pen.query.all()
@@ -703,6 +720,7 @@ def pen_dashboard():
     # متغیرهای فیلتر
     search_q = request.args.get('search', '').strip()
     gender_q = request.args.get('gender', 'همه')
+    breed_q = request.args.get('breed', 'همه')
     status_q = request.args.get('status', 'همه')
     starred_q = request.args.get('starred')
     min_w = request.args.get('min_weight', type=float)
@@ -734,9 +752,9 @@ def pen_dashboard():
         sensor = SensorData.query.filter_by(pen_id=selected_pen.id).order_by(SensorData.recorded_at.desc()).first()
 
         if sensor:
-            # شاخص THI
-            t = sensor.temperature
-            rh = sensor.humidity
+            # شاخص THI (تبدیل به float چون Numeric دیتابیس Decimal برمی‌گرداند)
+            t = float(sensor.temperature)
+            rh = float(sensor.humidity)
             thi = (0.8 * t) + ((rh / 100) * (t - 14.4)) + 46.4
             if thi < 72: thi_status = "نرمال و راحت"
             elif thi < 78: thi_status = "تنش حرارتی خفیف"
@@ -750,6 +768,7 @@ def pen_dashboard():
         query = Sheep.query.filter_by(pen_id=selected_pen.id)
         if search_q: query = query.filter(Sheep.ear_tag.ilike(f"%{search_q}%"))
         if gender_q != 'همه': query = query.filter(Sheep.gender == gender_q)
+        if breed_q != 'همه': query = query.filter(Sheep.breed == breed_q)
         if status_q != 'همه': query = query.filter(Sheep.status == status_q)
         if starred_q == '1': query = query.filter(Sheep.is_starred.is_(True))
         if min_w is not None: query = query.filter(Sheep.weight >= min_w)
@@ -763,11 +782,12 @@ def pen_dashboard():
                            stats=stats, sensor=sensor, thi=thi, thi_status=thi_status, 
                            sheeps=sheeps_pagination,
                            current_search=search_q, current_gender=gender_q, 
-                           current_status=status_q, current_starred=starred_q,
-                           current_min_w=min_w, current_max_w=max_w)
+                           current_breed=breed_q, current_status=status_q, current_starred=starred_q,
+                           current_min_w=min_w, current_max_w=max_w, breeds=BreedCategory.query.all())
 
 @livestock_bp.route('/api/pen/<int:pen_id>/sensor')
 @login_required
+@permission_required('can_view_livestock')
 def get_pen_sensor_api(pen_id):
     """API مخصوص به‌روزرسانی خودکار کارت‌های سنسور در پس‌زمینه"""
     from app.models import SensorData
@@ -775,8 +795,8 @@ def get_pen_sensor_api(pen_id):
     if not sensor:
         return jsonify({"status": "no_data"}), 200
     
-    t = sensor.temperature
-    rh = sensor.humidity
+    t = float(sensor.temperature)
+    rh = float(sensor.humidity)
     thi = (0.8 * t) + ((rh / 100) * (t - 14.4)) + 46.4
     
     if thi < 72: thi_status = "نرمال و راحت"
@@ -794,6 +814,7 @@ def get_pen_sensor_api(pen_id):
 
 @livestock_bp.route('/maintenance/cleanup_weights', methods=['POST'])
 @login_required
+@permission_required('can_view_livestock')
 def cleanup_weights():
     """حذف رکوردهای وزن‌کشی قدیمی‌تر از ۲ سال جهت بهینه‌سازی دیتابیس"""
     if current_user.role != 'مدیر':

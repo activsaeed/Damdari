@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+from decimal import Decimal
 from flask_login import UserMixin
 from sqlalchemy import Numeric
 
@@ -184,8 +185,8 @@ class JournalEntryLine(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True) # حساب تفصیلی اشخاص
     
-    debit = db.Column(Numeric(18, 2), default=0.0)  # بدهکار
-    credit = db.Column(Numeric(18, 2), default=0.0) # بستانکار
+    debit = db.Column(Numeric(18, 2), default=Decimal('0'))  # بدهکار
+    credit = db.Column(Numeric(18, 2), default=Decimal('0')) # بستانکار
     description = db.Column(db.String(255), nullable=True)
 
 
@@ -217,6 +218,8 @@ class Transaction(db.Model):
     is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن فاکتور
     is_deleted = db.Column(db.Boolean, default=False) # ابطال منطقی فاکتور (Soft Delete)
     is_archived = db.Column(db.Boolean, default=False) # وضعیت بایگانی
+    moadian_status = db.Column(db.String(20), default='منتظر ارسال') # وضعیت سامانه مودیان
+    moadian_sent_at = db.Column(db.DateTime, nullable=True) # تاریخ ارسال به مودیان
     
     documents = db.relationship('TransactionDocument', backref='transaction', lazy=True, cascade="all, delete-orphan")
 
@@ -269,8 +272,10 @@ class Cheque(db.Model):
     cheque_type = db.Column(db.String(50), nullable=False) 
     cheque_number = db.Column(db.String(50), nullable=False) 
     amount = db.Column(Numeric(18, 2), nullable=False) 
+    issue_date = db.Column(db.Date, nullable=True)
     due_date = db.Column(db.Date, nullable=False) 
     bank_name = db.Column(db.String(100), nullable=True) 
+    bank_branch = db.Column(db.String(100), nullable=True) 
     issuer_name = db.Column(db.String(100), nullable=True) 
     issuer_national_id = db.Column(db.String(20), nullable=True) 
     registered_to = db.Column(db.String(100), nullable=True) 
@@ -376,11 +381,13 @@ class Equipment(db.Model):
     def book_value(self):
         """محاسبه ارزش دفتری: بهای تمام شده منهای استهلاک انباشته"""
         from app.models import JournalEntryLine
+        from decimal import Decimal
         # جستجوی تمام آرتیکل‌های بستانکار در دفتر کل که شامل نام این دارایی در شرح استهلاک هستند
-        accumulated = db.session.query(db.func.sum(JournalEntryLine.credit)).filter(
+        raw = db.session.query(db.func.sum(JournalEntryLine.credit)).filter(
             JournalEntryLine.description.ilike(f"%ذخیره استهلاک انباشته {self.name}%")
-        ).scalar() or 0
-        return self.purchase_price - accumulated
+        ).scalar()
+        accumulated = Decimal(str(raw)) if raw is not None else Decimal('0')
+        return (self.purchase_price or Decimal('0')) - accumulated
 
 # 3. جدول اینترنت اشیا (سنسورهای دما و رطوبت بهاربندها)
 class SensorData(db.Model):

@@ -227,11 +227,11 @@
                     <div class="alert alert-warning small">مبلغ این وام به صورت اتوماتیک در دفتر کل (هزینه‌ها) ثبت شده و اقساط آن در زمان صدور فیش حقوقی کسر خواهد شد.</div>
                     <div class="row g-2 mb-3">
                         <div class="col-6"><label>نوع پرداختی</label><select name="loan_type" class="form-select"><option value="مساعده (پیش‌پرداخت)">مساعده (از حقوق)</option><option value="وام پرسنلی">وام پرسنلی</option></select></div>
-                        <div class="col-6"><label>مبلغ کل (تومان)</label><input type="text" class="form-control fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_loan')" required><input type="hidden" name="amount" id="raw_loan" required></div>
+                        <div class="col-6"><label>مبلغ کل ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_loan')" required><input type="hidden" name="amount" id="raw_loan" required></div>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6"><label>تاریخ پرداخت (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="issue_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
-                        <div class="col-6"><label>مبلغ قسط ماهانه (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_inst')"><input type="hidden" name="installment_amount" id="raw_inst"></div>
+                        <div class="col-6"><label>مبلغ قسط ماهانه ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_inst')"><input type="hidden" name="installment_amount" id="raw_inst"></div>
                     </div>
                     <div class="mb-3"><label>توضیحات (شرح چک/نقد)</label><input type="text" name="description" class="form-control"></div>
                     <div class="mb-2 p-2 bg-light border rounded"><label><i class="fa-solid fa-image text-secondary"></i> عکس سفته یا رسید</label><input type="file" name="document_image" class="form-control mt-1" accept="image/*"></div>

@@ -22,7 +22,7 @@
                     <li class="list-group-item py-3 d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-1 fw-bold">{{ med.medicine_name }} <span class="badge bg-secondary ms-2">پلاک {{ med.sheep.ear_tag }}</span></h6>
-                            <small class="text-muted">موعد: <strong class="text-danger">{{ med.next_date.strftime('%Y-%m-%d') }}</strong></small>
+                            <small class="text-muted">موعد: <strong class="text-danger">{{ med.next_date|jalali }}</strong></small>
                         </div>
                         <!-- با کلیک روی این دکمه از لیست پاک میشود -->
                         <a href="{{ url_for('livestock.mark_med_done', med_id=med.id) }}" class="btn btn-sm btn-success">ثبت انجام شد</a>

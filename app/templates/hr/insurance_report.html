@@ -41,7 +41,7 @@
     <div class="card-body p-4 d-flex justify-content-between align-items-center">
         <div>
             <h5 class="mb-1 opacity-75">جمع کل تعهدات بیمه جاری:</h5>
-            <h2 class="fw-bold mb-0">{{ "{:,.0f}".format(total_insurance) }} تومان</h2>
+            <h2 class="fw-bold mb-0">{{ "{:,.0f}".format(total_insurance) }} {{ get_system_currency_from_settings() }}</h2>
         </div>
         <i class="fa-solid fa-building-columns fa-3x opacity-50"></i>
     </div>
@@ -83,7 +83,7 @@
             <div class="modal-header bg-primary text-white"><h5 class="modal-title">ثبت فیش واریز بیمه</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.pay_insurance') }}" method="POST">
                 <div class="modal-body">
-                    <div class="mb-3"><label class="form-label fw-bold">مبلغ واریزی (تومان)</label><input type="text" class="form-control form-control-lg text-center fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_pay_amt')" required><input type="hidden" name="amount" id="raw_pay_amt"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">مبلغ واریزی ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control form-control-lg text-center fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_pay_amt')" required><input type="hidden" name="amount" id="raw_pay_amt"></div>
                     <div class="mb-3"><label class="form-label fw-bold">تاریخ واریز (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="pay_date" class="gregorian-hidden-field"></div>
                     <div class="mb-3"><label class="form-label fw-bold">بابت (توضیحات)</label><input type="text" name="description" class="form-control" placeholder="مثلاً: حق بیمه مرداد ماه 1403" required></div>
                 </div>

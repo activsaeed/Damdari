@@ -15,6 +15,7 @@
     <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
     <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
         /* استایل برای منوی فعال */
         .active-sidebar-link {
@@ -31,6 +32,11 @@
         .finance-menu-item:hover {
             background-color: rgba(52, 152, 219, 0.2) !important;
         }
+        /* مخفی کردن اسکرول نوار کناری اما حفظ عملکرد */
+        .sidebar-scroll::-webkit-scrollbar { display: none; }
+        .sidebar-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        /* رفع مشکل نمایش Select2 درون مودال Bootstrap */
+        .select2-container { z-index: 99999; }
     </style>
 </head>
 <body>
@@ -59,9 +65,9 @@
             </div>
 
             <div class="text-center text-white-50 mb-3 pb-3 border-bottom border-secondary mx-3">
-                <small><i class="fa-solid fa-circle-user"></i> {% if current_user.is_authenticated %}{{ current_user.name }} ({{ current_user.role }}){% endif %}</small>
+                <small><i class="fa-solid fa-circle-user"></i> {% if current_user.is_authenticated %}{{ current_user.name.split(' (')[0] if '(' in current_user.name else current_user.name }}{% endif %}</small>
             </div>
-            <div class="list-group list-group-flush my-1" id="sidebar-accordion" style="overflow-y: auto;">
+            <div class="list-group list-group-flush my-1 sidebar-scroll" id="sidebar-accordion" style="overflow-y: auto;">
                 
                 <!-- داشبورد اصلی (همه میبینند اما اطلاعات آن در داخل فایل محدود میشود) -->
                 <a href="{{ url_for('dashboard.index') }}" class="list-group-item list-group-item-action bg-transparent text-white {% if request.endpoint == 'dashboard.index' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-gauge me-2"></i> داشبورد</a>
@@ -73,30 +79,30 @@
                     <a href="#livestockSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'livestock' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-horse-head me-2"></i> مدیریت دام</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'livestock' %}show{% endif %}" id="livestockSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> مشاهده گله</a>
-                        <a href="{{ url_for('livestock.pen_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.pen_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-house-signal"></i> مانیتورینگ بهاربند</a>
+                        <a href="{{ url_for('livestock.pen_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.pen_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-house-signal"></i> بهاربندها</a>
                     </div>
                     
                     {% if current_user.role in ['مدیر', 'دامپزشک'] %}
                     <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
                     <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
-                        <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه روزانه</a>
+                        <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه</a>
                         <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
                     </div>
                     {% endif %}
                     {% endif %}
 
                     {% if current_user.can_view_finance %}
-                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}" {% if request.blueprint == 'finance' %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری و مالی</a>
+                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}" {% if request.blueprint == 'finance' %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'finance' %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
-                        <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل (نقد/فاکتور)</a>
-                        <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar"></i> مدیریت چک‌ها (اسناد)</a>
-                        <a href="{{ url_for('finance.journal_entries') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.journal_entries') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-journal-whills"></i> دفتر روزنامه (اسناد حسابداری)</a>
-                        <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> تنخواه‌گردان کارگران</a>
-                        <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book"></i> دفتر حساب اشخاص (نسیه)</a>
-                        <a href="{{ url_for('finance.trial_balance') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.trial_balance') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> تراز آزمایشی (Trial Balance)</a>
-                        <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه و سود و زیان</a>
-                        <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor"></i> مدیریت دارایی و استهلاک</a>
-                        <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات و سامانه مودیان</a>
+                        <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل</a>
+                        <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar"></i> مدیریت چک‌ها</a>
+                        <a href="{{ url_for('finance.journal_entries') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.journal_entries') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-journal-whills"></i> دفتر روزنامه</a>
+                        <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> تنخواه‌گردان</a>
+                        <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book"></i> اشخاص (نسیه)</a>
+                        <a href="{{ url_for('finance.trial_balance') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.trial_balance') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> تراز آزمایشی</a>
+                        <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه/سود و زیان</a>
+                        <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor"></i> دارایی و استهلاک</a>
+                        <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات/سامانه مودیان</a>
                     </div>
                     {% endif %}
 
@@ -104,25 +110,25 @@
                     
                     <a href="#inventorySubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'inventory' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-warehouse me-2"></i> انبار و علوفه</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'inventory' %}show{% endif %}" id="inventorySubmenu" data-bs-parent="#sidebar-accordion">
-                       <a href="{{ url_for('inventory.smart_ration') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.smart_ration') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calculator"></i> جیره‌نویس هوشمند</a>
-                       <a href="{{ url_for('inventory.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-boxes-stacked"></i> مدیریت موجودی</a>
-                       <a href="{{ url_for('dashboard.feeding_schedule') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('dashboard.feeding_schedule') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-clock"></i> برنامه تغذیه روزانه</a>
+                       <a href="{{ url_for('inventory.smart_ration') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.smart_ration') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calculator"></i> جیره‌نویس</a>
+                       <a href="{{ url_for('inventory.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('inventory.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-boxes-stacked"></i> موجودی انبار</a>
+                       <a href="{{ url_for('dashboard.feeding_schedule') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('dashboard.feeding_schedule') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-clock"></i> برنامه تغذیه</a>
                     </div>
                     {% endif %}
 
                     {% if current_user.can_view_hr or current_user.role == 'مدیر' %}
-                    <a href="#hrSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'hr' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-users me-2"></i> منابع انسانی و پرسنل</a>
+                    <a href="#hrSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'hr' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-users me-2"></i> پرسنل</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'hr' %}show{% endif %}" id="hrSubmenu" data-bs-parent="#sidebar-accordion">
-                    <a href="{{ url_for('hr.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> پنل وظایف و پروفایل</a>
-                    <a href="{{ url_for('hr.payslips') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.payslips') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice"></i> فیش حقوقی و دستمزد</a>
+                    <a href="{{ url_for('hr.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> وظایف و پروفایل</a>
+                    <a href="{{ url_for('hr.payslips') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.payslips') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice"></i> فیش حقوقی</a>
                     </div>
                     {% endif %}
                     
                     {% if current_user.can_view_reports or current_user.role == 'مدیر' %}
-                    <a href="#biSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'reports' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-pie me-2"></i> هوش تجاری (BI)</a>
+                    <a href="#biSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'reports' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-pie me-2"></i> هوش تجاری</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'reports' %}show{% endif %}" id="biSubmenu" data-bs-parent="#sidebar-accordion">
-                        <a href="{{ url_for('reports.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-simple"></i> داشبورد تحلیلی کل</a>
-                        <a href="{{ url_for('reports.sales_report') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.sales_report') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> گزارش و تحلیل فروش</a>
+                        <a href="{{ url_for('reports.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-simple"></i> داشبورد تحلیلی</a>
+                        <a href="{{ url_for('reports.sales_report') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('reports.sales_report') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> گزارش فروش</a>
                     </div>
                     {% endif %}
                     
@@ -199,6 +205,15 @@
                     var v = $(this).val();
                     if (v) { $(this).val(persianToEnglishNumbers(v)); }
                 });
+
+                // حفظ تب فعال در صفحه تنظیمات (از طریق hidden field)
+                var activeTab = document.querySelector('#settingsTab .nav-link.active');
+                if (activeTab && $form.find('input[name="_active_tab"]').length === 0) {
+                    var target = activeTab.getAttribute('data-bs-target');
+                    if (target) {
+                        $form.append($('<input>', {type: 'hidden', name: '_active_tab', value: target.replace('#', '')}));
+                    }
+                }
             });
         });
     </script>
@@ -210,8 +225,20 @@
       return new bootstrap.Tooltip(tooltipTriggerEl);
     });
     </script>
+    <script>
+    // مدیریت وضعیت فعال منوهای اصلی در سایدبار
+    document.querySelectorAll('#sidebar-accordion > .dropdown-toggle').forEach(function(link) {
+        link.addEventListener('click', function() {
+            document.querySelectorAll('#sidebar-accordion > .list-group-item').forEach(function(item) {
+                item.classList.remove('active-sidebar-link');
+            });
+            this.classList.add('active-sidebar-link');
+        });
+    });
+    </script>
 
 
-    
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>$(document).ready(function() { $('.select2').select2({language: 'fa', dropdownAutoWidth: true}); });</script>
 </body>
 </html>

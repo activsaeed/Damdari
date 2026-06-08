@@ -116,8 +116,8 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 mt-2">
     <h5 class="fw-bold mb-0"><i class="fa-solid fa-list-check text-primary"></i> دام‌های حاضر در بهاربند ({{ selected_pen.name }})</h5>
     <div class="d-flex gap-2">
-        <a href="{{ url_for('livestock.export_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" class="btn btn-outline-success shadow-sm"><i class="fa-solid fa-file-excel"></i> اکسل</a>
-        <a href="{{ url_for('livestock.print_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" target="_blank" class="btn btn-dark shadow-sm"><i class="fa-solid fa-print"></i> چاپ</a>
+        <a href="{{ url_for('livestock.export_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, breed=current_breed, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" class="btn btn-outline-success shadow-sm"><i class="fa-solid fa-file-excel"></i> اکسل</a>
+        <a href="{{ url_for('livestock.print_sheep', pen_id=selected_pen.id, search=current_search, gender=current_gender, breed=current_breed, status=current_status, starred=current_starred or '', min_weight=current_min_w, max_weight=current_max_w) }}" target="_blank" class="btn btn-dark shadow-sm"><i class="fa-solid fa-print"></i> چاپ</a>
         <!-- دکمه باز کردن منوی فیلترها -->
         <button class="btn btn-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#penFilterOffcanvas">
             <i class="fa-solid fa-filter"></i> فیلتر پیشرفته
@@ -183,13 +183,13 @@
 <nav aria-label="Page navigation">
     <ul class="pagination justify-content-center">
         {% if sheeps.has_prev %}
-        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.prev_num, search=current_search, gender=current_gender, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">قبلی</a></li>
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.prev_num, search=current_search, gender=current_gender, breed=current_breed, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">قبلی</a></li>
         {% else %}
         <li class="page-item disabled"><a class="page-link">قبلی</a></li>
         {% endif %}
         <li class="page-item active"><a class="page-link">صفحه {{ sheeps.page }} از {{ sheeps.pages }}</a></li>
         {% if sheeps.has_next %}
-        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.next_num, search=current_search, gender=current_gender, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">بعدی</a></li>
+        <li class="page-item"><a class="page-link" href="{{ url_for('livestock.pen_dashboard', pen_id=selected_pen.id, page=sheeps.next_num, search=current_search, gender=current_gender, breed=current_breed, status=current_status, starred=current_starred, min_weight=current_min_w, max_weight=current_max_w) }}">بعدی</a></li>
         {% else %}
         <li class="page-item disabled"><a class="page-link">بعدی</a></li>
         {% endif %}
@@ -200,6 +200,7 @@
             <input type="hidden" name="pen_id" value="{{ selected_pen.id }}">
             <input type="hidden" name="search" value="{{ current_search or '' }}">
             <input type="hidden" name="gender" value="{{ current_gender or 'همه' }}">
+            <input type="hidden" name="breed" value="{{ current_breed or 'همه' }}">
             <input type="hidden" name="status" value="{{ current_status or 'همه' }}">
             <input type="hidden" name="starred" value="{{ current_starred or '' }}">
             <input type="hidden" name="min_weight" value="{{ current_min_w or '' }}">
@@ -230,6 +231,13 @@
             <label class="form-label fw-bold">جنسیت</label>
             <select name="gender" class="form-select">
                 <option value="همه">همه</option><option value="میش" {% if current_gender == 'میش' %}selected{% endif %}>میش</option><option value="قوچ" {% if current_gender == 'قوچ' %}selected{% endif %}>قوچ</option><option value="بره ماده" {% if current_gender == 'بره ماده' %}selected{% endif %}>بره ماده</option><option value="بره نر" {% if current_gender == 'بره نر' %}selected{% endif %}>بره نر</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">نژاد</label>
+            <select name="breed" class="form-select">
+                <option value="همه">همه نژادها</option>
+                {% for b in breeds %}<option value="{{ b.name }}" {% if current_breed == b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
             </select>
         </div>
         <div class="mb-3">

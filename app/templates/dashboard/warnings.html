@@ -20,7 +20,7 @@
                     <li class="list-group-item py-3 bg-light">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="fw-bold text-danger">پلاک: {{ item.sheep.ear_tag }}</span>
-                            <small class="text-muted">{{ item.date.strftime('%Y-%m-%d') }}</small>
+                            <small class="text-muted">{{ item.date|jalali }}</small>
                         </div>
                         <p class="mb-2 small text-dark">این دام اخیراً <strong class="text-danger">{{ item.lost }} کیلوگرم</strong> کاهش وزن داشته است!</p>
                         <a href="{{ url_for('livestock.profile', id=item.sheep.id) }}" class="btn btn-sm btn-outline-danger w-100">بررسی پرونده و نمودار رشد</a>

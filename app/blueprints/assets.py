@@ -4,12 +4,14 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Equipment, Transaction
 from app.accounting_engine import AccountingEngine
+from app.blueprints.finance import permission_required, normalize_amount_to_toman
 from datetime import datetime
 
 assets_bp = Blueprint('assets', __name__)
 
 @assets_bp.route('/')
 @login_required
+@permission_required('can_view_finance')
 def index():
     if current_user.role != 'مدیر':
         flash('دسترسی محدود به مدیریت است.', 'danger')
@@ -23,10 +25,11 @@ def index():
 
 @assets_bp.route('/add', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def add_asset():
     name = request.form.get('name')
-    price = Decimal(request.form.get('purchase_price', '0').replace(',', ''))
-    scrap = Decimal(request.form.get('scrap_value', '0').replace(',', ''))
+    price = normalize_amount_to_toman(request.form.get('purchase_price'))
+    scrap = normalize_amount_to_toman(request.form.get('scrap_value'))
     lifespan = int(request.form.get('lifespan_years', 10))
     purchase_date_str = request.form.get('purchase_date')
     transaction_id = request.form.get('transaction_id')
@@ -53,6 +56,7 @@ def add_asset():
 
 @assets_bp.route('/depreciate/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def depreciate_asset(id):
     asset = Equipment.query.get_or_404(id)
     # فرمول خط مستقیم: (بهای تمام شده - ارزش اسقاط) / عمر مفید
@@ -68,6 +72,7 @@ def depreciate_asset(id):
 
 @assets_bp.route('/edit/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def edit_asset(id):
     if current_user.role != 'مدیر':
         flash('دسترسی محدود است.', 'danger')
@@ -76,8 +81,8 @@ def edit_asset(id):
     asset = Equipment.query.get_or_404(id)
     try:
         asset.name = request.form.get('name')
-        asset.purchase_price = Decimal(request.form.get('purchase_price', '0').replace(',', ''))
-        asset.scrap_value = Decimal(request.form.get('scrap_value', '0').replace(',', ''))
+        asset.purchase_price = normalize_amount_to_toman(request.form.get('purchase_price'))
+        asset.scrap_value = normalize_amount_to_toman(request.form.get('scrap_value'))
         asset.lifespan_years = int(request.form.get('lifespan_years', 10))
         
         transaction_id = request.form.get('transaction_id')
@@ -96,6 +101,7 @@ def edit_asset(id):
 
 @assets_bp.route('/delete/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def delete_asset(id):
     if current_user.role != 'مدیر':
         flash('دسترسی محدود است.', 'danger')

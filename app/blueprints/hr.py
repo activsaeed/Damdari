@@ -4,6 +4,7 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
 from app.accounting_engine import AccountingEngine
+from app.blueprints.finance import permission_required, normalize_amount_to_toman
 from datetime import datetime, timedelta, UTC
 import requests
 import os
@@ -45,6 +46,7 @@ def parse_smart_date(date_str):
 
 @hr_bp.route('/')
 @login_required
+@permission_required('can_view_hr')
 def index():
     from app.models import Worker, Task, Pen, Sheep
     workers = Worker.query.filter(Worker.is_deleted == False).order_by(Worker.id.desc()).all()
@@ -91,6 +93,7 @@ def index():
 
 @hr_bp.route('/add_worker', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def add_worker():
     from app.models import Worker, WorkerDocument, WorkerEvent
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
@@ -110,10 +113,10 @@ def add_worker():
         address=request.form.get('address'),
         bank_account=request.form.get('bank_account'),
         
-        salary=Decimal(request.form.get('salary') or '0'),
-        housing_allowance=Decimal(request.form.get('housing_allowance') or '0'),
-        food_allowance=Decimal(request.form.get('food_allowance') or '0'),
-        family_allowance=Decimal(request.form.get('family_allowance') or '0'),
+        salary=normalize_amount_to_toman(request.form.get('salary')),
+        housing_allowance=normalize_amount_to_toman(request.form.get('housing_allowance')),
+        food_allowance=normalize_amount_to_toman(request.form.get('food_allowance')),
+        family_allowance=normalize_amount_to_toman(request.form.get('family_allowance')),
         
         insurance_status=request.form.get('insurance_status'),
         status=request.form.get('status'),
@@ -145,6 +148,7 @@ def add_worker():
 
 @hr_bp.route('/profile/<int:id>')
 @login_required
+@permission_required('can_view_hr')
 def profile(id):
     from app.models import Worker, WorkerEvent, WorkerLoan, Task, PettyCash, Pen
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
@@ -160,6 +164,7 @@ def profile(id):
 
 @hr_bp.route('/edit_worker/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def edit_worker(id):
     from app.models import Worker, WorkerDocument
     w = Worker.query.get_or_404(id)
@@ -174,10 +179,10 @@ def edit_worker(id):
     w.address = request.form.get('address')
     w.bank_account = request.form.get('bank_account')
     
-    w.salary = Decimal(request.form.get('salary') or '0')
-    w.housing_allowance = Decimal(request.form.get('housing_allowance') or '0')
-    w.food_allowance = Decimal(request.form.get('food_allowance') or '0')
-    w.family_allowance = Decimal(request.form.get('family_allowance') or '0')
+    w.salary = normalize_amount_to_toman(request.form.get('salary'))
+    w.housing_allowance = normalize_amount_to_toman(request.form.get('housing_allowance'))
+    w.food_allowance = normalize_amount_to_toman(request.form.get('food_allowance'))
+    w.family_allowance = normalize_amount_to_toman(request.form.get('family_allowance'))
     
     w.insurance_status = request.form.get('insurance_status')
     w.status = request.form.get('status')
@@ -202,10 +207,11 @@ def edit_worker(id):
 
 @hr_bp.route('/add_loan/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def add_loan(id):
     from app.models import WorkerLoan, WorkerEvent, Transaction
     if current_user.role != 'مدیر': return redirect(url_for('hr.profile', id=id))
-    amount = Decimal(request.form.get('amount') or '0')
+    amount = normalize_amount_to_toman(request.form.get('amount'))
     loan_type = request.form.get('loan_type')
     i_date = parse_smart_date(request.form.get('issue_date'))
     
@@ -231,6 +237,7 @@ def add_loan(id):
 
 @hr_bp.route('/add_event/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def add_event(id):
     from app.models import WorkerEvent
     e_date = parse_smart_date(request.form.get('event_date'))
@@ -240,6 +247,7 @@ def add_event(id):
 
 @hr_bp.route('/delete_worker/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def delete_worker(id):
     from app.models import Worker
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
@@ -252,6 +260,7 @@ def delete_worker(id):
 
 @hr_bp.route('/add_task', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def add_task():
     from app.models import Task
     db.session.add(Task(worker_id=request.form.get('worker_id'), description=request.form.get('description')))
@@ -260,6 +269,7 @@ def add_task():
 
 @hr_bp.route('/toggle_task/<int:task_id>', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def toggle_task(task_id):
     from app.models import Task
     task = Task.query.get_or_404(task_id)
@@ -269,6 +279,7 @@ def toggle_task(task_id):
 
 @hr_bp.route('/quick_report', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def quick_report():
     from app.models import User, Task, Sheep
     issue_type = request.form.get('issue_type')
@@ -308,6 +319,7 @@ def quick_report():
 # ==========================================
 @hr_bp.route('/payslips')
 @login_required
+@permission_required('can_view_hr')
 def payslips():
     from app.models import Worker, Payslip
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
@@ -318,6 +330,7 @@ def payslips():
 
 @hr_bp.route('/generate_payslip', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def generate_payslip():
     from app.models import Worker, WorkerLoan, Task, Payslip
     worker_id = request.form.get('worker_id')
@@ -384,6 +397,7 @@ def generate_payslip():
 
 @hr_bp.route('/pay_payslip/<int:id>')
 @login_required
+@permission_required('can_view_hr')
 def pay_payslip(id):
     from app.models import Payslip, JournalEntry, JournalEntryLine, Account
     from app.accounting_engine import AccountingEngine
@@ -408,6 +422,7 @@ def pay_payslip(id):
 
 @hr_bp.route('/insurance_report')
 @login_required
+@permission_required('can_view_hr')
 def insurance_report():
     """گزارش لیست بیمه ماهانه بر اساس اسناد حسابداری با قابلیت فیلتر"""
     from app.models import JournalEntry, JournalEntryLine, Account
@@ -452,6 +467,7 @@ def insurance_report():
 
 @hr_bp.route('/export_insurance_excel')
 @login_required
+@permission_required('can_view_hr')
 def export_insurance_excel():
     """خروجی اکسل لیست بیمه با تاریخ شمسی و رعایت فیلترها"""
     from app.models import JournalEntry, JournalEntryLine, Account
@@ -504,11 +520,12 @@ def export_insurance_excel():
 
 @hr_bp.route('/pay_insurance', methods=['POST'])
 @login_required
+@permission_required('can_view_hr')
 def pay_insurance():
     """ثبت سند واریز بیمه در دفتر کل"""
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
     
-    amount = Decimal(request.form.get('amount', '0').replace(',', ''))
+    amount = normalize_amount_to_toman(request.form.get('amount'))
     description = request.form.get('description')
     pay_date = parse_smart_date(request.form.get('pay_date'))
 

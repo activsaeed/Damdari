@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app import db
-from app.models import Transaction, TransactionCategory, TransactionDocument, Cheque, Contact, ContactDocument, SensorData, Sheep, WeightRecord, AuditLog, InventoryLog
+from app.models import Transaction, TransactionCategory, TransactionDocument, Cheque, Contact, ContactDocument, SensorData, Sheep, WeightRecord, AuditLog, InventoryLog, InventoryItem
 from sqlalchemy import func, case
 from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
@@ -99,6 +99,8 @@ def require_api_token(f):
     """دکوراتور امنیتی برای کنترل دسترسی API سنسورها و باسکول"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if current_user.is_authenticated:
+            return f(*args, **kwargs)
         token = request.headers.get('X-API-TOKEN')
         expected_token = get_setting('api_token', 'SECRET_KEY_123')
         if not token or token != expected_token:
@@ -196,8 +198,10 @@ def index():
 
     # بهینه‌سازی آمار: استفاده از ساب‌کوئری برای سرعت بیشتر در دیتای حجیم
     tx_ids = query.with_entities(Transaction.id).subquery()
-    total_income = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar() or Decimal('0')
-    total_expense = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar() or Decimal('0')
+    raw_inc = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar()
+    raw_exp = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar()
+    total_income = Decimal(str(raw_inc)) if raw_inc is not None else Decimal('0')
+    total_expense = Decimal(str(raw_exp)) if raw_exp is not None else Decimal('0')
     net_profit = total_income - total_expense
     
     # صفحه‌بندی بر اساس تنظیمات مدیر
@@ -213,6 +217,7 @@ def index():
 
 @finance_bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('can_view_finance')
 def add_transaction():
     if request.method == 'POST':
         t_type = request.form.get('t_type')
@@ -336,6 +341,7 @@ def archive_tx(id):
 
 @finance_bp.route('/delete_tx/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def delete_tx(id):
     from app.models import AuditLog, JournalEntry
 
@@ -492,6 +498,7 @@ def print_cheques():
 # ==========================================
 @finance_bp.route('/cheques')
 @login_required
+@permission_required('can_view_finance')
 def cheques():
     page = request.args.get('page', 1, type=int)
     open_add = request.args.get('open_add', '0')
@@ -522,13 +529,15 @@ def cheques():
     warning_date = today + timedelta(days=5)
     urgent_cheques = Cheque.query.filter(Cheque.is_deleted == False, Cheque.status == 'در جریان', Cheque.due_date <= warning_date).all()
 
+    contacts = Contact.query.order_by(Contact.name).all()
+
     return render_template('finance/cheques.html', 
                            cheques=cheques_paginated, total_payable=total_payable, 
                            total_receivable=total_receivable, total_bounced=total_bounced,
                            pending_count=pending_count, cleared_count=cleared_count, bounced_count=bounced_count,
                            urgent_cheques=urgent_cheques, today=today,
                            current_search=search_q, current_type=type_q, current_status=status_q, current_starred=starred_q,
-                           open_add=open_add)
+                           open_add=open_add, contacts=contacts)
 
 # تابع جدید برای ویرایش چک
 @finance_bp.route('/edit_cheque/<int:id>', methods=['POST'])
@@ -541,12 +550,15 @@ def edit_cheque(id):
     if c.amount <= 0:
         flash('خطا: مبلغ چک باید بیشتر از صفر باشد.', 'danger')
         return redirect(url_for('finance.cheques'))
+    c.issue_date = parse_smart_date(request.form.get('issue_date')) if request.form.get('issue_date') else None
     c.due_date = parse_smart_date(request.form.get('due_date'))
     c.bank_name = request.form.get('bank_name')
+    c.bank_branch = request.form.get('bank_branch')
     c.issuer_name = request.form.get('issuer_name')
     c.issuer_national_id = request.form.get('issuer_national_id')
     c.registered_to = request.form.get('registered_to')
     c.registrar_national_id = request.form.get('registrar_national_id')
+    c.contact_id = int(request.form.get('contact_id')) if request.form.get('contact_id') else None
     c.reason = request.form.get('reason')
     c.notes = request.form.get('notes')
     db.session.commit()
@@ -556,24 +568,26 @@ def edit_cheque(id):
 
 @finance_bp.route('/add_cheque', methods=['GET', 'POST'])
 @login_required
+@permission_required('can_view_finance')
 def add_cheque():
     if request.method == 'GET':
         return redirect(url_for('finance.cheques'))
     due_date = parse_smart_date(request.form.get('due_date'))
+    issue_date = parse_smart_date(request.form.get('issue_date'))
     amount = normalize_amount_to_toman(request.form.get('amount'))
 
     if amount <= 0:
         flash('خطا: مبلغ چک باید بیشتر از صفر باشد.', 'danger')
-        return redirect(url_for('finance.cheques'))
+        return redirect(url_for('finance.cheques', open_add='1'))
     
     issuer_nid = request.form.get('issuer_national_id')
     registrar_nid = request.form.get('registrar_national_id')
     if issuer_nid and not validate_national_id_checksum(issuer_nid):
         flash('خطا: کد ملی صادرکننده چک نامعتبر است.', 'danger')
-        return redirect(url_for('finance.cheques'))
+        return redirect(url_for('finance.cheques', open_add='1'))
     if registrar_nid and not validate_national_id_checksum(registrar_nid):
         flash('خطا: کد ملی دریافت‌کننده چک نامعتبر است.', 'danger')
-        return redirect(url_for('finance.cheques'))
+        return redirect(url_for('finance.cheques', open_add='1'))
 
     image_path = None    
     photo = request.files.get('image')
@@ -584,11 +598,14 @@ def add_cheque():
         photo.save(os.path.join(upload_folder, filename))
         image_path = f"uploads/cheques/{filename}"
 
+    contact_id = int(request.form.get('contact_id')) if request.form.get('contact_id') else None
     new_cheque = Cheque(
         cheque_type=request.form.get('cheque_type'), cheque_number=request.form.get('cheque_number'),        
-        amount=amount, due_date=due_date, bank_name=request.form.get('bank_name'),
+        amount=amount, issue_date=issue_date, due_date=due_date, bank_name=request.form.get('bank_name'),
+        bank_branch=request.form.get('bank_branch'),
         issuer_name=request.form.get('issuer_name'), issuer_national_id=request.form.get('issuer_national_id'),
         registered_to=request.form.get('registered_to'), registrar_national_id=request.form.get('registrar_national_id'),
+        contact_id=contact_id,
         reason=request.form.get('reason'), notes=request.form.get('notes'), image_path=image_path
     )
     db.session.add(new_cheque)
@@ -599,7 +616,7 @@ def add_cheque():
     except Exception as e:
         db.session.rollback()
         flash(f'خطا در ثبت سند تعهدی چک: {str(e)}', 'danger')
-        return redirect(url_for('finance.cheques'))
+        return redirect(url_for('finance.cheques', open_add='1'))
     db.session.commit()
     flash('چک جدید با موفقیت ثبت شد.', 'success')
     return redirect(url_for('finance.cheques'))
@@ -697,6 +714,7 @@ def delete_cheque(id):
 # ==========================================
 @finance_bp.route('/petty_cash')
 @login_required
+@permission_required('can_view_finance')
 def petty_cash():
     from app.models import PettyCash, Worker
     page = request.args.get('page', 1, type=int)
@@ -753,7 +771,8 @@ def add_petty_cash():
 @login_required
 def cheque_profile(id):
     cheque = Cheque.query.get_or_404(id)
-    return render_template('finance/cheque_profile.html', c=cheque)
+    contacts = Contact.query.order_by(Contact.name).all()
+    return render_template('finance/cheque_profile.html', c=cheque, contacts=contacts)
 
 # ---> پروفایل و ویرایش فاکتورها <---
 @finance_bp.route('/tx_profile/<int:id>')
@@ -764,6 +783,7 @@ def tx_profile(id):
 
 @finance_bp.route('/edit_tx/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def edit_tx(id):
     from werkzeug.utils import secure_filename
     import time
@@ -848,6 +868,7 @@ def edit_tx(id):
 # ==========================================
 @finance_bp.route('/contacts')
 @login_required
+@permission_required('can_view_finance')
 def contacts():
     from app.models import Contact, Account, JournalEntryLine
     search_q = request.args.get('search', '').strip()
@@ -886,10 +907,11 @@ def contacts():
 
 @finance_bp.route('/add_contact', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def add_contact():
     from app.models import Contact
     try:
-        init_balance = float(request.form.get('balance') or 0)
+        init_balance = float(normalize_amount_to_toman(request.form.get('balance')) or 0)
     except (ValueError, TypeError):
         flash('خطا: مبلغ تراز اولیه نامعتبر است.', 'danger')
         return redirect(url_for('finance.contacts'))
@@ -947,6 +969,7 @@ def add_contact():
 
 @finance_bp.route('/edit_contact/<int:id>', methods=['POST'])
 @login_required
+@permission_required('can_view_finance')
 def edit_contact(id):
     c = Contact.query.get_or_404(id)
     # دریافت مقادیر و حذف فضاهای خالی (بدون تبدیل مستقیم به رشته None)
@@ -973,6 +996,7 @@ def edit_contact(id):
 
 @finance_bp.route('/contact/<int:id>')
 @login_required
+@permission_required('can_view_finance')
 def contact_profile(id):
     c = Contact.query.get_or_404(id)
     computed_balance = compute_contact_balance(c)
@@ -1077,7 +1101,7 @@ def contact_add_tx(id):
 
     db.session.commit()
     flash('تراکنش مالی ثبت و تراز شخص بروزرسانی شد.', 'success')
-    return redirect(url_for('finance.contact_profile', id=c.id, _anchor='ledger'))
+    return redirect(url_for('finance.contact_profile', id=c.id, _anchor='actions'))
 
 
 # ==========================================
@@ -1085,34 +1109,87 @@ def contact_add_tx(id):
 # ==========================================
 @finance_bp.route('/journal_entries')
 @login_required
+@permission_required('can_view_finance')
 def journal_entries():
     from app.models import JournalEntry, JournalEntryLine, Account
+    from sqlalchemy import func
+    from sqlalchemy.orm import joinedload
+    
     page = request.args.get('page', 1, type=int)
     page_size = int(get_setting('page_size', 50))
-    entries = JournalEntry.query.order_by(JournalEntry.date.desc(), JournalEntry.id.desc()).paginate(page=page, per_page=page_size, error_out=False)
-    return render_template('finance/journal_entries.html', entries=entries)
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    search_desc = request.args.get('search_desc', '').strip()
+    account_code = request.args.get('account_code', '').strip()
+    
+    query = JournalEntry.query.options(joinedload(JournalEntry.lines))
+    
+    if date_from:
+        try:
+            f = datetime.strptime(date_from, '%Y-%m-%d').date()
+            query = query.filter(JournalEntry.date >= f)
+        except: pass
+    if date_to:
+        try:
+            t = datetime.strptime(date_to, '%Y-%m-%d').date()
+            query = query.filter(JournalEntry.date <= t)
+        except: pass
+    if search_desc:
+        query = query.filter(JournalEntry.description.ilike(f"%{search_desc}%"))
+    
+    # فیلتر بر اساس کد حساب (جستجو در آرتیکل‌ها)
+    if account_code:
+        acc = Account.query.filter(Account.code == account_code).first()
+        if acc:
+            subquery = db.session.query(JournalEntryLine.journal_entry_id).filter(JournalEntryLine.account_id == acc.id).subquery()
+            query = query.filter(JournalEntry.id.in_(subquery))
+    
+    entries = query.order_by(JournalEntry.date.desc(), JournalEntry.id.desc()).paginate(page=page, per_page=page_size, error_out=False)
+    
+    # محاسبه جمع بدهکار و بستانکار برای صفحه جاری
+    entry_ids = [e.id for e in entries.items]
+    totals = {'debit': Decimal('0'), 'credit': Decimal('0')}
+    if entry_ids:
+        rows = db.session.query(
+            func.sum(JournalEntryLine.debit),
+            func.sum(JournalEntryLine.credit)
+        ).filter(JournalEntryLine.journal_entry_id.in_(entry_ids)).first()
+        if rows:
+            totals['debit'] = Decimal(str(rows[0])) if rows[0] is not None else Decimal('0')
+            totals['credit'] = Decimal(str(rows[1])) if rows[1] is not None else Decimal('0')
+    
+    accounts_list = Account.query.order_by(Account.code).all()
+    
+    return render_template('finance/journal_entries.html', entries=entries, totals=totals,
+                           date_from=date_from, date_to=date_to,
+                           search_desc=search_desc, account_code=account_code,
+                           accounts=accounts_list)
 
 # ==========================================
 # تراز آزمایشی (Trial Balance)
 # ==========================================
 @finance_bp.route('/trial_balance')
 @login_required
+@permission_required('can_view_finance')
 def trial_balance():
     from app.models import Account, JournalEntryLine
     from sqlalchemy import func
     accounts = Account.query.order_by(Account.code).all()
     rows = []
-    total_debit = total_credit = Decimal('0')
+    total_debit = Decimal('0')
+    total_credit = Decimal('0')
     for acc in accounts:
-        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
-        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
+        raw_d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar()
+        raw_c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar()
+        debits = Decimal(str(raw_d)) if raw_d is not None else Decimal('0')
+        credits = Decimal(str(raw_c)) if raw_c is not None else Decimal('0')
         if acc.type and acc.type.nature == 'بدهکار':
             bal = debits - credits
         else:
             bal = credits - debits
         rows.append({'code': acc.code, 'name': acc.name, 'debit': debits, 'credit': credits, 'balance': bal, 'nature': acc.type.nature if acc.type else '?'})
-        total_debit += Decimal(str(debits))
-        total_credit += Decimal(str(credits))
+        total_debit += debits
+        total_credit += credits
     return render_template('finance/trial_balance.html', rows=rows, total_debit=total_debit, total_credit=total_credit)
 
 # ==========================================
@@ -1120,6 +1197,7 @@ def trial_balance():
 # ==========================================
 @finance_bp.route('/statements')
 @login_required
+@permission_required('can_view_finance')
 def statements():
     from app.models import Account, JournalEntryLine, JournalEntry
     from sqlalchemy import func
@@ -1127,18 +1205,18 @@ def statements():
     accounts = Account.query.all()
     balances = {}
     
-    total_assets = 0
-    total_liabilities = 0
-    total_equity = 0
-    total_revenue = 0
-    total_expense = 0
+    total_assets = Decimal('0')
+    total_liabilities = Decimal('0')
+    total_equity = Decimal('0')
+    total_revenue = Decimal('0')
+    total_expense = Decimal('0')
     
     for acc in accounts:
-        # جمع مبالغ بدهکار و بستانکار هر حساب در دفتر کل
-        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
-        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
+        raw_d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar()
+        raw_c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar()
+        debits = Decimal(str(raw_d)) if raw_d is not None else Decimal('0')
+        credits = Decimal(str(raw_c)) if raw_c is not None else Decimal('0')
         
-        # محاسبه مانده حساب بر اساس ماهیت
         if acc.type.nature == 'بدهکار':
             bal = debits - credits
         else:
@@ -1146,7 +1224,6 @@ def statements():
             
         balances[acc.code] = {'name': acc.name, 'balance': bal, 'type': acc.type.name}
         
-        # طبقه بندی در صورت های مالی
         if acc.code.startswith('1'): total_assets += bal
         elif acc.code.startswith('2'): total_liabilities += bal
         elif acc.code.startswith('3'): total_equity += bal
@@ -1155,24 +1232,20 @@ def statements():
 
     net_income = total_revenue - total_expense
     
-    # تفکیک سود حاصل از ارزیابی (استاندارد 26) از سود عملیاتی (فروش)
-    valuation_gain = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
-        Account.code == '4101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه گله%')
-    ).scalar() or 0.0
-    
-    valuation_loss = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
-        Account.code == '5101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه گله%')
-    ).scalar() or 0.0
-    
+    def _dec(query):
+        raw = query.scalar()
+        return Decimal(str(raw)) if raw is not None else Decimal('0')
+
+    valuation_gain = _dec(db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
+        Account.code == '4101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه گله%')))
+    valuation_loss = _dec(db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
+        Account.code == '5101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه گله%')))
     net_valuation_profit = valuation_gain - valuation_loss
     operational_profit = net_income - net_valuation_profit
     
-    # تفکیک سهم هزینه‌های جیره (خوراک)
-    feed_costs_total = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
-        Account.code == '5101', JournalEntry.description.ilike('%مصرف خوراک%')
-    ).scalar() or 0.0
+    feed_costs_total = _dec(db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
+        Account.code == '5101', JournalEntry.description.ilike('%مصرف خوراک%')))
     
-    # استخراج تفکیکی بدهی به پرسنل (حقوق پرداختنی)
     salary_acc = Account.query.filter_by(code='2101').first()
     salary_breakdown = []
     if salary_acc:
@@ -1182,10 +1255,9 @@ def statements():
         ).filter(JournalEntryLine.account_id == salary_acc.id, JournalEntryLine.description.ilike('%خالص حقوق پرداختنی%')
         ).group_by(JournalEntryLine.description).having(func.sum(JournalEntryLine.credit - JournalEntryLine.debit) != 0).all()
 
-    total_equity_with_income = total_equity + net_income # حقوق صاحبان سهام + سود انباشته
+    total_equity_with_income = total_equity + net_income
     
-    # فرمول طلایی حسابداری: دارایی = بدهی + سرمایه
-    is_balanced = round(total_assets, 2) == round(total_liabilities + total_equity_with_income, 2)
+    is_balanced = total_assets == total_liabilities + total_equity_with_income
 
     return render_template('finance/statements.html', 
                            balances=balances,
@@ -1208,19 +1280,26 @@ def official_balance_sheet():
     from app.models import Account, JournalEntryLine, JournalEntry
     from sqlalchemy import func
     
+    from app.models import Account, JournalEntryLine, JournalEntry
+    from sqlalchemy import func
+    
+    def _dec(query):
+        raw = query.scalar()
+        return Decimal(str(raw)) if raw is not None else Decimal('0')
+
     accounts = Account.query.all()
     asset_accounts = []
     liability_equity_accounts = []
     
-    total_assets = 0
-    total_liabilities = 0
-    total_equity = 0
-    total_revenue = 0
-    total_expense = 0
+    total_assets = Decimal('0')
+    total_liabilities = Decimal('0')
+    total_equity = Decimal('0')
+    total_revenue = Decimal('0')
+    total_expense = Decimal('0')
     
     for acc in accounts:
-        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
-        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
+        debits = _dec(db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id))
+        credits = _dec(db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id))
         
         if acc.type.nature == 'بدهکار':
             bal = debits - credits
@@ -1256,52 +1335,131 @@ def official_balance_sheet():
 # ==========================================
 @finance_bp.route('/tax_management')
 @login_required
+@permission_required('can_view_finance')
 def tax_management():
-    # دسترسی فقط برای مدیر
     if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
     
-    from app.models import Account, JournalEntryLine, Transaction
+    import jdatetime
+    from app.models import Account, JournalEntry, JournalEntryLine, Transaction
     from sqlalchemy import func
     
-    # 1. محاسبه مالیات پرداختنی (فروش ما به مشتریان) - کد حساب 2030
-    vat_payable_acc = Account.query.filter_by(code='2030').first()
-    vat_payable = 0
-    if vat_payable_acc:
-        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=vat_payable_acc.id).scalar() or 0.0
-        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=vat_payable_acc.id).scalar() or 0.0
-        vat_payable = credits - debits # ماهیت بستانکار
-        
-    # 2. محاسبه اعتبار مالیاتی (خریدهای ما از تامین کنندگان) - کد حساب 1040
-    vat_receivable_acc = Account.query.filter_by(code='1040').first()
-    vat_receivable = 0
-    if vat_receivable_acc:
-        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=vat_receivable_acc.id).scalar() or 0.0
-        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=vat_receivable_acc.id).scalar() or 0.0
-        vat_receivable = debits - credits # ماهیت بدهکار
+    def _dec(query):
+        raw = query.scalar()
+        return Decimal(str(raw)) if raw is not None else Decimal('0')
 
-    # 3. تراز نهایی مالیات (اگر مثبت باشد باید به دارایی بدهیم، اگر منفی باشد از دارایی طلبکاریم)
-    net_tax_due = vat_payable - vat_receivable
+    # ---- فیلترهای دوره مالیاتی (فصل/سال) ----
+    now_j = jdatetime.datetime.now()
+    current_year = now_j.year
+    year = request.args.get('year', current_year, type=int)
+    quarter = request.args.get('quarter', type=int)
     
-    # دریافت فاکتورهای اخیر برای جدول سامانه مودیان
-    recent_transactions = Transaction.query.order_by(Transaction.t_date.desc()).limit(50).all()
-    vat_rate = float(get_setting('vat_rate', 10)) / 100
+    # تعیین بازه تاریخی بر اساس فصل انتخابی
+    period_start = period_end = None
+    if quarter and 1 <= quarter <= 4:
+        q_month_start = (quarter - 1) * 3 + 1
+        q_month_end = quarter * 3
+        j_start = jdatetime.date(year, q_month_start, 1)
+        if q_month_end == 12:
+            j_end = jdatetime.date(year + 1, 1, 1)
+        else:
+            j_end = jdatetime.date(year, q_month_end + 1, 1)
+        period_start = j_start.togregorian()
+        period_end = j_end.togregorian()
+    
+    def _apply_period(query, date_col):
+        if period_start and period_end:
+            return query.filter(date_col >= period_start, date_col < period_end)
+        return query
+
+    # ---- محاسبه مالیات با اعمال فیلتر دوره ----
+    vat_payable_acc = Account.query.filter_by(code='2030').first()
+    vat_payable = Decimal('0')
+    if vat_payable_acc:
+        q = _apply_period(
+            db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).filter(JournalEntryLine.account_id == vat_payable_acc.id),
+            JournalEntry.date)
+        credits = _dec(q)
+        q = _apply_period(
+            db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(JournalEntryLine.account_id == vat_payable_acc.id),
+            JournalEntry.date)
+        debits = _dec(q)
+        vat_payable = credits - debits
+        
+    vat_receivable_acc = Account.query.filter_by(code='1040').first()
+    vat_receivable = Decimal('0')
+    if vat_receivable_acc:
+        q = _apply_period(
+            db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(JournalEntryLine.account_id == vat_receivable_acc.id),
+            JournalEntry.date)
+        debits = _dec(q)
+        q = _apply_period(
+            db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).filter(JournalEntryLine.account_id == vat_receivable_acc.id),
+            JournalEntry.date)
+        credits = _dec(q)
+        vat_receivable = debits - credits
+
+    net_tax_due = vat_payable - vat_receivable
+
+    # ---- فیلترهای پیشرفته جدول تراکنش‌ها ----
+    search_q = request.args.get('search', '').strip()
+    type_filter = request.args.get('type_filter', '')
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+
+    tx_query = Transaction.query
+    if period_start and period_end:
+        tx_query = tx_query.filter(Transaction.t_date >= period_start, Transaction.t_date < period_end)
+    else:
+        # اگر فصلی انتخاب نشده، فقط 6 ماه اخیر را نشان بده
+        six_months_ago = datetime.now(UTC).date() - timedelta(days=180)
+        tx_query = tx_query.filter(Transaction.t_date >= six_months_ago)
+    if search_q:
+        tx_query = tx_query.filter(Transaction.invoice_number.ilike(f"%{search_q}%"))
+    if type_filter:
+        tx_query = tx_query.filter(Transaction.t_type == type_filter)
+    if date_from:
+        try:
+            f = datetime.strptime(date_from, '%Y-%m-%d').date()
+            tx_query = tx_query.filter(Transaction.t_date >= f)
+        except: pass
+    if date_to:
+        try:
+            t = datetime.strptime(date_to, '%Y-%m-%d').date()
+            tx_query = tx_query.filter(Transaction.t_date <= t)
+        except: pass
+
+    transactions = tx_query.order_by(Transaction.t_date.desc()).limit(100).all()
+    vat_rate = Decimal(str(float(get_setting('vat_rate', 10)) / 100))
+    vat_pct = int(float(get_setting('vat_rate', 10)))
 
     return render_template('finance/tax_management.html', 
                            vat_payable=vat_payable, 
                            vat_receivable=vat_receivable, 
                            net_tax_due=net_tax_due,
-                           transactions=recent_transactions,
-                           vat_rate=vat_rate)
+                           transactions=transactions,
+                           vat_rate=vat_rate, vat_pct=vat_pct,
+                           year=year, quarter=quarter,
+                           search_q=search_q, type_filter=type_filter,
+                           date_from=date_from, date_to=date_to,
+                           current_year=current_year)
 
 # روت شبیه ساز ارسال به سامانه مودیان
 @finance_bp.route('/send_to_moadian', methods=['POST'])
 @login_required
 def send_to_moadian():
-    # در دنیای واقعی اینجا کدهای API اتصال به my.tax.gov.ir قرار میگیرد
-    import time
-    time.sleep(1) # شبیه سازی تاخیر ارسال شبکه
-    flash('فاکتورهای انتخاب شده با موفقیت به کارپوشه سامانه مودیان مالیاتی ارسال شدند و شماره منحصر بفرد مالیاتی (Tax ID) دریافت گردید.', 'success')
-    return redirect(url_for('finance.tax_management'))
+    from app.models import Transaction
+    tx_ids = request.form.getlist('tx_ids')
+    now_ts = datetime.now(UTC)
+    count = 0
+    for tid in tx_ids:
+        tx = Transaction.query.get(int(tid))
+        if tx:
+            tx.moadian_status = 'ارسال شده'
+            tx.moadian_sent_at = now_ts
+            count += 1
+    db.session.commit()
+    flash(f'{count} فاکتور با موفقیت به کارپوشه سامانه مودیان مالیاتی ارسال شد.', 'success')
+    return redirect(url_for('finance.tax_management', year=request.args.get('year'), quarter=request.args.get('quarter')))
 
 
 @finance_bp.route('/export_vat_return')
@@ -1576,6 +1734,7 @@ def sync_contact_balances():
 
 @finance_bp.route('/contacts/ledger')
 @login_required
+@permission_required('can_view_finance')
 def contacts_ledger():
     """گزارش تراز معین اشخاص - تفکیک طلبکاران و بدهکاران بازار"""
     all_contacts = Contact.query.all()
