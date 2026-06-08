@@ -124,7 +124,7 @@
     </div>
 </div>
 
-<input type="hidden" id="vat_rate_setting" value="{{ vat_rate }}">
+<input type="hidden" id="vat_rate_setting" value="{{ system_settings.vat_rate }}">
 
 <script>
     const incCats = [{% for c in income_cats %}"{{ c.name }}",{% endfor %}];

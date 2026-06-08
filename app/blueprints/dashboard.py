@@ -1,4 +1,5 @@
 import requests
+from decimal import Decimal
 import os
 from flask_login import current_user, login_required
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, current_app, jsonify
@@ -136,16 +137,16 @@ def index():
     total_assets_book_value = total_purchase_price - total_accumulated_depreciation
 
     # محاسبات سود - استفاده از SQL بجای حلقه
-    total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0.0
-    total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0.0
+    total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0
+    total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0
     net_income = total_rev_ledger - total_exp_ledger
 
     valuation_gain = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
         Account.code == '4101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
-    ).scalar() or 0.0
+    ).scalar() or 0
     valuation_loss = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
         Account.code == '5101', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
-    ).scalar() or 0.0
+    ).scalar() or 0
 
     net_valuation_profit = valuation_gain - valuation_loss
     operational_profit = net_income - net_valuation_profit
@@ -163,10 +164,10 @@ def index():
     def get_monthly_net(s, e):
         rev = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
             Account.code.startswith('4'), JournalEntry.date >= s, JournalEntry.date < e
-        ).scalar() or 0.0
+        ).scalar() or 0
         exp = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
             Account.code.startswith('5'), JournalEntry.date >= s, JournalEntry.date < e
-        ).scalar() or 0.0
+        ).scalar() or 0
         return rev - exp
 
     curr_month_profit = get_monthly_net(start_curr_g, end_curr_g)
@@ -190,7 +191,7 @@ def index():
     ).join(Account).filter(
         Account.code == '2101',
         JournalEntryLine.description.ilike('%بیمه پرداختنی سازمان%')
-    ).scalar() or 0.0
+    ).scalar() or 0
 
     # --- پیش‌بینی اتمام موجودی انبار خوراک ---
     thirty_days_ago = datetime.now(UTC).date() - timedelta(days=30)
@@ -198,10 +199,10 @@ def index():
         InventoryLog.action_type == 'خروج',
         InventoryLog.date >= thirty_days_ago,
         InventoryCategory.name.in_(['خوراک', 'علوفه'])
-    ).scalar() or 0.0
+    ).scalar() or 0
     
     avg_daily_consumption = total_consumed_30d / 30
-    current_feed_inv = db.session.query(func.sum(InventoryItem.quantity)).join(InventoryCategory).filter(InventoryCategory.name.in_(['خوراک', 'علوفه'])).scalar() or 0.0
+    current_feed_inv = db.session.query(func.sum(InventoryItem.quantity)).join(InventoryCategory).filter(InventoryCategory.name.in_(['خوراک', 'علوفه'])).scalar() or 0
     days_until_empty = int(current_feed_inv / avg_daily_consumption) if avg_daily_consumption > 0 else 999
 
     # --- سیستم خودکار گزارش روزانه موجودی بحرانی به تلگرام ---
@@ -487,9 +488,9 @@ def run_valuation():
     # دریافت قیمت جدید از فرم ارسالی کاربر
     raw_price = request.form.get('market_price', '0').replace(',', '')
     try:
-        market_price = float(raw_price)
+        market_price = Decimal(raw_price)
     except ValueError:
-        market_price = 0.0
+        market_price = Decimal('0')
 
     if market_price <= 0:
         flash('لطفاً قیمت معتبری برای هر کیلوگرم وارد کنید.', 'warning')
@@ -498,7 +499,7 @@ def run_valuation():
     # محاسبه کل وزن زنده گله فعلی (بدون حذف شده‌ها)
     total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-    ).scalar() or 0.0
+    ).scalar() or 0
     
     total_fair_value = total_live_weight * market_price
     

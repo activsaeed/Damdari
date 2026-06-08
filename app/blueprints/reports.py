@@ -216,8 +216,7 @@ def index():
     total_depreciation = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntry.description.ilike('%استهلاک%')
-    ).scalar() or 0.0
-    total_depreciation = float(total_depreciation)
+    ).scalar() or 0
 
     # گزارش سالانه استهلاک برای نمودار یا جدول
     annual_depreciation_report = db.session.query(
@@ -232,18 +231,15 @@ def index():
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
         Sheep.weight.isnot(None)
     ).scalar() or 0
-    total_live_weight = float(total_live_weight)
 
     total_purchase_cost = db.session.query(func.sum(Sheep.purchase_price)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
     ).scalar() or 0
-    total_purchase_cost = float(total_purchase_cost)
 
     total_insurance_expenses = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntryLine.description.ilike('%بیمه سهم کارفرما%')
-    ).scalar() or 0.0
-    total_insurance_expenses = float(total_insurance_expenses)
+    ).scalar() or 0
 
     insurance_cost_per_kg = (total_insurance_expenses / total_live_weight) if total_live_weight > 0 else 0
     cost_per_kg = ((0 + total_purchase_cost + total_depreciation + total_insurance_expenses) / total_live_weight) if total_live_weight > 0 else 0
@@ -273,17 +269,17 @@ def index():
     # 6.2. دیتای نمودار دایره‌ای سود (عملیاتی vs ارزیابی)
     valuation_gain = db.session.query(func.sum(JournalEntryLine.credit)).join(JournalEntry).join(Account).filter(
         Account.code == '4010', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
-    ).scalar() or 0.0
+    ).scalar() or 0
     valuation_loss = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).join(Account).filter(
         Account.code == '5010', JournalEntry.description.ilike('%تعدیل ارزش منصفانه%')
-    ).scalar() or 0.0
+    ).scalar() or 0
     
-    total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0.0
-    total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0.0
+    total_rev_ledger = db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')).scalar() or 0
+    total_exp_ledger = db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')).scalar() or 0
     
     net_val_profit = valuation_gain - valuation_loss
     op_profit = (total_rev_ledger - total_exp_ledger) - net_val_profit
-    profit_pie_data = [max(0, op_profit), max(0, net_val_profit)]
+    profit_pie_data = [float(max(0, op_profit)), float(max(0, net_val_profit))]
 
     # 6.3. روند تغییر ارزش منصفانه گله (۶ ماه اخیر)
     # بهینه‌سازی: استفاده از یک کوئری واحد با گروه‌بندی ماهانه برای روند ۶ ماهه

@@ -55,7 +55,7 @@ def require_api_token(f):
 def normalize_amount_to_toman(amount_str):
     """تبدیل تمام ورودی ها به تومان بر اساس تنظیمات فعلی کاربر"""
     if not amount_str: 
-        return 0.0
+        return Decimal('0')
     try:
         # پاکسازی کاراکترهای غیرعددی و تبدیل اعداد فارسی/عربی
         persian_digits = '۰۱۲۳۴۵۶۷۸۹'
@@ -168,8 +168,10 @@ def add_transaction():
         category_name = category_name.strip()
         raw_amount = request.form.get('amount', '0')
         invoice_number = request.form.get('invoice_number')
-        description = request.form.get('description')
+        description = request.form.get('description') or ""
         follow_up_note = request.form.get('follow_up_note')
+        if follow_up_note:
+            description += f"\n[یادداشت پیگیری]: {follow_up_note}"
         party_name = request.form.get('party_name') # فیلد جدید شخص/شرکت
         contact_id = request.form.get('contact_id')
         payment_method = request.form.get('payment_method', 'نقدی')
@@ -204,7 +206,6 @@ def add_transaction():
                 new_transaction = Transaction(
                     t_type=t_type, category=category_name, amount=amount_val,
                     invoice_number=invoice_number, t_date=t_date, description=description,
-                    follow_up_note=follow_up_note,
                     party_name=linked_contact.name if linked_contact else party_name,
                     contact_id=linked_contact.id if linked_contact else None,
                     payment_method=payment_method,
@@ -1431,7 +1432,10 @@ def delete_contact_doc(doc_id):
 def update_followup(tx_id):
     """بروزرسانی یا ثبت یادداشت پیگیری برای یک تراکنش"""
     tx = Transaction.query.get_or_404(tx_id)
-    tx.follow_up_note = request.form.get('follow_up_note')
+    follow_up_note = request.form.get('follow_up_note')
+    if follow_up_note:
+        current_desc = tx.description or ""
+        tx.description = f"{current_desc}\n[پیگیری جدید]: {follow_up_note}"
     db.session.commit()
     # استفاده از _anchor برای بازگشت دقیق به تب ریزتراکنش‌ها
     flash('یادداشت پیگیری بروزرسانی شد.', 'success')
