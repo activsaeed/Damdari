@@ -35,7 +35,7 @@
                                     {% else %}text-secondary{% endif %}">
                                     <i class="fa-solid fa-clock"></i> {{ schedule.time_of_day }}
                                 </td>
-                                <td class="fw-bold">{{ schedule.feed_type }}</td>
+                                <td class="fw-bold">{{ schedule.item.name if schedule.item else 'نامشخص' }}</td>
                                 <td class="text-success fw-bold">{{ schedule.amount_kg }} kg</td>
                                 <td><a href="{{ url_for('dashboard.delete_setting', type='schedule', id=schedule.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></a></td>
                             </tr>
@@ -74,8 +74,13 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">نوع خوراک (یونجه، جو، کنسانتره...)</label>
-                        <input type="text" name="feed_type" class="form-control" required>
+                        <label class="form-label">نوع خوراک</label>
+                        <select name="inventory_item_id" class="form-select" required>
+                            <option value="">انتخاب کنید...</option>
+                            {% for item in feed_items %}
+                            <option value="{{ item.id }}">{{ item.name }} ({{ item.unit.name if item.unit else '' }})</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label text-success fw-bold">مقدار مصرف در این وعده (کیلوگرم)</label>

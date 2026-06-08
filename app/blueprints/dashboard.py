@@ -344,10 +344,11 @@ def settings():
             flash('پروتکل درمانی جدید اضافه شد.', 'success')
         elif action == 'add_schedule':
             amount_val = request.form.get('amount_kg')
+            inv_item_id = request.form.get('inventory_item_id')
             db.session.add(FeedingSchedule(
                 feed_ration_id=request.form.get('feed_ration_id'), 
                 time_of_day=request.form.get('time_of_day'), 
-                inventory_item_id=request.form.get('inventory_item_id'), 
+                inventory_item_id=int(inv_item_id) if inv_item_id else None, 
                 amount_kg=float(amount_val) if amount_val else 0.0
             ))
             flash('برنامه تغذیه ثبت شد.', 'success')
@@ -366,7 +367,7 @@ def settings():
             db.session.commit()
             flash('دسته‌بندی جدید انبار اضافه شد.', 'success')
         elif action == 'add_trans_cat':
-            db.session.add(TransactionCategory(name=request.form.get('name'), type=request.form.get('type')))
+            db.session.add(TransactionCategory(name=request.form.get('name'), t_type=request.form.get('type')))
             db.session.commit()
             flash('دسته‌بندی مالی جدید (درآمد/هزینه) اضافه شد.', 'success')
         elif action == 'add_buyer_cat':
@@ -374,7 +375,7 @@ def settings():
             db.session.commit()
             flash('نوع خریدار جدید اضافه شد.', 'success')
         elif action == 'update_constants':
-            for key in ['market_price', 'vat_rate', 'maturity_days', 'birth_weight', 'daily_feed_est', 'page_size', 'sms_api_key', 'sms_sender_number', 'sms_service_provider', 'farm_name', 'backup_hour', 'backup_minute']:
+            for key in ['market_price', 'vat_rate', 'maturity_days', 'birth_weight', 'daily_feed_est', 'page_size', 'sms_api_key', 'sms_sender_number', 'sms_service_provider', 'farm_name', 'backup_hour', 'backup_minute', 'currency_unit']:
                 val = request.form.get(key)
                 if val:
                     setting = SystemSetting.query.filter_by(key=key).first()
@@ -716,9 +717,12 @@ def cleanup_removed_sheep():
 
 # ---> اضافه شدن مجدد صفحه مدیریت تغذیه <---
 @dashboard_bp.route('/feeding_schedule')
+@login_required
 def feeding_schedule():
-    from app.models import FeedRation
-    return render_template('dashboard/feeding.html', rations=FeedRation.query.all())
+    from app.models import FeedRation, InventoryItem, InventoryCategory
+    feed_cat = InventoryCategory.query.filter(InventoryCategory.name.in_(['خوراک', 'علوفه'])).first()
+    feed_items = InventoryItem.query.filter_by(category_id=feed_cat.id).all() if feed_cat else []
+    return render_template('dashboard/feeding.html', rations=FeedRation.query.all(), feed_items=feed_items)
 
 @dashboard_bp.route('/delete_setting/<type>/<int:id>')
 @login_required
@@ -745,6 +749,9 @@ def delete_setting(type, id):
     # ---> اضافه شدن مجدد قابلیت حذف برنامه تغذیه <---
     elif type == 'schedule': obj = FeedingSchedule.query.get_or_404(id)
     
+    if obj is None:
+        flash(f'نوع "{type}" نامعتبر است.', 'danger')
+        return redirect(request.referrer)
     db.session.delete(obj)
     db.session.commit()
     flash('آیتم با موفقیت حذف شد.', 'warning')

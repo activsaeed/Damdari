@@ -12,6 +12,7 @@ from app.models import (
 )
 from datetime import datetime, timedelta, UTC
 from sqlalchemy import or_, and_, func, cast, case
+from sqlalchemy.orm import joinedload
 from app.blueprints.dashboard import get_setting
 from app.blueprints.finance import permission_required
 import jdatetime
@@ -181,7 +182,7 @@ def index():
     # SQL بهینه شده برای محاسبه مصرف خوراک بدون حلقه
     feed_logs = db.session.query(
         InventoryItem.name,
-        InventoryItem.unit_id,
+        Unit.name.label('unit_name'),
         func.sum(InventoryLog.amount).label('total_amount'),
         func.coalesce(
             func.nullif(func.avg(func.nullif(InventoryLog.transaction_price, 0)), None),
@@ -189,11 +190,12 @@ def index():
         ).label('avg_price')
     ).join(InventoryLog, InventoryItem.id == InventoryLog.item_id
     ).join(InventoryCategory, InventoryItem.category_id == InventoryCategory.id
+    ).outerjoin(Unit, InventoryItem.unit_id == Unit.id
     ).filter(
         InventoryLog.action_type == 'خروج',
         InventoryLog.date >= filter_date,
         InventoryCategory.name.in_(['خوراک', 'علوفه'])
-    ).group_by(InventoryItem.id, InventoryItem.name, InventoryItem.unit_id).all()
+    ).group_by(InventoryItem.id, InventoryItem.name, Unit.name).all()
 
     feed_consumption = {}
     total_feed_expenses = 0
@@ -201,8 +203,7 @@ def index():
     for row in feed_logs:
         cost = float(row[2] or 0) * float(row[3] or 0)
         total_feed_expenses += cost
-        unit_obj = db.session.query(Unit).filter_by(id=row[1]).first() if row[1] else None
-        unit_name = unit_obj.name if unit_obj else '-'
+        unit_name = row[1] or '-'
 
         feed_consumption[row[0]] = {
             'amount': row[2] or 0,
@@ -606,7 +607,9 @@ def sales_report():
 @reports_bp.route('/api/sales_data')
 @log_report_errors
 def api_sales_data():
-    sold_sheep = Sheep.query.filter_by(status='فروخته شده').all()
+    sold_sheep = Sheep.query.filter_by(status='فروخته شده').options(
+        joinedload(Sheep.ration), joinedload(Sheep.buyer_category)
+    ).all()
     data = []
     for s in sold_sheep:
         if not s.sale_date: continue

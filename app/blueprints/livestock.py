@@ -561,9 +561,27 @@ def add_birth(id):
     if status == 'موفق':
         mother = Sheep.query.get(id)
         b_weight = float(get_setting('birth_weight', 3.5))
-        for i in range(lambs_count):
-            tag = f"LMB-{mother.ear_tag}-{random.randint(100, 9999)}"
-            db.session.add(Sheep(ear_tag=tag, breed=mother.breed, gender="نامشخص", weight=b_weight, status="زنده و سالم", purpose="پرواربندی", birth_date=r_date, mother_id=mother.id, father_id=father_id or None))
+        lamb_value = Decimal(str(get_setting('market_price', '0'))) * Decimal(str(b_weight)) if get_setting('market_price', '0') != '0' else Decimal('500000')
+        from app.models import JournalEntry, JournalEntryLine, Account
+        entry = JournalEntry(
+            entry_number=AccountingEngine.generate_entry_number(),
+            date=r_date,
+            description=f"زایش دام - پلاک مادر: {mother.ear_tag} - تعداد بره: {lambs_count}"
+        )
+        db.session.add(entry)
+        db.session.flush()
+        acc_asset = Account.query.filter_by(code='1200').first()
+        acc_income = Account.query.filter_by(code='4010').first()
+        if acc_asset and acc_income:
+            for i in range(lambs_count):
+                tag = f"LMB-{mother.ear_tag}-{random.randint(100, 9999)}"
+                db.session.add(Sheep(ear_tag=tag, breed=mother.breed, gender="نامشخص", weight=b_weight, status="زنده و سالم", purpose="پرواربندی", birth_date=r_date, mother_id=mother.id, father_id=father_id or None))
+            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_asset.id, debit=lamb_value * lambs_count, credit=0.0, description=f"افزایش دارایی زیستی - {lambs_count} راس بره متولد شده از {mother.ear_tag}"))
+            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_income.id, debit=0.0, credit=lamb_value * lambs_count, description=f"درآمد حاصل از زایش - {lambs_count} راس بره"))
+        else:
+            for i in range(lambs_count):
+                tag = f"LMB-{mother.ear_tag}-{random.randint(100, 9999)}"
+                db.session.add(Sheep(ear_tag=tag, breed=mother.breed, gender="نامشخص", weight=b_weight, status="زنده و سالم", purpose="پرواربندی", birth_date=r_date, mother_id=mother.id, father_id=father_id or None))
         db.session.commit()
     return redirect(url_for('livestock.profile', id=id))
 

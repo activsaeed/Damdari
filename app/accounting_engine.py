@@ -11,6 +11,13 @@ class AccountingEngine:
         return Account.query.filter_by(code=code).first()
 
     @staticmethod
+    def require_account(code):
+        acc = AccountingEngine.get_account(code)
+        if not acc:
+            raise ValueError(f"حساب با کد {code} در سیستم تعریف نشده است. لطفاً ابتدا حساب‌های ضروری را ایجاد کنید.")
+        return acc
+
+    @staticmethod
     def get_vat_rate():
         from app.blueprints.dashboard import get_setting
         return Decimal(get_setting('vat_rate', '10')) / Decimal('100')
@@ -20,18 +27,32 @@ class AccountingEngine:
         return f"SANAD-{time.time_ns()}-{random.randint(100000, 999999)}"
 
     @staticmethod
+    def validate_amounts(debit, credit):
+        if debit < 0 or credit < 0:
+            raise ValueError(f"مقادیر بدهکار ({debit}) و بستانکار ({credit}) نمی‌توانند منفی باشند.")
+        if debit > 0 and credit > 0:
+            raise ValueError("هر ردیف سند حسابداری نمی‌تواند همزمان بدهکار و بستانکار داشته باشد.")
+        if debit == 0 and credit == 0:
+            raise ValueError("هر ردیف سند حسابداری باید حداقل یک طرف (بدهکار یا بستانکار) داشته باشد.")
+
+    @staticmethod
+    def add_line(journal_entry_id, account_id, debit, credit, description=None, contact_id=None):
+        AccountingEngine.validate_amounts(debit, credit)
+        db.session.add(JournalEntryLine(
+            journal_entry_id=journal_entry_id, account_id=account_id,
+            debit=Decimal(str(debit)), credit=Decimal(str(credit)),
+            description=description, contact_id=contact_id
+        ))
+
+    @staticmethod
     def record_sale(transaction, contact_id=None, include_vat=True):
         """ثبت اتوماتیک سند فروش (درآمد)"""
         try:
             with db.session.begin_nested():
-                cash_account = AccountingEngine.get_account('1010')
-                receivable_account = AccountingEngine.get_account('1030')
-                sales_account = AccountingEngine.get_account('4010')
+                cash_account = AccountingEngine.require_account('1010')
+                receivable_account = AccountingEngine.require_account('1030')
+                sales_account = AccountingEngine.require_account('4010')
                 vat_payable = AccountingEngine.get_account('2030')
-
-                if not all([cash_account, receivable_account, sales_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account)] if not acc]
-                    raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
                 amount = transaction.amount
                 vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')
@@ -74,14 +95,10 @@ class AccountingEngine:
         """ثبت اتوماتیک سند خرید / هزینه"""
         try:
             with db.session.begin_nested():
-                cash_account = AccountingEngine.get_account('1010')
-                payable_account = AccountingEngine.get_account('2010')
-                expense_account = AccountingEngine.get_account('5010')
+                cash_account = AccountingEngine.require_account('1010')
+                payable_account = AccountingEngine.require_account('2010')
+                expense_account = AccountingEngine.require_account('5010')
                 vat_receivable = AccountingEngine.get_account('1040')
-
-                if not all([cash_account, payable_account, expense_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account)] if not acc]
-                    raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
                 amount = transaction.amount
                 vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')

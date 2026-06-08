@@ -198,6 +198,7 @@ def create_app():
         t_equity = AccountType.query.filter_by(name='حقوق صاحبان سهام').first()
         required_accounts = [
             {'code': '3010', 'name': 'مانده افتتاحیه (سرمایه)', 'type': t_equity},
+            {'code': '3020', 'name': 'سود و زیان انباشته', 'type': t_equity},
             {'code': '1050', 'name': 'اسناد دریافتنی', 'type': t_asset},
             {'code': '2020', 'name': 'اسناد پرداختنی', 'type': t_liability},
         ]

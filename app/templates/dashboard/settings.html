@@ -204,7 +204,7 @@
                                 <div class="accordion accordion-flush" id="iotSteps">
                                     <div class="alert alert-warning mb-4 border-0 shadow-sm">
                                         <i class="fa-solid fa-tower-broadcast me-2"></i>
-                                        <strong>چالش فاصله دارید؟</strong> اگر فاصله سنسورها بیش از ۱۰۰ متر است، <a href="#" data-bs-toggle="modal" data-bs-target="#distanceGuideModal" class="alert-link">این راهنما</a> را بخوانید.
+                                        <strong>چالش فاصله دارید؟</strong> اگر فاصله سنسورها بیش از ۱۰۰ متر است، از ماژول‌های Lora (رنج ۱-۱۰ کیلومتر) استفاده کنید.
                                     </div>
                                     <div class="accordion-item">
                                         <h2 class="accordion-header"><button class="accordion-button fw-bold text-primary" data-bs-toggle="collapse" data-bs-target="#step1">گام ۱: پیش‌نیازهای سخت‌افزاری</button></h2>
@@ -246,7 +246,7 @@
                                 <div class="mt-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <h6 class="fw-bold mb-0"><i class="fa-solid fa-code text-danger"></i> نمونه کد آماده (Arduino/C++):</h6>
-                                        <button class="btn btn-sm btn-outline-dark fw-bold" data-bs-toggle="modal" data-bs-target="#distanceGuideModal"><i class="fa-solid fa-circle-info"></i> راهکار فواصل دور</button>
+                                        <button class="btn btn-sm btn-outline-dark fw-bold" onclick="window.open('https://www.google.com/search?q=lora+arduino+%D8%A7%D8%B1%D8%AA%D8%A8%D8%A7%D8%B7+%D9%81%D8%A7%D8%B5%D9%84%D9%87+%D8%AF%D9%88%D8%B1','_blank')"><i class="fa-solid fa-circle-info"></i> راهکار فواصل دور</button>
                                     </div>
                                     <pre class="bg-dark text-success p-3 rounded small" style="max-height: 250px; overflow-y: auto;">
 // قطعه کد ارسال دیتا
@@ -637,5 +637,41 @@ http.end();</pre>
             </form>
         </div>
     </div>
+</div>
+
+<!-- Modal افزودن دسته‌بندی خریدار -->
+<div class="modal fade text-start" id="addBuyerModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title">نوع خریدار جدید</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <form action="{{ url_for('dashboard.settings') }}" method="POST">
+        <div class="modal-body"><input type="hidden" name="action" value="add_buyer_cat"><input type="text" name="name" class="form-control" required placeholder="نام نوع خریدار"></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-info text-white w-100">ذخیره</button></div>
+    </form></div></div>
+</div>
+
+<!-- Modal افزودن دسته‌بندی دارویی -->
+<div class="modal fade text-start" id="addMedCatModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">دسته‌بندی دارویی جدید</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <form action="{{ url_for('dashboard.settings') }}" method="POST">
+        <div class="modal-body"><input type="hidden" name="action" value="add_med_cat"><input type="text" name="name" class="form-control" required placeholder="نام دسته‌بندی"></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-danger text-white w-100">ذخیره</button></div>
+    </form></div></div>
+</div>
+
+<!-- Modal افزودن دسته‌بندی انبار -->
+<div class="modal fade text-start" id="addInvCatModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-success text-white"><h5 class="modal-title">دسته‌بندی انبار جدید</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <form action="{{ url_for('dashboard.settings') }}" method="POST">
+        <div class="modal-body"><input type="hidden" name="action" value="add_inv_cat"><input type="text" name="name" class="form-control" required placeholder="نام دسته‌بندی"></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-success text-white w-100">ذخیره</button></div>
+    </form></div></div>
+</div>
+
+<!-- Modal افزودن دسته‌بندی مالی -->
+<div class="modal fade text-start" id="addTransCatModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-warning text-dark"><h5 class="modal-title">دسته‌بندی مالی جدید</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <form action="{{ url_for('dashboard.settings') }}" method="POST">
+        <div class="modal-body"><input type="hidden" name="action" value="add_trans_cat"><input type="text" name="name" class="form-control mb-2" required placeholder="نام دسته‌بندی"><select name="type" class="form-select"><option value="هزینه">هزینه</option><option value="درآمد">درآمد</option></select></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-warning text-dark w-100">ذخیره</button></div>
+    </form></div></div>
 </div>
 {% endblock %}

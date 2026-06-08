@@ -127,7 +127,7 @@
     <div class="card-body p-0">
         <div class="table-responsive" style="min-height: 300px;">
             <table class="table table-hover align-middle text-center mb-0">
-                <thead class="table-light"><tr><th><i class="fa-solid fa-star text-warning"></i></th><th>سررسید</th><th>نوع</th><th>شماره چک</th><th>مبلغ ({{ current_currency_unit }})</th><th>بانک/صادرکننده</th><th>بابت</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+                <thead class="table-light"><tr><th><i class="fa-solid fa-star text-warning"></i></th><th>سررسید</th><th>نوع</th><th>شماره چک</th><th>مبلغ ({{ get_system_currency_from_settings() }})</th><th>بانک/صادرکننده</th><th>بابت</th><th>وضعیت</th><th>عملیات</th></tr></thead>
                 <tbody>
                     {% for c in cheques.items %}
                     <tr class="{% if c.status == 'برگشت خورده' %}table-danger{% elif c.status == 'پاس شده' %}table-light text-muted{% endif %}">

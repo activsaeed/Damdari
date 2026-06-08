@@ -23,6 +23,27 @@ from app.blueprints.dashboard import get_setting  # این تابع در داش�
 
 finance_bp = Blueprint('finance', __name__)
 
+def compute_contact_balance(contact):
+    from app.models import JournalEntryLine, Account
+    recv = Account.query.filter_by(code='1030').first()
+    pay = Account.query.filter_by(code='2010').first()
+    if not recv or not pay:
+        return Decimal('0')
+    receivable = db.session.query(func.sum(JournalEntryLine.debit - JournalEntryLine.credit)).filter(
+        JournalEntryLine.contact_id == contact.id, JournalEntryLine.account_id == recv.id
+    ).scalar() or 0
+    payable = db.session.query(func.sum(JournalEntryLine.credit - JournalEntryLine.debit)).filter(
+        JournalEntryLine.contact_id == contact.id, JournalEntryLine.account_id == pay.id
+    ).scalar() or 0
+    return Decimal(str(receivable)) - Decimal(str(payable))
+
+def sync_contact_balance(contact):
+    computed = compute_contact_balance(contact)
+    if abs(computed - Decimal(str(contact.balance or 0))) > Decimal('0.01'):
+        contact.balance = float(computed)
+        return True
+    return False
+
 def validate_national_id_checksum(nid):
     """اعتبارسنجی کد ملی ۱۰ رقمی ایران با الگوریتم چک‌سام"""
     if not nid:
@@ -258,13 +279,6 @@ def add_transaction():
                 db.session.add(new_transaction)
                 db.session.flush()
 
-                # اصلاح باگ: تراز شخص باید بر اساس "مبلغ نهایی فاکتور" تغییر کند
-                if linked_contact and payment_method == 'نسیه':
-                    final_val = (amount_val - discount_val) + vat_val
-                    change = final_val if t_type == 'درآمد' else -final_val
-                    db.session.query(Contact).filter_by(id=linked_contact.id).update({Contact.balance: Contact.balance + change})
-                    db.session.flush()
-
                 if t_type == 'درآمد':
                     AccountingEngine.record_sale(new_transaction, include_vat=True)
                 elif t_type == 'هزینه':
@@ -332,14 +346,6 @@ def delete_tx(id):
     old_jes = JournalEntry.query.filter_by(transaction_id=tx.id).all()
     for old_je in old_jes:
         AccountingEngine.record_reversal_entry(old_je, description=f"ابطال فاکتور شماره {tx.invoice_number or tx.id} - {tx.description}")
-
-    # برگرداندن تراز شخص در صورت نسیه بودن
-    if tx.payment_method == 'نسیه' and tx.contact_id:
-        final_val = (tx.amount - (tx.discount_amount or 0)) + (tx.vat_amount or 0)
-        change = -final_val if tx.t_type == 'درآمد' else final_val
-        db.session.query(Contact).filter_by(id=tx.contact_id).update(
-            {Contact.balance: Contact.balance + change}
-        )
 
     db.session.add(AuditLog(
         user_name=current_user.name,
@@ -488,6 +494,7 @@ def print_cheques():
 @login_required
 def cheques():
     page = request.args.get('page', 1, type=int)
+    open_add = request.args.get('open_add', '0')
     search_q = request.args.get('search', '').strip()
     type_q = request.args.get('type', 'همه')
     status_q = request.args.get('status', 'در جریان')
@@ -520,7 +527,8 @@ def cheques():
                            total_receivable=total_receivable, total_bounced=total_bounced,
                            pending_count=pending_count, cleared_count=cleared_count, bounced_count=bounced_count,
                            urgent_cheques=urgent_cheques, today=today,
-                           current_search=search_q, current_type=type_q, current_status=status_q, current_starred=starred_q)
+                           current_search=search_q, current_type=type_q, current_status=status_q, current_starred=starred_q,
+                           open_add=open_add)
 
 # تابع جدید برای ویرایش چک
 @finance_bp.route('/edit_cheque/<int:id>', methods=['POST'])
@@ -621,7 +629,9 @@ def update_cheque_status(id):
                 Transaction.description.ilike(f"%{desc_pattern}%")
             ).first()
             if old_tx:
-                JournalEntry.query.filter_by(transaction_id=old_tx.id).delete()
+                old_jes = JournalEntry.query.filter_by(transaction_id=old_tx.id).all()
+                for old_je in old_jes:
+                    AccountingEngine.record_reversal_entry(old_je, description=f"برگشت سند تسویه چک {cheque.cheque_number}")
                 db.session.delete(old_tx)
             flash(f"سند حسابداری تسویه چک به دلیل برگشت وضعیت به {new_status} ابطال شد.", "warning")
         except Exception as e:
@@ -667,19 +677,10 @@ def delete_cheque(id):
         Transaction.description.ilike(f"%{desc_pattern}%")
     ).first()
     if old_tx:
-        JournalEntry.query.filter_by(transaction_id=old_tx.id).delete()
+        old_jes = JournalEntry.query.filter_by(transaction_id=old_tx.id).all()
+        for old_je in old_jes:
+            AccountingEngine.record_reversal_entry(old_je, description=f"برگشت سند تسویه چک {cheque.cheque_number}")
         db.session.delete(old_tx)
-
-    # بروزرسانی تراز شخص در صورت وجود
-    if cheque.contact_id:
-        if cheque.cheque_type == 'دریافتی (مشتری)':
-            db.session.query(Contact).filter_by(id=cheque.contact_id).update(
-                {Contact.balance: Contact.balance - cheque.amount}
-            )
-        else:
-            db.session.query(Contact).filter_by(id=cheque.contact_id).update(
-                {Contact.balance: Contact.balance + cheque.amount}
-            )
 
     db.session.add(AuditLog(
         user_name=current_user.name,
@@ -791,24 +792,6 @@ def edit_tx(id):
     tx.discount_amount = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
     tx.vat_amount = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
 
-    # بروزرسانی تراز شخص در صورت تغییر
-    new_final_val = (tx.amount - (tx.discount_amount or 0)) + (tx.vat_amount or 0)
-    contact_id = tx.contact_id or old_contact_id
-
-    if contact_id and (old_payment_method == 'نسیه' or tx.payment_method == 'نسیه'):
-        # برگرداندن اثر قدیمی
-        if old_contact_id and old_payment_method == 'نسیه':
-            old_change = -old_final_val if old_t_type == 'درآمد' else old_final_val
-            db.session.query(Contact).filter_by(id=old_contact_id).update(
-                {Contact.balance: Contact.balance + old_change}
-            )
-        # اعمال اثر جدید
-        if contact_id and tx.payment_method == 'نسیه':
-            new_change = new_final_val if tx.t_type == 'درآمد' else -new_final_val
-            db.session.query(Contact).filter_by(id=contact_id).update(
-                {Contact.balance: Contact.balance + new_change}
-            )
-
     # بروزرسانی میانگین موزون انبار در صورت تغییر فاکتور خرید
     is_inv_purchase = (old_category == 'خرید انبار (خودکار)') or (tx.category == 'خرید انبار (خودکار)')
     if is_inv_purchase and old_amount != tx.amount:
@@ -866,7 +849,7 @@ def edit_tx(id):
 @finance_bp.route('/contacts')
 @login_required
 def contacts():
-    from app.models import Contact
+    from app.models import Contact, Account, JournalEntryLine
     search_q = request.args.get('search', '').strip()
     type_q = request.args.get('type', 'همه')
     page = request.args.get('page', 1, type=int)
@@ -885,8 +868,17 @@ def contacts():
     
     page_size = int(get_setting('page_size', 50))    
     contacts_paginated = query.order_by(Contact.name).paginate(page=page, per_page=page_size, error_out=False)
-    total_debt = db.session.query(func.sum(Contact.balance)).filter(Contact.balance < 0).scalar() or 0
-    total_credit = db.session.query(func.sum(Contact.balance)).filter(Contact.balance > 0).scalar() or 0
+    
+    total_debt = Decimal('0')
+    total_credit = Decimal('0')
+    for c in contacts_paginated.items:
+        bal = compute_contact_balance(c)
+        sync_contact_balance(c)
+        if bal < 0:
+            total_debt -= bal
+        elif bal > 0:
+            total_credit += bal
+    db.session.commit()
     
     return render_template('finance/contacts.html', contacts=contacts_paginated, 
                            total_debt=total_debt, total_credit=total_credit,
@@ -983,6 +975,10 @@ def edit_contact(id):
 @login_required
 def contact_profile(id):
     c = Contact.query.get_or_404(id)
+    computed_balance = compute_contact_balance(c)
+    if abs(Decimal(str(c.balance or 0)) - computed_balance) > Decimal('0.01'):
+        c.balance = float(computed_balance)
+        db.session.commit()
     
     # دریافت پارامترها با اولویت فیلد مخفی (میلادی) و سپس فیلد متنی (شمسی)
     # Explicitly try to parse gregorian first, then jalali
@@ -1044,7 +1040,7 @@ def contact_add_tx(id):
     amount = normalize_amount_to_toman(request.form.get('amount'))
     
     if amount <= 0:
-        flash('خطا: مبلغ وارد شده باید بیشتر از صفر باشد.', 'contact_tx_error')
+        flash('خطا: مبلغ وارد شده باید بیشتر از صفر باشد.', 'danger')
         return redirect(url_for('finance.contact_profile', id=id, _anchor='actions'))
 
     tx_type = request.form.get('tx_type') # پرداخت به شخص (بدهی کم میشود) یا دریافت از شخص
@@ -1053,15 +1049,9 @@ def contact_add_tx(id):
 
     new_tx = None
     if tx_type == 'پرداخت به شخص (تسویه بدهی)':
-        db.session.query(Contact).filter_by(id=c.id).update({Contact.balance: Contact.balance + amount})
-        db.session.flush()
-        db.session.refresh(c) # همگام‌سازی شیء با مقدار جدید دیتابیس
         new_tx = Transaction(t_type='هزینه', category='تسویه حساب اشخاص', amount=amount, party_name=c.name, t_date=t_date, description=f"تسویه بدهی به {c.name}", contact_id=c.id, is_archived=False)
         AccountingEngine.record_contact_settlement(c, amount, "پرداخت وجه", t_date)
     else:
-        db.session.query(Contact).filter_by(id=c.id).update({Contact.balance: Contact.balance - amount})
-        db.session.flush()
-        db.session.refresh(c)
         new_tx = Transaction(t_type='درآمد', category='تسویه حساب اشخاص', amount=amount, party_name=c.name, t_date=t_date, description=f"دریافت مطالبات از {c.name}", contact_id=c.id, is_archived=False)
         AccountingEngine.record_contact_settlement(c, amount, "دریافت وجه", t_date)
         
@@ -1572,25 +1562,13 @@ def export_contact_statement_pdf(id):
 @login_required
 def sync_contact_balances():
     """بررسی و همگام‌سازی تراز اشخاص با دفتر کل (رفع Desync)"""
-    from app.models import Contact, JournalEntryLine
-    from sqlalchemy import func
+    from app.models import Contact
     if current_user.role != 'مدیر':
         flash('فقط مدیر می‌تواند این عملیات را انجام دهد.', 'danger')
         return redirect(url_for('finance.index'))
     fixed = 0
     for c in Contact.query.all():
-        # محاسبه تراز از آرتیکل‌های حسابداری
-        receivable_sum = db.session.query(func.sum(JournalEntryLine.debit - JournalEntryLine.credit)).filter(
-            JournalEntryLine.contact_id == c.id,
-            JournalEntryLine.account_id == Account.query.filter_by(code='1030').first().id
-        ).scalar() or 0
-        payable_sum = db.session.query(func.sum(JournalEntryLine.credit - JournalEntryLine.debit)).filter(
-            JournalEntryLine.contact_id == c.id,
-            JournalEntryLine.account_id == Account.query.filter_by(code='2010').first().id
-        ).scalar() or 0
-        computed_balance = Decimal(str(receivable_sum)) - Decimal(str(payable_sum))
-        if abs(computed_balance - Decimal(str(c.balance or 0))) > Decimal('0.01'):
-            c.balance = computed_balance
+        if sync_contact_balance(c):
             fixed += 1
     db.session.commit()
     flash(f'همگام‌سازی انجام شد. {fixed} مورد عدم تطابق اصلاح شد.', 'success')
@@ -1601,11 +1579,12 @@ def sync_contact_balances():
 def contacts_ledger():
     """گزارش تراز معین اشخاص - تفکیک طلبکاران و بدهکاران بازار"""
     all_contacts = Contact.query.all()
-    debtors = [c for c in all_contacts if c.balance > 0] # کسانی که به ما بدهکارند (طلب ما)
-    creditors = [c for c in all_contacts if c.balance < 0] # کسانی که ما به آنها بدهکاریم
+    computed_balances = {c.id: compute_contact_balance(c) for c in all_contacts}
+    debtors = [c for c in all_contacts if computed_balances.get(c.id, Decimal('0')) > 0]
+    creditors = [c for c in all_contacts if computed_balances.get(c.id, Decimal('0')) < 0]
     
-    total_debtors = sum(c.balance for c in debtors)
-    total_creditors = abs(sum(c.balance for c in creditors))
+    total_debtors = sum(computed_balances.get(c.id, Decimal('0')) for c in debtors)
+    total_creditors = abs(sum(computed_balances.get(c.id, Decimal('0')) for c in creditors))
     
     return render_template('finance/ledger_balance.html', 
                            debtors=debtors, creditors=creditors,

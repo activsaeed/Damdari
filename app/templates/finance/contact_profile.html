@@ -86,7 +86,7 @@
 
                     <div class="table-responsive">
                         <table class="table table-hover align-middle text-center border-top">
-                            <thead class="table-light"><tr><th><input type="checkbox" id="selectAll"></th><th><i class="fa-solid fa-star"></i></th><th>تاریخ</th><th>نوع</th><th>مبلغ ({{ current_currency_unit }})</th><th>شرح و پیگیری</th><th>فایل</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+                            <thead class="table-light"><tr><th><input type="checkbox" id="selectAll"></th><th><i class="fa-solid fa-star"></i></th><th>تاریخ</th><th>نوع</th><th>مبلغ ({{ get_system_currency_from_settings() }})</th><th>شرح و پیگیری</th><th>فایل</th><th>وضعیت</th><th>عملیات</th></tr></thead>
                             <tbody>
                                 {% for t in transactions %}
                                 <tr class="{% if t.t_type == 'درآمد' and c.balance > 0 and 'تسویه' not in t.category %}table-warning bg-opacity-10{% elif t.t_type == 'هزینه' and c.balance < 0 and 'تسویه' not in t.category %}table-warning bg-opacity-10{% endif %}">

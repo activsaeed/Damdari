@@ -136,7 +136,9 @@
                     {% if current_user.can_view_settings or current_user.role == 'مدیر' %}
                     <a href="{{ url_for('dashboard.settings') }}" class="list-group-item list-group-item-action bg-transparent text-white"><i class="fa-solid fa-gear me-2"></i> تنظیمات</a>
                     {% endif %}
+                    {% if current_user.can_view_settings or current_user.role == 'مدیر' %}
                     <a href="{{ url_for('dashboard.audit_logs') }}" class="list-group-item list-group-item-action bg-transparent text-white"><i class="fa-solid fa-user-secret me-2"></i> لاگ امنیت </a>
+                    {% endif %}
                     {% endif %}
             </div>
             
@@ -194,7 +196,8 @@
                 // تبدیل اعداد فارسی به انگلیسی قبل از ارسال فرم
                 const persianToEnglishNumbers = str => str.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
                 $(this).find('input[type="text"], input[type="hidden"]').each(function() {
-                    $(this).val(persianToEnglishNumbers($(this).val()));
+                    var v = $(this).val();
+                    if (v) { $(this).val(persianToEnglishNumbers(v)); }
                 });
             });
         });
