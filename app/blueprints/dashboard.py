@@ -663,11 +663,15 @@ def cleanup_transactions():
     cutoff_date = datetime.now(UTC).date() - timedelta(days=730)
     # تضمین حذف فقط داده‌های غیرحساس و بایگانی شده در یک تراکنش واحد
     with db.session.begin_nested():
-        deleted_count = Transaction.query.filter(
+        tx_ids = db.session.query(Transaction.id).filter(
             Transaction.is_archived == True, 
             Transaction.t_date < cutoff_date, 
             Transaction.is_starred == False
-        ).delete(synchronize_session=False)
+        ).subquery()
+        # حذف اسناد حسابداری مرتبط قبل از حذف فاکتورها
+        from app.models import JournalEntry
+        JournalEntry.query.filter(JournalEntry.transaction_id.in_(tx_ids)).delete(synchronize_session=False)
+        deleted_count = Transaction.query.filter(Transaction.id.in_(tx_ids)).delete(synchronize_session=False)
 
     db.session.commit()
     flash(f'پاکسازی فاکتورهای بایگانی قدیمی (قبل از ۲ سال) انجام شد. {deleted_count} مورد حذف گردید.', 'success')
@@ -698,8 +702,13 @@ def cleanup_removed_sheep():
     cutoff_date = datetime.now(UTC).date() - timedelta(days=730)
     # حذف دام‌های فروخته شده قدیمی (تاریخ فروش ملاک است)
     sold_deleted = Sheep.query.filter(Sheep.status == 'فروخته شده', Sheep.sale_date < cutoff_date).delete()
-    # توجه: دام‌های تلف شده فیلد تاریخ خروج ندارند، لذا بر اساس entry_date حذف میشوند
-    dead_deleted = Sheep.query.filter(Sheep.status.in_(['تلف شده', 'مرده']), Sheep.entry_date < cutoff_date).delete()
+    # هشدار: دام‌های تلف شده فیلد تاریخ تلف شدن ندارند، فقط در صورتی حذف می‌شوند که entry_date بسیار قدیمی باشد
+    dead_deleted = Sheep.query.filter(
+        Sheep.status.in_(['تلف شده', 'مرده']),
+        Sheep.death_reason.isnot(None),
+        Sheep.sale_date.is_(None),
+        Sheep.entry_date < cutoff_date
+    ).delete()
     
     db.session.commit()
     flash(f'پاکسازی انجام شد. {sold_deleted + dead_deleted} شناسنامه قدیمی از سیستم حذف گردید.', 'success')
@@ -828,12 +837,14 @@ def audit_logs():
     if not current_user.can_view_settings and current_user.role != 'مدیر': 
         return redirect(url_for('dashboard.index'))
     
+    page = request.args.get('page', 1, type=int)
     target = request.args.get('filter_target')
     query = AuditLog.query
     if target:
         query = query.filter(AuditLog.action.ilike(f"%{target}%"))
-        
-    logs = query.order_by(AuditLog.timestamp.desc()).limit(200).all()
+    
+    page_size = int(get_setting('page_size', 50))    
+    logs = query.order_by(AuditLog.timestamp.desc()).paginate(page=page, per_page=page_size, error_out=False)
     return render_template('dashboard/audit.html', logs=logs)
 
 @dashboard_bp.route('/maintenance/cleanup_logs', methods=['POST'])

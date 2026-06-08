@@ -91,6 +91,7 @@ class Sheep(db.Model):
     father_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
     feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id', ondelete='SET NULL'), nullable=True, index=True)
     pen_id = db.Column(db.Integer, db.ForeignKey('pen.id', ondelete='SET NULL'), nullable=True, index=True)
+    is_deleted = db.Column(db.Boolean, default=False)
     
     ration = db.relationship('FeedRation', backref='sheep_list')
     weight_records = db.relationship('WeightRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
@@ -281,6 +282,7 @@ class Cheque(db.Model):
     is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن چک
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_deleted = db.Column(db.Boolean, default=False)
 
 # ==========================================
 # سیستم پیشرفته منابع انسانی (HR) و پرسنل بر اساس قانون کار
@@ -307,7 +309,8 @@ class Worker(db.Model):
     
     insurance_status = db.Column(db.String(50), default='بدون بیمه')
     status = db.Column(db.String(50), default='فعال') 
-    assigned_pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=True) 
+    assigned_pen_id = db.Column(db.Integer, db.ForeignKey('pen.id'), nullable=True)
+    is_deleted = db.Column(db.Boolean, default=False) 
     
     tasks = db.relationship('Task', backref='worker', lazy=True, cascade="all, delete-orphan")
     events = db.relationship('WorkerEvent', backref='worker', lazy=True, cascade="all, delete-orphan") 

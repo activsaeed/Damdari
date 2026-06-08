@@ -5,7 +5,7 @@
     <h2><i class="fa-solid fa-file-invoice-dollar text-success"></i> پرونده فاکتور / تراکنش</h2>
     <div>
         <a href="javascript:history.back()" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به لیست</a>
-        <button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editTxModal"><i class="fa-solid fa-pen"></i> ویرایش فاکتور</button>
+        {% if not t.is_archived and not t.is_deleted %}<button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editTxModal"><i class="fa-solid fa-pen"></i> ویرایش فاکتور</button>{% endif %}
     </div>
 </div>
 

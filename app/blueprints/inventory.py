@@ -2,9 +2,9 @@ from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from app import db
-from app.models import InventoryItem, InventoryLog, Transaction, Unit, InventoryCategory
+from app.models import InventoryItem, InventoryLog, Transaction, Unit, InventoryCategory, AuditLog
 from datetime import datetime, timedelta, UTC
-from app.blueprints.finance import permission_required
+from app.blueprints.finance import permission_required, parse_smart_date
 
 inventory_bp = Blueprint('inventory', __name__)
 
@@ -51,7 +51,7 @@ def add_item():
         db.session.flush()
 
     exp_date_str = request.form.get('expiry_date')
-    exp_date = datetime.strptime(exp_date_str, '%Y-%m-%d').date() if exp_date_str else None
+    exp_date = parse_smart_date(exp_date_str)
 
     new_item = InventoryItem(
         name=name, 
@@ -63,6 +63,9 @@ def add_item():
         expiry_date=exp_date # ذخیره تاریخ انقضا
     )
     db.session.add(new_item)
+    db.session.commit()
+    log = AuditLog(user_name=current_user.name, action=f"ثبت کالای جدید: {new_item.name}", timestamp=datetime.now(UTC))
+    db.session.add(log)
     db.session.commit()
     flash('کالای جدید به انبار اضافه شد.', 'success')
     return redirect(url_for('inventory.index'))
@@ -88,8 +91,11 @@ def edit_item(id):
     item.description = request.form.get('description')
     
     exp_date_str = request.form.get('expiry_date')
-    item.expiry_date = datetime.strptime(exp_date_str, '%Y-%m-%d').date() if exp_date_str else None
+    item.expiry_date = parse_smart_date(exp_date_str)
     
+    db.session.commit()
+    log = AuditLog(user_name=current_user.name, action=f"ویرایش کالا: {item.name}", timestamp=datetime.now(UTC))
+    db.session.add(log)
     db.session.commit()
     flash('مشخصات کالا با موفقیت ویرایش شد.', 'info')
     return redirect(url_for('inventory.index'))
@@ -162,6 +168,9 @@ def transaction():
             return redirect(url_for('inventory.index'))
         
     db.session.add(InventoryLog(item_id=item_id, action_type=action_type, amount=amount, transaction_price=transaction_price, notes=notes))
+    db.session.commit()
+    log = AuditLog(user_name=current_user.name, action=f"انبار: {action_type} {amount} {item.unit.name if item.unit else ''} {item.name}", timestamp=datetime.now(UTC))
+    db.session.add(log)
     db.session.commit()
     return redirect(url_for('inventory.index'))
 

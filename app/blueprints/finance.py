@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app import db
-from app.models import Transaction, TransactionCategory, TransactionDocument, Cheque, Contact, ContactDocument, SensorData, Sheep, WeightRecord
+from app.models import Transaction, TransactionCategory, TransactionDocument, Cheque, Contact, ContactDocument, SensorData, Sheep, WeightRecord, AuditLog
 from sqlalchemy import func, case
 from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
@@ -160,11 +160,11 @@ def add_transaction():
         t_type = request.form.get('t_type')
         if t_type not in ['درآمد', 'هزینه']:
             flash('نوع تراکنش نامعتبر است.', 'danger')
-            return redirect(request.referrer)
+            return redirect(url_for('finance.index'))
         category_name = request.form.get('category')
         if not category_name or not category_name.strip():
             flash('دسته‌بندی تراکنش الزامی است.', 'danger')
-            return redirect(request.referrer)
+            return redirect(url_for('finance.index'))
         category_name = category_name.strip()
         raw_amount = request.form.get('amount', '0')
         invoice_number = request.form.get('invoice_number')
@@ -191,6 +191,10 @@ def add_transaction():
         # --- منطق هوشمند اتصال یا ساخت حساب شخص ---
         linked_contact = None        
         amount_val = normalize_amount_to_toman(raw_amount) # <--- تبدیل امن
+
+        if amount_val <= 0:
+            flash('خطا: مبلغ تراکنش باید بیشتر از صفر باشد.', 'danger')
+            return redirect(url_for('finance.index'))
 
         try:
             if contact_id:
@@ -243,6 +247,11 @@ def add_transaction():
                 unique_filename = f"{int(time.time())}_{filename}"
                 doc.save(os.path.join(upload_folder, unique_filename))
                 db.session.add(TransactionDocument(transaction_id=new_transaction.id, file_path=f"uploads/documents/{unique_filename}"))
+        db.session.add(AuditLog(
+            user_name=current_user.name,
+            action=f"ثبت فاکتور {'درآمد' if t_type == 'درآمد' else 'هزینه'} شماره {invoice_number or 'بدون شماره'} - مبلغ {amount_val}",
+            ip_address=request.remote_addr
+        ))
         db.session.commit()
         flash('فاکتور با موفقیت ثبت شد.', 'success')
         return redirect(url_for('finance.index'))
@@ -273,11 +282,30 @@ def archive_tx(id):
 @finance_bp.route('/delete_tx/<int:id>', methods=['POST'])
 @login_required
 def delete_tx(id):
+    from app.models import AuditLog, JournalEntry
+
     tx = Transaction.query.get_or_404(id)
-    tx.is_deleted = True # جایگزینی حذف فیزیکی
+    tx.is_deleted = True
+
+    # حذف سند حسابداری مرتبط (جلوگیری از Desync ترازنامه)
+    JournalEntry.query.filter_by(transaction_id=tx.id).delete()
+
+    # برگرداندن تراز شخص در صورت نسیه بودن
+    if tx.payment_method == 'نسیه' and tx.contact_id:
+        final_val = (tx.amount - (tx.discount_amount or 0)) + (tx.vat_amount or 0)
+        change = -final_val if tx.t_type == 'درآمد' else final_val
+        db.session.query(Contact).filter_by(id=tx.contact_id).update(
+            {Contact.balance: Contact.balance + change}
+        )
+
+    db.session.add(AuditLog(
+        user_name=current_user.name,
+        action=f"ابطال فاکتور {tx.invoice_number or 'بدون شماره'} - مبلغ {tx.amount} - {tx.description or ''}",
+        ip_address=request.remote_addr
+    ))
     db.session.commit()
-    flash('فاکتور ابطال شد. سند از محاسبات خارج شد اما در تاریخچه باقی ماند.', 'warning')
-    return redirect(request.referrer)
+    flash('فاکتور ابطال شد. سند حسابداری و ترازنامه تصحیح شد.', 'warning')
+    return redirect(request.referrer or url_for('finance.index'))
 
 @finance_bp.route('/export_tx')
 @login_required
@@ -458,8 +486,11 @@ def edit_cheque(id):
     c = Cheque.query.get_or_404(id)
     c.cheque_type = request.form.get('cheque_type')
     c.cheque_number = request.form.get('cheque_number')
-    c.amount = float(request.form.get('amount') or 0)
-    c.due_date = parse_smart_date(request.form.get('due_date')) # رفع خطای تاریخ
+    c.amount = normalize_amount_to_toman(request.form.get('amount'))
+    if c.amount <= 0:
+        flash('خطا: مبلغ چک باید بیشتر از صفر باشد.', 'danger')
+        return redirect(url_for('finance.cheques'))
+    c.due_date = parse_smart_date(request.form.get('due_date'))
     c.bank_name = request.form.get('bank_name')
     c.issuer_name = request.form.get('issuer_name')
     c.issuer_national_id = request.form.get('issuer_national_id')
@@ -477,7 +508,12 @@ def edit_cheque(id):
 def add_cheque():
     if request.method == 'GET':
         return redirect(url_for('finance.cheques'))
-    due_date = parse_smart_date(request.form.get('due_date')) # رفع خطای تاریخ
+    due_date = parse_smart_date(request.form.get('due_date'))
+    amount = normalize_amount_to_toman(request.form.get('amount'))
+
+    if amount <= 0:
+        flash('خطا: مبلغ چک باید بیشتر از صفر باشد.', 'danger')
+        return redirect(url_for('finance.cheques'))
     
     image_path = None    
     photo = request.files.get('image')
@@ -490,7 +526,7 @@ def add_cheque():
 
     new_cheque = Cheque(
         cheque_type=request.form.get('cheque_type'), cheque_number=request.form.get('cheque_number'),        
-        amount=normalize_amount_to_toman(request.form.get('amount')), due_date=due_date, bank_name=request.form.get('bank_name'),
+        amount=amount, due_date=due_date, bank_name=request.form.get('bank_name'),
         issuer_name=request.form.get('issuer_name'), issuer_national_id=request.form.get('issuer_national_id'),
         registered_to=request.form.get('registered_to'), registrar_national_id=request.form.get('registrar_national_id'),
         reason=request.form.get('reason'), notes=request.form.get('notes'), image_path=image_path
@@ -511,10 +547,28 @@ def toggle_star_cheque(id):
 @finance_bp.route('/update_cheque_status/<int:id>', methods=['POST'])
 @login_required
 def update_cheque_status(id):
+    from app.models import JournalEntry, AuditLog
     cheque = Cheque.query.get_or_404(id)
     new_status = request.form.get('status')
+    old_status = cheque.status
     cheque.status = new_status
-    
+
+    # اگر از حالت 'پاس شده' به وضعیت دیگر برگشت، سند حسابداری و تراکنش را برمی‌گردانیم
+    if old_status == 'پاس شده' and new_status != 'پاس شده':
+        try:
+            desc_pattern = f"تسویه چک {cheque.cheque_number}"
+            old_tx = Transaction.query.filter(
+                Transaction.description.ilike(f"%{desc_pattern}%")
+            ).first()
+            if old_tx:
+                JournalEntry.query.filter_by(transaction_id=old_tx.id).delete()
+                db.session.delete(old_tx)
+            flash(f"سند حسابداری تسویه چک به دلیل برگشت وضعیت به {new_status} ابطال شد.", "warning")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"خطا در ابطال سند قبلی: {str(e)}", "danger")
+            return redirect(request.referrer)
+
     if new_status == 'پاس شده':
         try:
             AccountingEngine.record_cheque_clearing(cheque)
@@ -527,23 +581,53 @@ def update_cheque_status(id):
                 t_date=datetime.now(UTC).date(), invoice_number=cheque.cheque_number,
                 description=f"تسویه چک {cheque.cheque_number} بابت {cheque.reason}", party_name=cheque.issuer_name
             ))
-            db.session.commit()
             flash(f"چک با موفقیت پاس شد و سند حسابداری جابجایی وجه در دفتر کل صادر گردید.", "success")
         except Exception as e:
             db.session.rollback()
             flash(f"خطا در ثبت سند حسابداری تسویه: {str(e)}", "danger")
-    else:
-        flash(f"وضعیت چک به {new_status} تغییر یافت.", "warning")
-        
+
+    db.session.add(AuditLog(
+        user_name=current_user.name,
+        action=f"تغییر وضعیت چک {cheque.cheque_number}: {old_status} → {new_status}",
+        ip_address=request.remote_addr
+    ))
+    db.session.commit()
     return redirect(request.referrer)
 
 @finance_bp.route('/delete_cheque/<int:id>', methods=['POST'])
 @login_required
 def delete_cheque(id):
+    from app.models import AuditLog, JournalEntry
     cheque = Cheque.query.get_or_404(id)
-    db.session.delete(cheque)
+    cheque.is_deleted = True
+
+    # ابطال سند حسابداری تسویه چک در صورت وجود
+    desc_pattern = f"تسویه چک {cheque.cheque_number}"
+    old_tx = Transaction.query.filter(
+        Transaction.description.ilike(f"%{desc_pattern}%")
+    ).first()
+    if old_tx:
+        JournalEntry.query.filter_by(transaction_id=old_tx.id).delete()
+        db.session.delete(old_tx)
+
+    # بروزرسانی تراز شخص در صورت وجود
+    if cheque.contact_id:
+        if cheque.cheque_type == 'دریافتی (مشتری)':
+            db.session.query(Contact).filter_by(id=cheque.contact_id).update(
+                {Contact.balance: Contact.balance - cheque.amount}
+            )
+        else:
+            db.session.query(Contact).filter_by(id=cheque.contact_id).update(
+                {Contact.balance: Contact.balance + cheque.amount}
+            )
+
+    db.session.add(AuditLog(
+        user_name=current_user.name,
+        action=f"حذف (ابطال) چک شماره {cheque.cheque_number} - مبلغ {cheque.amount} - {cheque.reason or ''}",
+        ip_address=request.remote_addr
+    ))
     db.session.commit()
-    flash('چک به طور کامل حذف شد.', 'danger')
+    flash('چک با موفقیت ابطال شد و از محاسبات حذف گردید.', 'warning')
     return redirect(url_for('finance.cheques'))
 
 
@@ -554,8 +638,10 @@ def delete_cheque(id):
 @login_required
 def petty_cash():
     from app.models import PettyCash, Worker
+    page = request.args.get('page', 1, type=int)
     workers = Worker.query.all()
-    records = PettyCash.query.order_by(PettyCash.record_date.desc(), PettyCash.id.desc()).all()
+    page_size = int(get_setting('page_size', 50))
+    records = PettyCash.query.order_by(PettyCash.record_date.desc(), PettyCash.id.desc()).paginate(page=page, per_page=page_size, error_out=False)
     
     # محاسبه موجودی تنخواه هر کارگر
     worker_balances = {}
@@ -593,6 +679,11 @@ def add_petty_cash():
             description=f"خرید توسط تنخواه‌دار: {description}"
         ))
         
+    db.session.add(AuditLog(
+        user_name=current_user.name,
+        action=f"تنخواه: {action_type} مبلغ {amount} - {description or ''}",
+        ip_address=request.remote_addr
+    ))
     db.session.commit()
     flash(f"تراکنش تنخواه با موفقیت ثبت شد.", "success")
     return redirect(url_for('finance.petty_cash'))
@@ -617,9 +708,16 @@ def edit_tx(id):
     import time
     
     tx = Transaction.query.get_or_404(id)
+
+    # ذخیره مقادیر قدیمی برای بروزرسانی تراز شخص
+    old_contact_id = tx.contact_id
+    old_payment_method = tx.payment_method
+    old_final_val = (tx.amount - (tx.discount_amount or 0)) + (tx.vat_amount or 0)
+    old_t_type = tx.t_type
+
     tx.t_type = request.form.get('t_type')
     tx.category = request.form.get('category')    
-    tx.amount = normalize_amount_to_toman(request.form.get('amount')) # اینجا مبلغ بدون کاما که از هیدن فیلد میاد دریافت میشه
+    tx.amount = normalize_amount_to_toman(request.form.get('amount'))
     tx.t_date = parse_smart_date(request.form.get('t_date'))
     tx.invoice_number = request.form.get('invoice_number')
     tx.party_name = request.form.get('party_name')
@@ -629,7 +727,37 @@ def edit_tx(id):
     tx.due_date = parse_smart_date(request.form.get('due_date'))
     tx.discount_amount = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
     tx.vat_amount = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
-    
+
+    # بروزرسانی تراز شخص در صورت تغییر
+    new_final_val = (tx.amount - (tx.discount_amount or 0)) + (tx.vat_amount or 0)
+    contact_id = tx.contact_id or old_contact_id
+
+    if contact_id and (old_payment_method == 'نسیه' or tx.payment_method == 'نسیه'):
+        # برگرداندن اثر قدیمی
+        if old_contact_id and old_payment_method == 'نسیه':
+            old_change = -old_final_val if old_t_type == 'درآمد' else old_final_val
+            db.session.query(Contact).filter_by(id=old_contact_id).update(
+                {Contact.balance: Contact.balance + old_change}
+            )
+        # اعمال اثر جدید
+        if contact_id and tx.payment_method == 'نسیه':
+            new_change = new_final_val if tx.t_type == 'درآمد' else -new_final_val
+            db.session.query(Contact).filter_by(id=contact_id).update(
+                {Contact.balance: Contact.balance + new_change}
+            )
+
+    # حذف سند حسابداری قدیمی و بازسازی با اطلاعات جدید (رفع Desync ترازنامه)
+    from app.models import JournalEntry
+    JournalEntry.query.filter_by(transaction_id=tx.id).delete()
+    db.session.flush()
+    try:
+        if tx.t_type == 'درآمد':
+            AccountingEngine.record_sale(tx, include_vat=True)
+        else:
+            AccountingEngine.record_expense(tx, include_vat=True)
+    except Exception as e:
+        flash(f'خطا در بازسازی سند حسابداری: {str(e)}', 'warning')
+
     # افزودن عکس جدید به فاکتور قبلی
     documents = request.files.getlist('documents')
     upload_folder = os.path.join('app', 'static', 'uploads', 'documents')
@@ -654,6 +782,7 @@ def contacts():
     from app.models import Contact
     search_q = request.args.get('search', '').strip()
     type_q = request.args.get('type', 'همه')
+    page = request.args.get('page', 1, type=int)
     
     query = Contact.query
     
@@ -666,12 +795,13 @@ def contacts():
     
     if type_q != 'همه':
         query = query.filter(Contact.contact_type == type_q)
-        
-    all_contacts = query.order_by(Contact.name).all()
+    
+    page_size = int(get_setting('page_size', 50))    
+    contacts_paginated = query.order_by(Contact.name).paginate(page=page, per_page=page_size, error_out=False)
     total_debt = db.session.query(func.sum(Contact.balance)).filter(Contact.balance < 0).scalar() or 0
     total_credit = db.session.query(func.sum(Contact.balance)).filter(Contact.balance > 0).scalar() or 0
     
-    return render_template('finance/contacts.html', contacts=all_contacts, 
+    return render_template('finance/contacts.html', contacts=contacts_paginated, 
                            total_debt=total_debt, total_credit=total_credit,
                            current_search=search_q, current_type=type_q)
 
@@ -679,7 +809,11 @@ def contacts():
 @login_required
 def add_contact():
     from app.models import Contact
-    init_balance = float(request.form.get('balance') or 0)
+    try:
+        init_balance = float(request.form.get('balance') or 0)
+    except (ValueError, TypeError):
+        flash('خطا: مبلغ تراز اولیه نامعتبر است.', 'danger')
+        return redirect(url_for('finance.contacts'))
     b_type = request.form.get('balance_type')
     bank_card = str(request.form.get('bank_card', '')).replace(' ', '').strip()
     economic_code = str(request.form.get('economic_code', '')).strip()
@@ -990,16 +1124,16 @@ def tax_management():
     from app.models import Account, JournalEntryLine, Transaction
     from sqlalchemy import func
     
-    # 1. محاسبه مالیات پرداختنی (فروش ما به مشتریان) - کد حساب 2103
-    vat_payable_acc = Account.query.filter_by(code='2103').first()
+    # 1. محاسبه مالیات پرداختنی (فروش ما به مشتریان) - کد حساب 2030
+    vat_payable_acc = Account.query.filter_by(code='2030').first()
     vat_payable = 0
     if vat_payable_acc:
         credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=vat_payable_acc.id).scalar() or 0.0
         debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=vat_payable_acc.id).scalar() or 0.0
         vat_payable = credits - debits # ماهیت بستانکار
         
-    # 2. محاسبه اعتبار مالیاتی (خریدهای ما از تامین کنندگان) - کد حساب 1104
-    vat_receivable_acc = Account.query.filter_by(code='1104').first()
+    # 2. محاسبه اعتبار مالیاتی (خریدهای ما از تامین کنندگان) - کد حساب 1040
+    vat_receivable_acc = Account.query.filter_by(code='1040').first()
     vat_receivable = 0
     if vat_receivable_acc:
         debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=vat_receivable_acc.id).scalar() or 0.0

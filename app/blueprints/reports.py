@@ -624,7 +624,7 @@ def api_sales_data():
             'profit': profit,
             'gender': s.gender,
             'breed': s.breed or 'نامشخص',
-            'buyer_type': s.buyer_type or 'نامشخص'
+            'buyer_type': s.buyer_category.name if s.buyer_category else 'نامشخص'
         })
     data.sort(key=lambda x: x['timestamp'])
     return jsonify(data)

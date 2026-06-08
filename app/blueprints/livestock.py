@@ -4,9 +4,10 @@ from werkzeug.utils import secure_filename
 from app import db
 from sqlalchemy import func, case
 from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog
-from datetime import datetime, timedelta, UTC # استفاده از UTC برای دقت بیشتر
+from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
 import qrcode
+import jdatetime
 import os
 import csv
 import io
@@ -17,6 +18,23 @@ from flask_login import current_user, login_required
 from app.blueprints.dashboard import get_setting
 
 livestock_bp = Blueprint('livestock', __name__)
+
+def parse_smart_date(date_str, default=None):
+    """پشتیبانی از تاریخ شمسی و میلادی در بک‌اند (مستقل از JS فرانت)"""
+    if not date_str or str(date_str).strip() in ['', 'None']:
+        return default
+    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
+    arabic_digits = '٠١٢٣٤٥٦٧٨٩'
+    english_digits = '0123456789'
+    translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
+    date_str = str(date_str).translate(translation_table).replace('/', '-').strip()
+    try:
+        if date_str.startswith(('13', '14')):
+            p = date_str.split('-')
+            return jdatetime.date(int(p[0]), int(p[1]), int(p[2])).togregorian()
+        return datetime.strptime(date_str[:10], '%Y-%m-%d').date()
+    except Exception:
+        return default
 
 def log_audit(action):
     try:
@@ -34,10 +52,16 @@ def index():
     today = datetime.now(UTC).date()
     maturity_days = int(get_setting('maturity_days', 240))
     maturity_date = today - timedelta(days=maturity_days)
-    lambs_to_update = Sheep.query.filter(Sheep.gender.like('%بره%'), Sheep.birth_date <= maturity_date).all()
+    lambs_to_update = Sheep.query.filter(
+        Sheep.gender.in_(['بره ماده', 'بره نر', 'نامشخص']),
+        Sheep.birth_date <= maturity_date
+    ).all()
     if lambs_to_update:
         for lamb in lambs_to_update:
-            lamb.gender = 'میش' if 'ماده' in lamb.gender else 'قوچ'
+            if 'ماده' in lamb.gender:
+                lamb.gender = 'میش'
+            else:
+                lamb.gender = 'قوچ'
         db.session.commit()
     
     rations = FeedRation.query.all()
@@ -190,7 +214,7 @@ def bulk_action():
                     bulk_sale_price = request.form.get('bulk_sale_price', '0').replace(',', '').strip()
                     bulk_sale_date = request.form.get('bulk_sale_date')
                     sale_price = Decimal(bulk_sale_price) if bulk_sale_price else Decimal('0')
-                    sale_date = datetime.strptime(bulk_sale_date, '%Y-%m-%d').date() if bulk_sale_date else datetime.now(UTC).date()
+                    sale_date = parse_smart_date(bulk_sale_date, datetime.now(UTC).date())
 
                     selected_sheeps = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
                     transaction_count = 0
@@ -258,7 +282,7 @@ def add_sheep():
             ear_tag=ear_tag, breed=request.form.get('breed'), gender=request.form.get('gender'), 
             weight=weight, purpose=request.form.get('purpose'), status=request.form.get('status'),
             feed_ration_id=request.form.get('feed_ration_id') or None, pen_id=request.form.get('pen_id') or None, 
-            birth_date=datetime.strptime(b_date_str, '%Y-%m-%d').date() if b_date_str else None,
+            birth_date=parse_smart_date(b_date_str),
             qr_code_path=qr_path, purchase_price=Decimal(purchase_price or '0')
         )
         db.session.add(new_sheep)
@@ -376,7 +400,7 @@ def edit_sheep(id):
     sheep.target_weight = Decimal(t_weight) if t_weight else None
     
     heat_str = request.form.get('last_heat_date')
-    sheep.last_heat_date = datetime.strptime(heat_str, '%Y-%m-%d').date() if heat_str else None
+    sheep.last_heat_date = parse_smart_date(heat_str)
 
     with db.session.begin_nested():
         # منطق ثبت خودکار فاکتور فروش در دفتر کل
@@ -389,7 +413,7 @@ def edit_sheep(id):
 
             s_date_str = request.form.get('sale_date')
             try:
-                sheep.sale_date = datetime.strptime(s_date_str, '%Y-%m-%d').date() if s_date_str else datetime.now(UTC).date()
+                sheep.sale_date = parse_smart_date(s_date_str, datetime.now(UTC).date())
             except ValueError:
                 sheep.sale_date = datetime.now(UTC).date()
 
@@ -460,7 +484,7 @@ def add_weight(id):
     sheep = Sheep.query.get_or_404(id)
     new_weight = float(request.form.get('weight'))
     date_str = request.form.get('record_date')
-    r_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.now(UTC).date()
+    r_date = parse_smart_date(date_str, datetime.now(UTC).date())
     
     # دریافت نمره BCS
     bcs_val = request.form.get('bcs')
@@ -479,9 +503,9 @@ def add_weight(id):
 @livestock_bp.route('/add_medical/<int:id>', methods=['POST'])
 @login_required
 def add_medical(id):
-    r_date = datetime.strptime(request.form.get('record_date'), '%Y-%m-%d').date() if request.form.get('record_date') else datetime.now(UTC).date()
-    n_date = datetime.strptime(request.form.get('next_date'), '%Y-%m-%d').date() if request.form.get('next_date') else None
-    w_date = datetime.strptime(request.form.get('withdrawal_end_date'), '%Y-%m-%d').date() if request.form.get('withdrawal_end_date') else None
+    r_date = parse_smart_date(request.form.get('record_date'), datetime.now(UTC).date())
+    n_date = parse_smart_date(request.form.get('next_date'))
+    w_date = parse_smart_date(request.form.get('withdrawal_end_date'))
     
     action_type = request.form.get('action_type', 'درمان') 
     record = MedicalRecord(
@@ -507,7 +531,7 @@ def add_medical(id):
 @livestock_bp.route('/add_birth/<int:id>', methods=['POST'])
 @login_required
 def add_birth(id):
-    r_date = datetime.strptime(request.form.get('record_date'), '%Y-%m-%d').date() if request.form.get('record_date') else datetime.utcnow().date()
+    r_date = parse_smart_date(request.form.get('record_date'), datetime.now(UTC).date())
     father_id = request.form.get('father_id')
     lambs_count = int(request.form.get('lambs_count', 1))
     status = request.form.get('status', 'موفق')
@@ -528,8 +552,10 @@ def add_birth(id):
 @login_required
 def delete_sheep(id):
     sheep = Sheep.query.get_or_404(id)
-    db.session.delete(sheep)
+    sheep.is_deleted = True
+    sheep.status = 'حذف شده'
     db.session.commit()
+    flash(f'دام پلاک {sheep.ear_tag} از لیست خارج شد.', 'warning')
     return redirect(url_for('livestock.index'))
 
 @livestock_bp.route('/vet_queue')
@@ -604,7 +630,12 @@ def toggle_star(id):
 def public_passport(ear_tag):
     sheep = Sheep.query.filter_by(ear_tag=ear_tag).first_or_404()
     from app.models import SystemSetting
-    settings = {s.key: s.value for s in SystemSetting.query.all()}
+    # فقط تنظیمات غیرحساس برای نمایش عمومی
+    safe_keys = ['farm_name', 'farm_logo_path', 'currency_unit']
+    safe_settings = {}
+    for key in safe_keys:
+        s = SystemSetting.query.filter_by(key=key).first()
+        if s: safe_settings[key] = s.value
     
     # محاسبه سن
     age = "نامشخص"
@@ -612,7 +643,7 @@ def public_passport(ear_tag):
         age_days = (datetime.now(UTC).date() - sheep.birth_date).days
         age = f"{age_days // 30} ماه"
         
-    return render_template('livestock/passport.html', sheep=sheep, age=age, settings=settings)
+    return render_template('livestock/passport.html', sheep=sheep, age=age, settings=safe_settings)
 
 
 # ==========================================

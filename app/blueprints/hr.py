@@ -13,6 +13,15 @@ import jdatetime
 
 hr_bp = Blueprint('hr', __name__)
 
+def validate_national_id(nid):
+    """اعتبارسنجی ساختار کد ملی ۱۰ رقمی ایرانی"""
+    if not nid:
+        return True
+    nid = str(nid).replace(' ', '').strip()
+    if not nid.isdigit() or len(nid) != 10:
+        return False
+    return True
+
 def send_to_telegram(message):
     from app.models import TelegramBot
     bot = TelegramBot.query.filter_by(is_active=True).first()
@@ -81,6 +90,10 @@ def add_worker():
     from app.models import Worker, WorkerDocument, WorkerEvent
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
     w_code = request.form.get('worker_code') or f"PR-{random.randint(1000,9999)}"
+
+    if not validate_national_id(request.form.get('national_id')):
+        flash('خطا: کد ملی وارد شده معتبر نیست (باید ۱۰ رقم باشد).', 'danger')
+        return redirect(url_for('hr.index'))
     
     new_worker = Worker(
         worker_code=w_code,
@@ -118,6 +131,9 @@ def add_worker():
             
     db.session.add(WorkerEvent(worker_id=new_worker.id, event_type="استخدام", event_date=new_worker.start_date, description=f"شروع به کار با سمت {new_worker.role}"))
     db.session.commit()
+    from app.models import AuditLog
+    db.session.add(AuditLog(user_name=current_user.name, action=f"ثبت پرسنل جدید: {new_worker.name} ({new_worker.worker_code})", timestamp=datetime.now(UTC)))
+    db.session.commit()
     
     flash('پرسنل جدید به همراه مدارک با موفقیت ثبت شد.', 'success')
     return redirect(url_for('hr.index'))
@@ -142,6 +158,9 @@ def profile(id):
 def edit_worker(id):
     from app.models import Worker, WorkerDocument
     w = Worker.query.get_or_404(id)
+    if not validate_national_id(request.form.get('national_id')):
+        flash('خطا: کد ملی وارد شده معتبر نیست (باید ۱۰ رقم باشد).', 'danger')
+        return redirect(url_for('hr.profile', id=id))
     w.name = request.form.get('name')
     w.national_id = request.form.get('national_id')
     w.phone = request.form.get('phone')
@@ -170,6 +189,9 @@ def edit_worker(id):
             db.session.add(WorkerDocument(worker_id=w.id, doc_title="مدرک پرسنلی (افزوده شده)", file_path=f"uploads/hr/{filename}"))
 
     db.session.commit()
+    from app.models import AuditLog
+    db.session.add(AuditLog(user_name=current_user.name, action=f"ویرایش پرسنل: {w.name} ({w.worker_code})", timestamp=datetime.now(UTC)))
+    db.session.commit()
     flash('اطلاعات و مدارک پرسنل ویرایش شد.', 'success')
     return redirect(url_for('hr.profile', id=id))
 
@@ -195,6 +217,10 @@ def add_loan(id):
     db.session.add(WorkerEvent(worker_id=id, event_type="مالی", event_date=i_date, description=f"پرداخت {loan_type} به مبلغ {amount:,.0f} تومان."))
     db.session.add(Transaction(t_type='هزینه', category=f"پرداخت {loan_type} پرسنل", amount=amount, t_date=i_date, description=f"پرداخت {loan_type} به پرسنل ({request.form.get('description')})"))
     db.session.commit()
+    from app.models import AuditLog
+    worker = Worker.query.get(id)
+    db.session.add(AuditLog(user_name=current_user.name, action=f"ثبت وام {loan_type} {amount:,.0f} تومان برای {worker.name if worker else 'نامشخص'}", timestamp=datetime.now(UTC)))
+    db.session.commit()
     flash(f'{loan_type} ثبت و در دفتر کل حسابداری لحاظ شد.', 'success')
     return redirect(url_for('hr.profile', id=id))
 
@@ -213,9 +239,10 @@ def delete_worker(id):
     from app.models import Worker
     if current_user.role != 'مدیر': return redirect(url_for('hr.index'))
     w = Worker.query.get_or_404(id)
-    db.session.delete(w)
+    w.is_deleted = True
+    w.status = 'حذف شده'
     db.session.commit()
-    flash('پرسنل و تمام سوابق وی حذف شد.', 'danger')
+    flash('پرسنل از لیست خارج شد (سوابق حفظ شد).', 'warning')
     return redirect(url_for('hr.index'))
 
 @hr_bp.route('/add_task', methods=['POST'])
@@ -343,6 +370,9 @@ def generate_payslip():
         # صدور همزمان سند حسابداری در دفتر کل
         AccountingEngine.record_payroll(new_payslip)
 
+    db.session.commit()
+    from app.models import AuditLog
+    db.session.add(AuditLog(user_name=current_user.name, action=f"صدور فیش حقوقی {worker.name} بابت {month_name}", timestamp=datetime.now(UTC)))
     db.session.commit()
     flash(f"فیش حقوقی {worker.name} صادر و سند مالی ثبت شد.", "success")
     return redirect(url_for('hr.payslips'))
