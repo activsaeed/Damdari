@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-journal-whills text-primary"></i> دفتر روزنامه (اسناد حسابداری)</h2>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>شماره سند</th>
+                        <th>تاریخ</th>
+                        <th>شرح</th>
+                        <th>تعداد آرتیکل</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in entries.items %}
+                    <tr>
+                        <td class="fw-bold text-primary"><small>{{ e.entry_number }}</small></td>
+                        <td dir="ltr"><small>{{ e.date.strftime('%Y-%m-%d') }}</small></td>
+                        <td class="text-start">{{ e.description }}</td>
+                        <td>{{ e.lines.count() }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" data-bs-target="#entryLines{{ e.id }}"><i class="fa-solid fa-list"></i> آرتیکل‌ها</button>
+                        </td>
+                    </tr>
+                    <tr class="collapse" id="entryLines{{ e.id }}">
+                        <td colspan="5" class="p-0">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead class="table-light"><tr><th>کد حساب</th><th>حساب</th><th>بدهکار</th><th>بستانکار</th><th>شرح</th></tr></thead>
+                                <tbody>
+                                    {% for line in e.lines.all() %}
+                                    <tr>
+                                        <td><code>{{ line.account.code if line.account else '-' }}</code></td>
+                                        <td class="fw-bold">{{ line.account.name if line.account else 'نامشخص' }}</td>
+                                        <td class="text-danger fw-bold">{{ (line.debit or 0)|currency }}</td>
+                                        <td class="text-success fw-bold">{{ (line.credit or 0)|currency }}</td>
+                                        <td class="text-muted small">{{ line.description }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted small"><i class="fa-solid fa-check-circle text-success"></i> اسناد حسابداری دوطرفه (بدهکار = بستانکار)</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="py-5 text-muted">هیچ سند حسابداری ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<nav class="mt-3" aria-label="Page navigation"><ul class="pagination justify-content-center">{% if entries.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.prev_num) }}">قبلی</a></li>{% endif %}{% for p in entries.iter_pages() %}{% if p %}<li class="page-item {% if p == entries.page %}active{% endif %}"><a class="page-link" href="{{ url_for('finance.journal_entries', page=p) }}">{{ p }}</a></li>{% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}{% endfor %}{% if entries.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('finance.journal_entries', page=entries.next_num) }}">بعدی</a></li>{% endif %}</ul></nav>
+{% endblock %}

@@ -191,7 +191,13 @@ def create_app():
             )
             db.session.add(admin_user)
         
-        pass # تمامی داده های پایه و بذرپاشی اکنون از طریق seed.py مدیریت می شوند
+        # اطمینان از وجود حساب ۳۰۱۰ (مانده افتتاحیه) برای ثبت سند افتتاحیه اشخاص
+        from app.models import Account, AccountType
+        if not Account.query.filter_by(code='3010').first():
+            eq_type = AccountType.query.filter_by(name='حقوق صاحبان سهام').first()
+            if eq_type:
+                db.session.add(Account(code='3010', name='مانده افتتاحیه (سرمایه)', account_type_id=eq_type.id))
+                db.session.commit()
 
     # مکانیزم همگامی انبار و مالی: بازگرداندن موجودی در صورت حذف فاکتور خرید
     from app.models import Transaction, InventoryItem

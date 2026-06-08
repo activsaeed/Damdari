@@ -470,7 +470,7 @@ def settings():
                                {'name': 'فاکتورهای بایگانی', 'count': Transaction.query.filter_by(is_archived=True).count(), 'icon': 'fa-box-archive', 'size_mb': Transaction.query.filter_by(is_archived=True).count() * 0.00015},
                                {'name': 'چک‌های مختومه', 'count': Cheque.query.filter(Cheque.status != 'در جریان').count(), 'icon': 'fa-file-circle-check', 'size_mb': Cheque.query.filter(Cheque.status != 'در جریان').count() * 0.00020},
                                {'name': 'دام‌های خارج شده', 'count': Sheep.query.filter(Sheep.status.in_(['فروخته شده', 'تلف شده', 'مرده'])).count(), 'icon': 'fa-skull-crossbones', 'size_mb': Sheep.query.filter(Sheep.status.in_(['فروخته شده', 'تلف شده', 'مرده'])).count() * 0.00025},
-                               {'name': 'کل شناسنامه‌ها', 'count': Sheep.query.count(), 'icon': 'fa-sheep', 'size_mb': Sheep.query.count() * 0.00030}
+                                {'name': 'کل شناسنامه‌ها', 'count': Sheep.query.filter(Sheep.is_deleted == False).count(), 'icon': 'fa-sheep', 'size_mb': Sheep.query.filter(Sheep.is_deleted == False).count() * 0.00030}
                            ], # مقادیر ضرب شده میانگین حجم هر ردیف به مگابایت هستند
                            # محاسبه حجم کل فایل دیتابیس
                            db_file_mb = os.path.getsize(os.path.join(current_app.root_path, 'damdari.db')) / (1024 * 1024)

@@ -14,13 +14,18 @@ import jdatetime
 hr_bp = Blueprint('hr', __name__)
 
 def validate_national_id(nid):
-    """اعتبارسنجی ساختار کد ملی ۱۰ رقمی ایرانی"""
+    """اعتبارسنجی کد ملی ۱۰ رقمی ایران با الگوریتم چک‌سام"""
     if not nid:
         return True
     nid = str(nid).replace(' ', '').strip()
     if not nid.isdigit() or len(nid) != 10:
         return False
-    return True
+    if nid in [str(i)*10 for i in range(10)]:
+        return False
+    s = sum(int(nid[i]) * (10 - i) for i in range(9))
+    r = s % 11
+    c = int(nid[9])
+    return (r < 2 and c == r) or (r >= 2 and c == 11 - r)
 
 def send_to_telegram(message):
     from app.models import TelegramBot
@@ -42,7 +47,7 @@ def parse_smart_date(date_str):
 @login_required
 def index():
     from app.models import Worker, Task, Pen, Sheep
-    workers = Worker.query.order_by(Worker.id.desc()).all()
+    workers = Worker.query.filter(Worker.is_deleted == False).order_by(Worker.id.desc()).all()
     pens = Pen.query.all()
     today = datetime.now(UTC).date()
     thirty_days_ago = today - timedelta(days=30)

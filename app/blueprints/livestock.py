@@ -70,19 +70,19 @@ def index():
     statuses = StatusCategory.query.all()
     
     from sqlalchemy import func
-    total_sheep = Sheep.query.filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).count()
+    total_sheep = Sheep.query.filter(Sheep.is_deleted == False, Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).count()
     sick_count = Sheep.query.filter_by(status='بیمار').count()
     pregnant_count = Sheep.query.filter_by(status='آبستن').count()
     total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])).scalar() or 0.0
 
-    query = Sheep.query
+    query = Sheep.query.filter(Sheep.is_deleted == False)
     search_q = request.args.get('search', '').strip()
     gender_q = request.args.get('gender', 'همه')
     breed_q = request.args.get('breed', 'همه')
     status_q = request.args.get('status', 'فعال')
     min_w = request.args.get('min_weight', type=float)
     max_w = request.args.get('max_weight', type=float)
-    starred_q = request.args.get('starred') # دریافت فیلتر ستاره دار
+    starred_q = request.args.get('starred')
 
     if search_q: query = query.filter(Sheep.ear_tag.ilike(f"%{search_q}%"))
     if gender_q != 'همه': query = query.filter(Sheep.gender == gender_q)
@@ -97,7 +97,7 @@ def index():
     page = request.args.get('page', 1, type=int)
     page_size = int(get_setting('page_size', 50))
     sheeps_pagination = query.order_by(Sheep.id.desc()).paginate(page=page, per_page=page_size)
-    
+
     return render_template('livestock/index.html', 
                            sheeps=sheeps_pagination, rations=rations, pens=pens, breeds=breeds, statuses=statuses,
                            total_sheep=total_sheep, sick_count=sick_count, pregnant_count=pregnant_count, total_live_weight=total_live_weight,
@@ -107,7 +107,7 @@ def index():
 @livestock_bp.route('/export')
 @login_required
 def export_sheep():
-    query = Sheep.query
+    query = Sheep.query.filter(Sheep.is_deleted == False)
     search_q = request.args.get('search', '').strip()
     gender_q = request.args.get('gender', 'همه')
     breed_q = request.args.get('breed', 'همه')
@@ -161,7 +161,7 @@ def export_sheep():
 @livestock_bp.route('/print')
 @login_required
 def print_sheep():
-    query = Sheep.query
+    query = Sheep.query.filter(Sheep.is_deleted == False)
     search_q = request.args.get('search', '').strip()
     gender_q = request.args.get('gender', 'همه')
     breed_q = request.args.get('breed', 'همه')
