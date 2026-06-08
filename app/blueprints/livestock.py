@@ -474,6 +474,25 @@ def edit_sheep(id):
             sheep.sale_price = 0.0
             sheep.sale_date = None
      
+    # ثبت سند حسابداری تلفات دام (کاهش دارایی زیستی)
+    old_status = Sheep.query.filter_by(id=sheep.id).with_for_update().first().status if hasattr(sheep, 'id') and sheep.id else sheep.status
+    if sheep.status in ['تلف شده', 'مرده'] and old_status not in ['تلف شده', 'مرده', 'فروخته شده']:
+        from app.accounting_engine import AccountingEngine
+        from app.models import JournalEntry, JournalEntryLine, Account
+        loss_value = sheep.purchase_price or (sheep.weight * 50000 if sheep.weight else 500000)
+        acc_expense = Account.query.filter_by(code='5010').first()
+        acc_asset = Account.query.filter_by(code='1200').first()
+        if acc_expense and acc_asset:
+            entry = JournalEntry(
+                entry_number=AccountingEngine.generate_entry_number(),
+                date=datetime.now(UTC).date(),
+                description=f"تلفات دام - پلاک {sheep.ear_tag} - {sheep.death_reason or 'نامشخص'}"
+            )
+            db.session.add(entry)
+            db.session.flush()
+            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=loss_value, credit=0.0, description=f"هزینه تلفات دام پلاک {sheep.ear_tag}"))
+            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_asset.id, debit=0.0, credit=loss_value, description=f"کاهش دارایی زیستی - پلاک {sheep.ear_tag}"))
+
     log_audit(f"ویرایش اطلاعات پروفایل دام پلاک {sheep.ear_tag}") 
     db.session.commit()
     return redirect(url_for('livestock.profile', id=id))

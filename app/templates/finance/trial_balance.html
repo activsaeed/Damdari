@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-scale-balanced text-success"></i> تراز آزمایشی (Trial Balance)</h2>
+    <a href="{{ url_for('finance.statements') }}" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به صورت‌های مالی</a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>کد حساب</th>
+                        <th>نام حساب</th>
+                        <th>ماهیت</th>
+                        <th>بدهکار</th>
+                        <th>بستانکار</th>
+                        <th>مانده</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td><code>{{ r.code }}</code></td>
+                        <td class="fw-bold text-start">{{ r.name }}</td>
+                        <td><span class="badge {% if r.nature == 'بدهکار' %}bg-info{% else %}bg-warning{% endif %}">{{ r.nature }}</span></td>
+                        <td class="text-danger fw-bold">{{ (r.debit or 0)|currency }}</td>
+                        <td class="text-success fw-bold">{{ (r.credit or 0)|currency }}</td>
+                        <td class="fw-bold {% if r.balance > 0 %}text-success{% elif r.balance < 0 %}text-danger{% endif %}">{{ r.balance|currency }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="py-5 text-muted">هیچ حسابی ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="3" class="text-center">جمع</td>
+                        <td class="text-danger">{{ total_debit|currency }}</td>
+                        <td class="text-success">{{ total_credit|currency }}</td>
+                        <td>{% if total_debit == total_credit %}<span class="text-success">تراز ✓</span>{% else %}<span class="text-danger">عدم تراز ✗</span>{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

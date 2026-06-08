@@ -328,8 +328,10 @@ def delete_tx(id):
     tx = Transaction.query.get_or_404(id)
     tx.is_deleted = True
 
-    # حذف سند حسابداری مرتبط (جلوگیری از Desync ترازنامه)
-    JournalEntry.query.filter_by(transaction_id=tx.id).delete()
+    # برگشت سند حسابداری مرتبط (به جای حذف، سند برگشتی صادر می‌شود)
+    old_jes = JournalEntry.query.filter_by(transaction_id=tx.id).all()
+    for old_je in old_jes:
+        AccountingEngine.record_reversal_entry(old_je, description=f"ابطال فاکتور شماره {tx.invoice_number or tx.id} - {tx.description}")
 
     # برگرداندن تراز شخص در صورت نسیه بودن
     if tx.payment_method == 'نسیه' and tx.contact_id:
@@ -582,6 +584,14 @@ def add_cheque():
         reason=request.form.get('reason'), notes=request.form.get('notes'), image_path=image_path
     )
     db.session.add(new_cheque)
+    db.session.flush()
+    # ثبت سند حسابداری تعهدی چک (اسناد دریافتنی/پرداختنی)
+    try:
+        AccountingEngine.record_cheque_issuance(new_cheque)
+    except Exception as e:
+        db.session.rollback()
+        flash(f'خطا در ثبت سند تعهدی چک: {str(e)}', 'danger')
+        return redirect(url_for('finance.cheques'))
     db.session.commit()
     flash('چک جدید با موفقیت ثبت شد.', 'success')
     return redirect(url_for('finance.cheques'))
@@ -817,9 +827,11 @@ def edit_tx(id):
                 # ثبت لاگ انبار
                 db.session.add(InventoryLog(item_id=inv_item.id, action_type='ویرایش فاکتور', amount=0, transaction_price=inv_item.unit_price, notes=f"ویرایش فاکتور خرید: {old_amount:,.0f} → {tx.amount:,.0f}"))
 
-    # حذف سند حسابداری قدیمی و بازسازی با اطلاعات جدید (رفع Desync ترازنامه)
+    # برگشت سند حسابداری قدیمی (به جای حذف، سند برگشتی صادر می‌شود) و بازسازی با اطلاعات جدید
     from app.models import JournalEntry
-    JournalEntry.query.filter_by(transaction_id=tx.id).delete()
+    old_jes = JournalEntry.query.filter_by(transaction_id=tx.id).all()
+    for old_je in old_jes:
+        AccountingEngine.record_reversal_entry(old_je, description=f"ویرایش فاکتور شماره {tx.invoice_number or tx.id} - سند قبلی برگشت خورد")
     db.session.flush()
     try:
         if tx.t_type == 'درآمد':
@@ -1089,6 +1101,29 @@ def journal_entries():
     page_size = int(get_setting('page_size', 50))
     entries = JournalEntry.query.order_by(JournalEntry.date.desc(), JournalEntry.id.desc()).paginate(page=page, per_page=page_size, error_out=False)
     return render_template('finance/journal_entries.html', entries=entries)
+
+# ==========================================
+# تراز آزمایشی (Trial Balance)
+# ==========================================
+@finance_bp.route('/trial_balance')
+@login_required
+def trial_balance():
+    from app.models import Account, JournalEntryLine
+    from sqlalchemy import func
+    accounts = Account.query.order_by(Account.code).all()
+    rows = []
+    total_debit = total_credit = Decimal('0')
+    for acc in accounts:
+        debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
+        credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
+        if acc.type and acc.type.nature == 'بدهکار':
+            bal = debits - credits
+        else:
+            bal = credits - debits
+        rows.append({'code': acc.code, 'name': acc.name, 'debit': debits, 'credit': credits, 'balance': bal, 'nature': acc.type.nature if acc.type else '?'})
+        total_debit += Decimal(str(debits))
+        total_credit += Decimal(str(credits))
+    return render_template('finance/trial_balance.html', rows=rows, total_debit=total_debit, total_credit=total_credit)
 
 # ==========================================
 # صورت های مالی (ترازنامه و سود و زیان استاندارد)
@@ -1532,6 +1567,34 @@ def export_contact_statement_pdf(id):
     filename_suffix = f"{year}_{quarter}" if report_type == 'seasonal' else "Custom_Range"
     response.headers['Content-Disposition'] = f'attachment; filename=Statement_{id}_{filename_suffix}.pdf'
     return response
+
+@finance_bp.route('/maintenance/sync_contact_balances')
+@login_required
+def sync_contact_balances():
+    """بررسی و همگام‌سازی تراز اشخاص با دفتر کل (رفع Desync)"""
+    from app.models import Contact, JournalEntryLine
+    from sqlalchemy import func
+    if current_user.role != 'مدیر':
+        flash('فقط مدیر می‌تواند این عملیات را انجام دهد.', 'danger')
+        return redirect(url_for('finance.index'))
+    fixed = 0
+    for c in Contact.query.all():
+        # محاسبه تراز از آرتیکل‌های حسابداری
+        receivable_sum = db.session.query(func.sum(JournalEntryLine.debit - JournalEntryLine.credit)).filter(
+            JournalEntryLine.contact_id == c.id,
+            JournalEntryLine.account_id == Account.query.filter_by(code='1030').first().id
+        ).scalar() or 0
+        payable_sum = db.session.query(func.sum(JournalEntryLine.credit - JournalEntryLine.debit)).filter(
+            JournalEntryLine.contact_id == c.id,
+            JournalEntryLine.account_id == Account.query.filter_by(code='2010').first().id
+        ).scalar() or 0
+        computed_balance = Decimal(str(receivable_sum)) - Decimal(str(payable_sum))
+        if abs(computed_balance - Decimal(str(c.balance or 0))) > Decimal('0.01'):
+            c.balance = computed_balance
+            fixed += 1
+    db.session.commit()
+    flash(f'همگام‌سازی انجام شد. {fixed} مورد عدم تطابق اصلاح شد.', 'success')
+    return redirect(url_for('finance.index'))
 
 @finance_bp.route('/contacts/ledger')
 @login_required

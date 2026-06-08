@@ -191,13 +191,20 @@ def create_app():
             )
             db.session.add(admin_user)
         
-        # اطمینان از وجود حساب ۳۰۱۰ (مانده افتتاحیه) برای ثبت سند افتتاحیه اشخاص
+        # اطمینان از وجود حساب‌های ضروری
         from app.models import Account, AccountType
-        if not Account.query.filter_by(code='3010').first():
-            eq_type = AccountType.query.filter_by(name='حقوق صاحبان سهام').first()
-            if eq_type:
-                db.session.add(Account(code='3010', name='مانده افتتاحیه (سرمایه)', account_type_id=eq_type.id))
-                db.session.commit()
+        t_asset = AccountType.query.filter_by(name='دارایی').first()
+        t_liability = AccountType.query.filter_by(name='بدهی').first()
+        t_equity = AccountType.query.filter_by(name='حقوق صاحبان سهام').first()
+        required_accounts = [
+            {'code': '3010', 'name': 'مانده افتتاحیه (سرمایه)', 'type': t_equity},
+            {'code': '1050', 'name': 'اسناد دریافتنی', 'type': t_asset},
+            {'code': '2020', 'name': 'اسناد پرداختنی', 'type': t_liability},
+        ]
+        for ra in required_accounts:
+            if ra['type'] and not Account.query.filter_by(code=ra['code']).first():
+                db.session.add(Account(code=ra['code'], name=ra['name'], account_type_id=ra['type'].id))
+        db.session.commit()
 
     # مکانیزم همگامی انبار و مالی: بازگرداندن موجودی در صورت حذف فاکتور خرید
     from app.models import Transaction, InventoryItem

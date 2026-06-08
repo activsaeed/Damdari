@@ -385,10 +385,23 @@ def generate_payslip():
 @hr_bp.route('/pay_payslip/<int:id>')
 @login_required
 def pay_payslip(id):
-    from app.models import Payslip, Transaction
+    from app.models import Payslip, JournalEntry, JournalEntryLine, Account
+    from app.accounting_engine import AccountingEngine
     p = Payslip.query.get_or_404(id)
     p.is_paid = True
-    db.session.add(Transaction(t_type='هزینه', category='حقوق کارگران', amount=p.net_pay, t_date=datetime.now(UTC).date(), description=f"تسویه فیش حقوقی {p.worker.name} بابت {p.month_name}"))
+    # ثبت سند حسابداری تسویه حقوق (کاهش حساب پرداختنی و کاهش بانک)
+    entry = JournalEntry(
+        entry_number=AccountingEngine.generate_entry_number(),
+        date=datetime.now(UTC).date(),
+        description=f"تسویه فیش حقوقی {p.worker.name} بابت {p.month_name}"
+    )
+    db.session.add(entry)
+    db.session.flush()
+    acc_payable = Account.query.filter_by(code='2010').first()
+    acc_bank = Account.query.filter_by(code='1010').first()
+    if acc_payable and acc_bank:
+        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=p.net_pay, credit=0.0, description=f"کاهش حساب پرداختنی - تسویه حقوق {p.worker.name}"))
+        db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_bank.id, debit=0.0, credit=p.net_pay, description=f"پرداخت نقدی حقوق {p.worker.name}"))
     db.session.commit()
     flash("حقوق تسویه و در دفتر کل مالی ثبت شد.", "success")
     return redirect(url_for('hr.payslips'))

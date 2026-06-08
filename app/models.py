@@ -168,12 +168,14 @@ class JournalEntry(db.Model):
     date = db.Column(db.Date, default=datetime.utcnow)
     description = db.Column(db.String(255), nullable=False) # شرح سند
     is_auto_generated = db.Column(db.Boolean, default=True) # آیا سیستم خودش ساخته؟
-    status = db.Column(db.String(20), default='تایید شده') # موقت، تایید شده
+    status = db.Column(db.String(20), default='تایید شده') # موقت، تایید شده، برگشتی
     
     # ارتباط با فاکتور یا چک (برای پیگیری)
     transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=True)
+    reversed_entry_id = db.Column(db.Integer, db.ForeignKey('journal_entry.id'), nullable=True) # سند برگشتی
     
     lines = db.relationship('JournalEntryLine', backref='journal_entry', lazy=True, cascade="all, delete-orphan")
+    reversal = db.relationship('JournalEntry', backref=db.backref('reversed_by', remote_side=[id]), lazy=True)
 
 class JournalEntryLine(db.Model):
     """آرتیکل‌های سند (بدهکار/بستانکار)"""

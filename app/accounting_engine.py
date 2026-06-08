@@ -30,12 +30,11 @@ class AccountingEngine:
                 vat_payable = AccountingEngine.get_account('2030')
 
                 if not all([cash_account, receivable_account, sales_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account), ('2030', vat_payable)] if not acc]
+                    missing = [code for code, acc in [('1010', cash_account), ('1030', receivable_account), ('4010', sales_account)] if not acc]
                     raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
-                # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
-                amount = transaction.amount  # مبلغ پایه
-                vat_amount = transaction.vat_amount or Decimal('0')
+                amount = transaction.amount
+                vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')
                 discount_amount = transaction.discount_amount or Decimal('0')
                 total_amount = (amount - discount_amount) + vat_amount
 
@@ -48,19 +47,23 @@ class AccountingEngine:
                 db.session.add(entry)
                 db.session.flush()
 
-                # اولویت با contact_id تراکنش اگر ورودی تابع خالی بود
                 effective_contact_id = contact_id or transaction.contact_id
                 
-                # اگر نسیه بود به حساب دریافتنی و اگر نقدی بود به بانک/صندوق سند می‌خورد
+                # تشخیص حساب بدهکار بر اساس نوع شخص و روش پرداخت
                 if transaction.payment_method == 'نسیه' and effective_contact_id:
-                    debit_acc_id = receivable_account.id
+                    from app.models import Contact
+                    contact = db.session.get(Contact, effective_contact_id)
+                    if contact and contact.contact_type and 'تامین' in contact.contact_type:
+                        debit_acc_id = cash_account.id  # تامین‌کننده -> نقدی
+                    else:
+                        debit_acc_id = receivable_account.id  # مشتری -> دریافتنی
                 else:
                     debit_acc_id = cash_account.id
                 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=effective_contact_id, debit=total_amount, credit=0.0))
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
 
-                if vat_amount > 0:
+                if vat_amount > 0 and vat_payable:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_payable.id, debit=0.0, credit=vat_amount))
         except Exception as e:
             db.session.rollback()
@@ -77,12 +80,11 @@ class AccountingEngine:
                 vat_receivable = AccountingEngine.get_account('1040')
 
                 if not all([cash_account, payable_account, expense_account]):
-                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account), ('1040', vat_receivable)] if not acc]
+                    missing = [code for code, acc in [('1010', cash_account), ('2010', payable_account), ('5010', expense_account)] if not acc]
                     raise Exception(f"کدهای حسابداری {', '.join(missing)} در سیستم یافت نشد. لطفا seed.py را اجرا کنید.")
 
-                # استفاده از مبالغ تفکیکی ثبت شده در تراکنش
-                amount = transaction.amount  # مبلغ پایه
-                vat_amount = transaction.vat_amount or Decimal('0')
+                amount = transaction.amount
+                vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')
                 discount_amount = transaction.discount_amount or Decimal('0')
                 total_amount = (amount - discount_amount) + vat_amount
 
@@ -97,14 +99,19 @@ class AccountingEngine:
 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=amount, credit=0.0))
 
-                if vat_amount > 0:
+                if vat_amount > 0 and vat_receivable:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
 
                 effective_contact_id = contact_id or transaction.contact_id
                 
-                # اگر نسیه بود به حساب پرداختنی و اگر نقدی بود از بانک/صندوق کسر می‌شود
+                # تشخیص حساب بستانکار بر اساس نوع شخص و روش پرداخت
                 if transaction.payment_method == 'نسیه' and effective_contact_id:
-                    credit_acc_id = payable_account.id
+                    from app.models import Contact
+                    contact = db.session.get(Contact, effective_contact_id)
+                    if contact and contact.contact_type and 'مشتری' in contact.contact_type:
+                        credit_acc_id = cash_account.id  # مشتری -> نقدی
+                    else:
+                        credit_acc_id = payable_account.id  # تامین‌کننده -> پرداختنی
                 else:
                     credit_acc_id = cash_account.id
                 
@@ -114,7 +121,38 @@ class AccountingEngine:
             raise Exception(f"خطا در ثبت فاکتور هزینه: {str(e)}")
 
     @staticmethod
+    def record_cheque_issuance(cheque):
+        """ثبت سند حسابداری هنگام صدور/دریافت چک (مرحله تعهدی)"""
+        try:
+            with db.session.begin_nested():
+                description = f"ثبت تعهدی چک شماره {cheque.cheque_number} - {cheque.cheque_type} - بابت {cheque.reason}"
+                entry = JournalEntry(
+                    entry_number=AccountingEngine.generate_entry_number(),
+                    date=cheque.issue_date or datetime.now(UTC).date(),
+                    description=description
+                )
+                db.session.add(entry)
+                db.session.flush()
+
+                if cheque.cheque_type == 'دریافتی (مشتری)':
+                    acc_notes_recv = AccountingEngine.get_account('1050')  # اسناد دریافتنی
+                    acc_recv = AccountingEngine.get_account('1030')       # حساب‌های دریافتنی
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_notes_recv.id, debit=cheque.amount, credit=0.0, description=f"دریافت چک از {cheque.issuer_name or 'نامشخص'}"))
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_recv.id, debit=0.0, credit=cheque.amount, description=f"کاهش حساب دریافتنی - {cheque.issuer_name or 'نامشخص'}"))
+                else:
+                    acc_notes_pay = AccountingEngine.get_account('2020')  # اسناد پرداختنی
+                    acc_pay = AccountingEngine.get_account('2010')        # حساب‌های پرداختنی
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_pay.id, debit=cheque.amount, credit=0.0, description=f"کاهش حساب پرداختنی - {cheque.registered_to or 'نامشخص'}"))
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_notes_pay.id, debit=0.0, credit=cheque.amount, description=f"صدور چک به {cheque.registered_to or 'نامشخص'}"))
+
+                return entry
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"خطا در ثبت سند تعهدی چک: {str(e)}")
+
+    @staticmethod
     def record_cheque_clearing(cheque):
+        """ثبت سند حسابداری هنگام پاس شدن چک (انتقال از اسناد به بانک)"""
         try:
             with db.session.begin_nested():
                 description = f"تسویه نهایی چک شماره {cheque.cheque_number} - بابت {cheque.reason}"
@@ -130,13 +168,13 @@ class AccountingEngine:
                 acc_bank = AccountingEngine.get_account('1010')
 
                 if cheque.cheque_type == 'دریافتی (مشتری)':
-                    acc_receivable = AccountingEngine.get_account('1030')
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_bank.id, debit=cheque.amount, credit=0.0))
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_receivable.id, debit=0.0, credit=cheque.amount))
+                    acc_notes_recv = AccountingEngine.get_account('1050')  # اسناد دریافتنی
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_bank.id, debit=cheque.amount, credit=0.0, description=f"وصول چک دریافتی - {cheque.issuer_name or 'نامشخص'}"))
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_notes_recv.id, debit=0.0, credit=cheque.amount, description=f"کاهش اسناد دریافتنی - {cheque.issuer_name or 'نامشخص'}"))
                 else:
-                    acc_payable = AccountingEngine.get_account('2010')
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=cheque.amount, credit=0.0))
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_bank.id, debit=0.0, credit=cheque.amount))
+                    acc_notes_pay = AccountingEngine.get_account('2020')  # اسناد پرداختنی
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_notes_pay.id, debit=cheque.amount, credit=0.0, description=f"تسویه اسناد پرداختنی - {cheque.registered_to or 'نامشخص'}"))
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_bank.id, debit=0.0, credit=cheque.amount, description=f"پرداخت نقدی چک به {cheque.registered_to or 'نامشخص'}"))
         except Exception as e:
             db.session.rollback()
             raise Exception(f"خطا در ثبت سند تسویه چک: {str(e)}")
@@ -440,6 +478,38 @@ class AccountingEngine:
         except Exception as e:
             db.session.rollback()
             raise Exception(f"خطا در ثبت تسویه حساب: {str(e)}")
+
+    @staticmethod
+    def record_reversal_entry(old_entry, description=None):
+        """ایجاد سند برگشتی (معکوس) برای یک سند حسابداری قبلی"""
+        try:
+            with db.session.begin_nested():
+                rev_description = description or f"برگشت از سند {old_entry.entry_number} - {old_entry.description}"
+                rev_entry = JournalEntry(
+                    entry_number=AccountingEngine.generate_entry_number(),
+                    date=datetime.now(UTC).date(),
+                    description=rev_description,
+                    transaction_id=old_entry.transaction_id,
+                    reversed_entry_id=old_entry.id
+                )
+                db.session.add(rev_entry)
+                db.session.flush()
+
+                for line in old_entry.lines.all():
+                    db.session.add(JournalEntryLine(
+                        journal_entry_id=rev_entry.id,
+                        account_id=line.account_id,
+                        contact_id=line.contact_id,
+                        debit=line.credit,
+                        credit=line.debit,
+                        description=f"برگشت: {line.description}"
+                    ))
+
+                old_entry.status = 'برگشتی'
+                return rev_entry
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"خطا در ثبت سند برگشتی: {str(e)}")
 
     @staticmethod
     def record_opening_entry():
