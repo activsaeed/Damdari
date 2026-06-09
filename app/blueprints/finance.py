@@ -1955,3 +1955,29 @@ def update_weight_iot():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@finance_bp.route('/period-closing')
+@login_required
+@permission_required('can_view_finance')
+def period_closing():
+    """عملیات پایان دوره حسابداری (ارزیابی، بستن حساب‌ها، افتتاحیه)"""
+    from app.models import JournalEntry, Equipment, SystemSetting, Account
+    from app.blueprints.dashboard import get_setting
+
+    system_settings = {s.key: s.value for s in SystemSetting.query.all()}
+    
+    # دستگاه‌های قابل استهلاک
+    equipments = Equipment.query.order_by(Equipment.name).all()
+
+    # آخرین اسناد خودکار حسابداری
+    last_entries = JournalEntry.query.filter(
+        JournalEntry.is_auto_generated == True
+    ).order_by(JournalEntry.date.desc()).limit(10).all()
+
+    return render_template('finance/period_closing.html',
+                           settings=system_settings,
+                           equipments=equipments,
+                           last_entries=last_entries,
+                           total_weight = db.session.query(func.sum(Sheep.weight)).filter(
+                               Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
+                           ).scalar() or 0)

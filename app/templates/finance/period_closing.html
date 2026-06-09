@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-file-invoice-dollar text-warning"></i> عملیات پایان دوره حسابداری</h2>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message|safe }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-4">
+    <!-- کارت ارزیابی ارزش منصفانه -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-warning border-4">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="fa-solid fa-scale-balanced text-warning fs-4 me-2"></i>
+                <h5 class="mb-0 fw-bold">۱. ارزیابی ارزش منصفانه گله (استاندارد ۲۶)</h5>
+                <i class="fa-solid fa-circle-question text-primary ms-2" data-bs-toggle="tooltip"
+                   title="طبق استاندارد ۲۶ حسابداری، گله باید به ارزش منصفانه (قیمت بازار) ارزیابی شود."></i>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <div class="p-3 bg-light rounded text-center">
+                            <small class="text-muted d-block">وزن کل گله</small>
+                            <strong class="fs-4">{{ "{:,.0f}".format(total_weight) }} کیلو</strong>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 bg-light rounded text-center">
+                            <small class="text-muted d-block">قیمت پایه هر کیلو</small>
+                            <strong class="fs-4 text-primary">{{ settings.get('market_price', '0')|currency }}</strong>
+                        </div>
+                    </div>
+                </div>
+                <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" class="mt-auto"
+                      onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
+                    <label class="form-label fw-bold small">قیمت جدید هر کیلو (تومان):</label>
+                    <div class="input-group">
+                        <input type="text" name="market_price" class="form-control fw-bold text-primary"
+                               value="{{ settings.get('market_price', '250000') }}">
+                        <button type="submit" class="btn btn-warning fw-bold px-4">بروزرسانی ارزش و صدور سند</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- کارت تطبیق انبار -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-secondary border-4">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="fa-solid fa-warehouse text-secondary fs-4 me-2"></i>
+                <h5 class="mb-0 fw-bold">۲. تطبیق و انتقال مانده انبار</h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را محاسبه کرده و مانده حساب دارایی (۱۰۲۰) را به‌روز می‌کند. در صورت مغایرت، سند تعدیل صادر می‌شود.</p>
+                <ul class="small text-muted mb-3">
+                    <li>کالاهای موجود با قیمت روز ارزیابی می‌شوند</li>
+                    <li>هزینه مصرف کالا (بهای تمام شده) شناسایی می‌گردد</li>
+                    <li>سند حسابداری به صورت خودکار صادر می‌شود</li>
+                </ul>
+                <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" class="mt-auto"
+                      onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
+                    <button type="submit" class="btn btn-outline-secondary w-100 fw-bold py-2">شروع تطبیق و صدور سند</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- کارت بستن حساب‌های موقت -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="fa-solid fa-lock text-primary fs-4 me-2"></i>
+                <h5 class="mb-0 fw-bold">۳. بستن حساب‌های موقت (سال مالی)</h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted small">مانده تمام حساب‌های درآمد (کد ۴) و هزینه (کد ۵) را صفر کرده و سود یا زیان خالص را به «سود انباشته» (کد ۳۰۲۰) منتقل می‌کند.</p>
+                <div class="alert alert-warning py-2 small border-0">
+                    <i class="fa-solid fa-triangle-exclamation"></i> این عملیات فقط یک بار در پایان سال مالی انجام می‌شود.
+                </div>
+                <form action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" class="mt-auto"
+                      onsubmit="return confirm('هشدار: آیا از بستن دفاتر مالی اطمینان دارید؟ این عملیات قابل بازگشت نیست.')">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">بستن دفاتر مالی و انتقال سود/زیان</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- کارت صدور سند افتتاحیه -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-success border-4">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <i class="fa-solid fa-door-open text-success fs-4 me-2"></i>
+                <h5 class="mb-0 fw-bold">۴. صدور سند افتتاحیه</h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted small">مانده نهایی تمام حساب‌های دائمی (دارایی، بدهی، سرمایه) را به عنوان «موجودی اول دوره» در سال جدید ثبت می‌کند.</p>
+                <div class="alert alert-info py-2 small border-0">
+                    <i class="fa-solid fa-circle-info"></i> این سند اولین سند سال مالی جدید خواهد بود.
+                </div>
+                <form action="{{ url_for('dashboard.issue_opening_entry') }}" method="POST" class="mt-auto"
+                      onsubmit="return confirm('آیا از صدور سند افتتاحیه سال جدید اطمینان دارید؟')">
+                    <button type="submit" class="btn btn-outline-success w-100 fw-bold py-2">صدور سند افتتاحیه سال جدید</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- آخرین اسناد حسابداری -->
+<div class="card border-0 shadow-sm mt-4 border-top border-info border-4">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold text-info"><i class="fa-solid fa-clock-rotate-left"></i> آخرین اسناد حسابداری خودکار</h5>
+        <a href="{{ url_for('finance.journal_entries') }}" class="btn btn-sm btn-outline-info">مشاهده همه اسناد</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover text-center align-middle mb-0">
+                <thead class="table-light small">
+                    <tr><th>#</th><th>شماره سند</th><th>شرح عملیات</th><th>تاریخ</th><th>آرتیکل‌ها</th></tr>
+                </thead>
+                <tbody>
+                    {% for je in last_entries %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td dir="ltr" class="fw-bold text-primary">{{ je.entry_number }}</td>
+                        <td class="text-start small">{{ je.description }}</td>
+                        <td class="small">{{ je.date|jalali }}</td>
+                        <td><span class="badge bg-info">{{ je.lines|length }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="py-4 text-muted">تاکنون سند خودکاری صادر نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

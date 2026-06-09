@@ -395,75 +395,17 @@ http.end();</pre>
     </div>
 </div>
 
-<!-- بخش جدید: عملیات‌های بستن سال مالی و حسابداری (استاندارد ۲۶) -->
+
+
 <div class="card border-0 shadow-sm mb-4 border-top border-warning border-4">
-    <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-bold text-dark">
-            <i class="fa-solid fa-file-invoice-dollar text-warning"></i> عملیات‌های پایان دوره و حسابداری
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="alert alert-info border-0 shadow-sm mb-3 small">
-            <i class="fa-solid fa-circle-info text-info"></i> 
-            این بخش شامل ابزارهای کنترلی جهت بستن سال مالی، انبارگردانی و صدور اسناد تعدیلی طبق استانداردهای حسابداری است.
+    <div class="card-body d-flex justify-content-between align-items-center py-3">
+        <div>
+            <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-invoice-dollar text-warning"></i> عملیات پایان دوره حسابداری</h6>
+            <p class="text-muted small mb-0">ارزیابی گله، تطبیق انبار، بستن حساب‌ها و صدور سند افتتاحیه به صفحه تخصصی حسابداری منتقل شد.</p>
         </div>
-        
-        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
-            <h6 class="fw-bold text-dark mb-0">
-                ۱. ارزیابی بیولوژیک گله (Fair Value) 
-                <i class="fa-solid fa-circle-question text-primary ms-1" data-bs-toggle="tooltip" 
-                   title="طبق استاندارد ۲۶ حسابداری، گله باید به ارزش منصفانه (قیمت بازار) ارزیابی شود. این عملیات مابه‌التفاوت قیمت خرید و قیمت روز بازار را به عنوان سود/زیان غیرعملیاتی در ترازنامه شما ثبت می‌کند."></i>
-            </h6>
-        </div>
-        <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
-            <div class="row align-items-end g-3">
-                <div class="col-md-7">
-                    <label class="form-label fw-bold small text-muted">مبنای قیمت‌گذاری فعلی (از تنظیمات):</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light text-secondary">قیمت هر کیلوگرم:</span>
-                        <input type="text" class="form-control fw-bold text-primary bg-white"
-                               value="{{ (system_settings.get('market_price', '0')|float)|currency }}" readonly>
-                    </div>
-                </div>
-                <div class="col-md-5">
-                    <button type="submit" class="btn btn-warning w-100 fw-bold py-2 shadow-sm">
-                        <i class="fa-solid fa-sync"></i> بروزرسانی ارزش و صدور سند
-                    </button>
-                </div>
-            </div>
-        </form>
-
-        <hr class="my-4">
-
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="p-3 border rounded bg-light h-100">
-                    <h6 class="fw-bold"><i class="fa-solid fa-sync text-warning"></i> تطبیق و انتقال مانده انبار</h6>
-                    <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را محاسبه کرده و مانده حساب دارایی (۱۱۰۲) را به‌روز می‌کند.</p>
-                    <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
-                        <button type="submit" class="btn btn-sm btn-outline-warning w-100 fw-bold">تطبیق انبار و دفتر</button>
-                    </form>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 border rounded bg-light h-100">
-                    <h6 class="fw-bold text-primary"><i class="fa-solid fa-lock"></i> بستن حساب‌های موقت</h6>
-                    <p class="text-muted small">مانده تمام حساب‌های درآمد و هزینه را صفر کرده و سود یا زیان خالص را به «سود انباشته» منتقل می‌کند.</p>
-                    <form action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" onsubmit="return confirm('هشدار: آیا از بستن دفاتر مالی اطمینان دارید؟')">
-                        <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold">بستن دفاتر مالی</button>
-                    </form>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 border rounded bg-light h-100">
-                    <h6 class="fw-bold text-success"><i class="fa-solid fa-door-open"></i> صدور سند افتتاحیه</h6>
-                    <p class="text-muted small">مانده نهایی تمام حساب‌های دارایی و بدهی را به عنوان «موجودی اول دوره» در سال جدید ثبت می‌کند.</p>
-                    <form action="{{ url_for('dashboard.issue_opening_entry') }}" method="POST" onsubmit="return confirm('آیا از صدور سند افتتاحیه سال جدید اطمینان دارید؟')">
-                        <button type="submit" class="btn btn-sm btn-outline-success w-100 fw-bold">صدور سند افتتاحیه</button>
-                    </form>
-                </div>
-            </div>
-        </div>
+        <a href="{{ url_for('finance.period_closing') }}" class="btn btn-warning fw-bold shadow-sm px-4">
+            <i class="fa-solid fa-arrow-left"></i> ورود به عملیات حسابداری
+        </a>
     </div>
 </div>
 

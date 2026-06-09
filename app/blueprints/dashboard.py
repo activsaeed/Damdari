@@ -12,7 +12,7 @@ import jdatetime
 from app.models import InventoryLog, InventoryCategory, TelegramBot
 from app.accounting_engine import AccountingEngine
 from app import get_system_setting, set_system_setting
-from app.models import (Sheep, Transaction, InventoryItem, Task, WeightRecord, User, Pen, Medicine, BreedCategory, PurposeCategory, StatusCategory, FeedRation, FeedingSchedule, TreatmentTemplate, AuditLog, Cheque, MedicalRecord, SystemSetting, Unit, MedicineCategory, BuyerCategory, TransactionCategory, InventoryCategory)
+from app.models import (Sheep, Transaction, InventoryItem, Task, WeightRecord, User, Pen, Medicine, BreedCategory, PurposeCategory, StatusCategory, FeedRation, FeedingSchedule, TreatmentTemplate, AuditLog, Cheque, MedicalRecord, SystemSetting, Unit, MedicineCategory, BuyerCategory, TransactionCategory, InventoryCategory, JournalEntry)
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -531,14 +531,18 @@ def close_fiscal_year():
         return redirect(url_for('dashboard.index'))
 
     try:
-        AccountingEngine.close_temporary_accounts()
+        entry = AccountingEngine.close_temporary_accounts()
         db.session.commit()
-        flash('حساب‌های موقت با موفقیت بسته شدند و سود/زیان به حساب دائم منتقل گردید. دفتار برای سال مالی جدید آماده است.', 'success')
+        line_count = len(entry.lines)
+        total_debit = sum(l.debit for l in entry.lines)
+        total_credit = sum(l.credit for l in entry.lines)
+        flash(f'✅ حساب‌های موقت بسته شدند. سند <b>{entry.entry_number}</b> با {line_count} آرتیکل صادر شد. '
+              f'(جمع بدهکار: {total_debit:,.0f} — جمع بستانکار: {total_credit:,.0f})', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'خطا در بستن حساب‌ها: {str(e)}', 'danger')
+        flash(f'❌ خطا در بستن حساب‌ها: {str(e)}', 'danger')
 
-    return redirect(url_for('dashboard.settings'))
+    return redirect(request.referrer or url_for('finance.period_closing'))
 
 @dashboard_bp.route('/maintenance/opening_entry', methods=['POST'])
 @login_required
@@ -546,13 +550,17 @@ def issue_opening_entry():
     """صدور سند افتتاحیه جهت انتقال مانده‌ها به سال جدید"""
     if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
     try:
-        AccountingEngine.record_opening_entry()
+        entry = AccountingEngine.record_opening_entry()
         db.session.commit()
-        flash('سند افتتاحیه صادر شد. مانده حساب‌های دائمی به عنوان موجودی اول دوره جدید ثبت گردید.', 'success')
+        line_count = len(entry.lines)
+        total_debit = sum(l.debit for l in entry.lines)
+        total_credit = sum(l.credit for l in entry.lines)
+        flash(f'✅ سند افتتاحیه <b>{entry.entry_number}</b> صادر شد. {line_count} حساب دائمی به سال جدید منتقل شد. '
+              f'(جمع بدهکار: {total_debit:,.0f} — جمع بستانکار: {total_credit:,.0f})', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'خطا در صدور سند افتتاحیه: {str(e)}', 'danger')
-    return redirect(url_for('dashboard.settings'))
+        flash(f'❌ خطا در صدور سند افتتاحیه: {str(e)}', 'danger')
+    return redirect(request.referrer or url_for('finance.period_closing'))
 
 @dashboard_bp.route('/run_depreciation', methods=['POST'])
 @login_required
@@ -575,7 +583,7 @@ def run_depreciation():
         db.session.rollback()
         flash(f'خطا در ثبت استهلاک: {str(e)}', 'danger')
         
-    return redirect(url_for('dashboard.settings'))
+    return redirect(request.referrer or url_for('finance.period_closing'))
 
 @dashboard_bp.route('/maintenance/sync_inventory', methods=['POST'])
 @login_required
@@ -589,14 +597,18 @@ def sync_inventory():
         entry = AccountingEngine.sync_inventory_ledger()
         db.session.commit()
         if entry:
-            flash('تطبیق انبار انجام شد. هزینه مصرف کالا شناسایی و سند مالی صادر گردید.', 'success')
+            line_count = len(entry.lines)
+            total_debit = sum(l.debit for l in entry.lines)
+            total_credit = sum(l.credit for l in entry.lines)
+            flash(f'✅ تطبیق انبار انجام شد. سند <b>{entry.entry_number}</b> با {line_count} آرتیکل صادر شد. '
+                  f'(جمع بدهکار: {total_debit:,.0f} — جمع بستانکار: {total_credit:,.0f})', 'success')
         else:
-            flash('مانده انبار و دفتر کل از قبل کاملاً تراز هستند.', 'info')
+            flash('ℹ️ مانده انبار و دفتر کل از قبل کاملاً تراز هستند. نیازی به سند تعدیل نیست.', 'info')
     except Exception as e:
         db.session.rollback()
-        flash(f'خطا در تطبیق انبار: {str(e)}', 'danger')
+        flash(f'❌ خطا در تطبیق انبار: {str(e)}', 'danger')
 
-    return redirect(url_for('dashboard.settings'))
+    return redirect(request.referrer or url_for('finance.period_closing'))
 
 @dashboard_bp.route('/run_daily_feed', methods=['POST'])
 @login_required

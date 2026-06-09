@@ -103,6 +103,7 @@
                         <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه/سود و زیان</a>
                         <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor"></i> دارایی و استهلاک</a>
                         <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات/سامانه مودیان</a>
+                        <a href="{{ url_for('finance.period_closing') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.period_closing') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-check"></i> عملیات پایان دوره</a>
                     </div>
                     {% endif %}
 

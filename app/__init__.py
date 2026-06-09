@@ -162,9 +162,13 @@ def create_app():
     @app.template_filter('currency')
     def currency_filter(amount):
         if amount is None: amount = 0
-        # دریافت واحد پول از تنظیمات سیستم # ۱. حل بحران واحد پول و هاردکد مالیات (Data Integrity & VAT)
+        from decimal import Decimal
+        try:
+            amount = Decimal(str(amount))
+        except Exception:
+            amount = Decimal('0')
         unit = get_system_setting('currency_unit', 'تومان')
-        factor = 10 if unit == 'ریال' else 1
+        factor = Decimal('10') if unit == 'ریال' else Decimal('1')
         
         converted_amount = amount * factor
         formatted = "{:,.0f}".format(converted_amount)
