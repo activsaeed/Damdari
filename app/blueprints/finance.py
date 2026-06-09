@@ -244,12 +244,14 @@ def add_transaction():
         vat_val = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
         
         # استفاده از تابع پارسر هوشمند برای جلوگیری از خطا در تاریخ‌های شمسی/خالی
-        t_date = parse_smart_date(request.form.get('t_date'), datetime.now(UTC).date())
+        t_date = parse_smart_date(request.form.get('t_date'), None)
+        if not t_date:
+            t_date = parse_smart_date(request.form.get('t_date_jalali'), datetime.now(UTC).date())
         
         existing_cat = TransactionCategory.query.filter_by(name=category_name, t_type=t_type).first()
         if not existing_cat:
-            db.session.add(TransactionCategory(name=category_name, t_type=t_type))
-            db.session.flush()
+            flash(f'دسته‌بندی "{category_name}" برای {t_type} وجود ندارد. لطفاً از دسته‌بندی‌های موجود استفاده کنید یا در تنظیمات دسته جدید بسازید.', 'danger')
+            return redirect(url_for('finance.index'))
 
         # --- منطق هوشمند اتصال یا ساخت حساب شخص ---
         linked_contact = None        
@@ -258,6 +260,12 @@ def add_transaction():
         if amount_val <= 0:
             flash('خطا: مبلغ تراکنش باید بیشتر از صفر باشد.', 'danger')
             return redirect(url_for('finance.index'))
+
+        # اعتبارسنجی مالیات بر ارزش افزوده وارد شده توسط کاربر
+        if vat_val > 0:
+            expected_vat = amount_val * Decimal(get_setting('vat_rate', '10')) / Decimal('100')
+            if abs(vat_val - expected_vat) > Decimal('1'):
+                flash(f'⚠️ هشدار: مبلغ مالیات وارد شده ({vat_val:,.0f}) با نرخ سیستم ({get_setting("vat_rate", "10")}% = {expected_vat:,.0f}) مطابقت ندارد.', 'warning')
 
         try:
             if contact_id:
@@ -310,7 +318,7 @@ def add_transaction():
                 ip_address=request.remote_addr
             ))
             db.session.commit()
-            flash('فاکتور با موفقیت ثبت شد.', 'success')
+            flash(f'فاکتور {invoice_number or new_transaction.id} با موفقیت ثبت شد (مبلغ: {amount_val:,.0f} تومان).', 'success')
         except Exception as e:
             db.session.rollback()
             flash(f'خطا در نهایی‌سازی فاکتور: {str(e)}', 'danger')
@@ -353,13 +361,20 @@ def delete_tx(id):
     for old_je in old_jes:
         AccountingEngine.record_reversal_entry(old_je, description=f"ابطال فاکتور شماره {tx.invoice_number or tx.id} - {tx.description}")
 
+    # بروزرسانی مانده حساب شخص مرتبط
+    if tx.contact_id:
+        from app.models import Contact
+        c = db.session.get(Contact, tx.contact_id)
+        if c:
+            sync_contact_balance(c)
+
     db.session.add(AuditLog(
         user_name=current_user.name,
         action=f"ابطال فاکتور {tx.invoice_number or 'بدون شماره'} - مبلغ {tx.amount} - {tx.description or ''}",
         ip_address=request.remote_addr
     ))
     db.session.commit()
-    flash('فاکتور ابطال شد. سند حسابداری و ترازنامه تصحیح شد.', 'warning')
+    flash(f'فاکتور {tx.invoice_number or tx.id} ابطال شد. سند حسابداری و ترازنامه تصحیح شد.', 'warning')
     return redirect(request.referrer or url_for('finance.index'))
 
 @finance_bp.route('/export_tx')
@@ -802,7 +817,7 @@ def edit_tx(id):
     tx.t_type = request.form.get('t_type')
     tx.category = request.form.get('category')    
     tx.amount = normalize_amount_to_toman(request.form.get('amount'))
-    tx.t_date = parse_smart_date(request.form.get('t_date'))
+    tx.t_date = parse_smart_date(request.form.get('t_date')) or parse_smart_date(request.form.get('t_date_jalali'))
     tx.invoice_number = request.form.get('invoice_number')
     tx.party_name = request.form.get('party_name')
     tx.description = request.form.get('description')
@@ -812,23 +827,29 @@ def edit_tx(id):
     tx.discount_amount = normalize_amount_to_toman(request.form.get('discount_amount', '0'))
     tx.vat_amount = normalize_amount_to_toman(request.form.get('vat_amount', '0'))
 
+    # اعتبارسنجی مالیات بر ارزش افزوده
+    vat_val = tx.vat_amount
+    if vat_val > 0:
+        expected_vat = tx.amount * Decimal(get_setting('vat_rate', '10')) / Decimal('100')
+        if abs(vat_val - expected_vat) > Decimal('1'):
+            flash(f'⚠️ هشدار: مبلغ مالیات وارد شده ({vat_val:,.0f}) با نرخ سیستم ({get_setting("vat_rate", "10")}% = {expected_vat:,.0f}) مطابقت ندارد.', 'warning')
+
     # بروزرسانی میانگین موزون انبار در صورت تغییر فاکتور خرید
     is_inv_purchase = (old_category == 'خرید انبار (خودکار)') or (tx.category == 'خرید انبار (خودکار)')
     if is_inv_purchase and old_amount != tx.amount:
-        import re
-        match = re.search(r"خرید ([\d.]+) .* (.*)$", tx.description)
-        if not match:
+        inv_qty = tx.inventory_quantity
+        inv_item = InventoryItem.query.get(tx.inventory_item_id) if tx.inventory_item_id else None
+        if not inv_item:
+            import re
             match = re.search(r"خرید ([\d.]+) .* (.*)$", old_description)
-        if match:
-            inv_qty = Decimal(match.group(1))
-            inv_name = match.group(2).strip()
-            inv_item = InventoryItem.query.filter_by(name=inv_name).first()
-            if inv_item and inv_item.quantity >= inv_qty:
-                if inv_item.quantity > 0:
-                    old_unit_price = old_amount / inv_qty if inv_qty > 0 else Decimal('0')
-                    inv_item.unit_price = ((inv_item.unit_price or Decimal('0')) * inv_item.quantity - old_amount + tx.amount) / inv_item.quantity
-                # ثبت لاگ انبار
-                db.session.add(InventoryLog(item_id=inv_item.id, action_type='ویرایش فاکتور', amount=0, transaction_price=inv_item.unit_price, notes=f"ویرایش فاکتور خرید: {old_amount:,.0f} → {tx.amount:,.0f}"))
+            if match:
+                inv_name = match.group(2).strip()
+                inv_qty = Decimal(match.group(1))
+                inv_item = InventoryItem.query.filter_by(name=inv_name).first()
+        if inv_item and inv_qty and inv_item.quantity >= inv_qty:
+            if inv_item.quantity > 0:
+                inv_item.unit_price = ((inv_item.unit_price or Decimal('0')) * inv_item.quantity - old_amount + tx.amount) / inv_item.quantity
+            db.session.add(InventoryLog(item_id=inv_item.id, action_type='ویرایش فاکتور', amount=0, transaction_price=inv_item.unit_price, notes=f"ویرایش فاکتور خرید: {old_amount:,.0f} → {tx.amount:,.0f}"))
 
     # برگشت سند حسابداری قدیمی (به جای حذف، سند برگشتی صادر می‌شود) و بازسازی با اطلاعات جدید
     from app.models import JournalEntry
@@ -855,9 +876,16 @@ def edit_tx(id):
             doc.save(os.path.join(upload_folder, unique_filename))
             db.session.add(TransactionDocument(transaction_id=tx.id, file_path=f"uploads/documents/{unique_filename}"))
             
+    # بروزرسانی مانده حساب شخص مرتبط
+    if tx.contact_id:
+        from app.models import Contact
+        c = db.session.get(Contact, tx.contact_id)
+        if c:
+            sync_contact_balance(c)
+
     try:
         db.session.commit()
-        flash('فاکتور با موفقیت ویرایش شد.', 'success')
+        flash(f'فاکتور {tx.invoice_number or tx.id} با موفقیت ویرایش شد.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'خطا در ویرایش فاکتور: {str(e)}', 'danger')
@@ -1288,11 +1316,16 @@ def official_balance_sheet():
         return Decimal(str(raw)) if raw is not None else Decimal('0')
 
     accounts = Account.query.all()
-    asset_accounts = []
-    liability_equity_accounts = []
+    current_assets = []
+    non_current_assets = []
+    current_liabilities = []
+    non_current_liabilities = []
+    equity_accounts = []
     
-    total_assets = Decimal('0')
-    total_liabilities = Decimal('0')
+    total_current_assets = Decimal('0')
+    total_non_current_assets = Decimal('0')
+    total_current_liabilities = Decimal('0')
+    total_non_current_liabilities = Decimal('0')
     total_equity = Decimal('0')
     total_revenue = Decimal('0')
     total_expense = Decimal('0')
@@ -1307,27 +1340,53 @@ def official_balance_sheet():
             bal = credits - debits
             
         if acc.code.startswith('1'):
-            total_assets += bal
-            if bal != 0: asset_accounts.append({'name': acc.name, 'balance': bal})
+            if bal != 0:
+                entry = {'code': acc.code, 'name': acc.name, 'balance': bal}
+                if acc.code < '1050':  # دارایی‌های جاری (کدهای 1010 تا 1049)
+                    current_assets.append(entry)
+                    total_current_assets += bal
+                else:  # دارایی‌های غیرجاری (کدهای 1050 به بالا)
+                    non_current_assets.append(entry)
+                    total_non_current_assets += bal
         elif acc.code.startswith('2'):
-            total_liabilities += bal
-            if bal != 0: liability_equity_accounts.append({'name': acc.name, 'balance': bal})
+            if bal != 0:
+                entry = {'code': acc.code, 'name': acc.name, 'balance': bal}
+                if acc.code < '2050':  # بدهی‌های جاری (کدهای 2010 تا 2049)
+                    current_liabilities.append(entry)
+                    total_current_liabilities += bal
+                else:  # بدهی‌های غیرجاری (کدهای 2050 به بالا)
+                    non_current_liabilities.append(entry)
+                    total_non_current_liabilities += bal
         elif acc.code.startswith('3'):
             total_equity += bal
-            if bal != 0: liability_equity_accounts.append({'name': acc.name, 'balance': bal})
+            if bal != 0: equity_accounts.append({'code': acc.code, 'name': acc.name, 'balance': bal})
         elif acc.code.startswith('4'): total_revenue += bal
         elif acc.code.startswith('5'): total_expense += bal
 
     net_income = total_revenue - total_expense
-    # سود در ترازنامه به عنوان بخشی از حقوق صاحبان سهام نمایش داده می‌شود
-    liability_equity_accounts.append({'name': 'سود (زیان) انباشته و جاری', 'balance': net_income})
+    equity_accounts.append({'code': '----', 'name': 'سود (زیان) انباشته و جاری', 'balance': net_income})
+    total_equity += net_income
+    total_assets = total_current_assets + total_non_current_assets
+    total_liabilities = total_current_liabilities + total_non_current_liabilities
+    total_liability_equity = total_liabilities + total_equity
+    
+    now_j = jdatetime.date.today()
     
     return render_template('finance/opening_statement_print.html',
-                           asset_accounts=asset_accounts,
-                           liability_equity_accounts=liability_equity_accounts,
+                           current_assets=current_assets,
+                           non_current_assets=non_current_assets,
+                           current_liabilities=current_liabilities,
+                           non_current_liabilities=non_current_liabilities,
+                           equity_accounts=equity_accounts,
+                           total_current_assets=total_current_assets,
+                           total_non_current_assets=total_non_current_assets,
+                           total_current_liabilities=total_current_liabilities,
+                           total_non_current_liabilities=total_non_current_liabilities,
                            total_assets=total_assets,
-                           total_liability_equity=total_liabilities + total_equity + net_income,
-                           today=jdatetime.date.today())
+                           total_liabilities=total_liabilities,
+                           total_equity=total_equity,
+                           total_liability_equity=total_liability_equity,
+                           today=now_j)
 
 
 # ==========================================

@@ -253,7 +253,8 @@
             alert('لطفاً ابتدا حداقل یک دام را با تیک چک‌باکس انتخاب کنید.');
             return false;
         }
-        return confirm('تغییرات اعمال شود؟');
+        showLoading();
+        return true;
     }
 
     function toggleBulkSaleFields() {
@@ -279,6 +280,15 @@
             priceField.required = false;
             dateField.required = false;
         }
+    }
+
+    // نمایش حالت بارگذاری برای عملیات‌های گروهی
+    function showLoading() {
+        const overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
+        overlay.innerHTML = '<div class="spinner-border text-light mb-2" role="status" style="width:3rem;height:3rem;"></div><div class="text-light fw-bold">در حال پردازش...</div>';
+        document.body.appendChild(overlay);
     }
 </script>
 {% endblock %}

@@ -313,6 +313,25 @@ def warnings():
 
 # ... (کدهای ابتدای فایل dashboard.py شامل ایمپورت ها و توابع index و warnings دست نخورده باقی بماند) ...
 
+@dashboard_bp.route('/settings/test_sms', methods=['POST'])
+@login_required
+def test_sms():
+    """تست ارسال پیامک با تنظیمات فعلی"""
+    import requests, json
+    api_key = get_setting('sms_api_key', '')
+    sender = get_setting('sms_sender_number', '')
+    if not api_key or not sender:
+        return jsonify({'success': False, 'message': 'API Key یا شماره فرستنده تنظیم نشده است.'})
+    try:
+        # تست اتصال به سرویس پیامک (Kavenegar)
+        resp = requests.get(f'https://api.kavenegar.com/v1/{api_key}/account/info.json', timeout=10)
+        if resp.status_code == 200:
+            return jsonify({'success': True, 'message': 'اتصال به پنل پیامک با موفقیت برقرار شد.'})
+        else:
+            return jsonify({'success': False, 'message': f'خطا در اتصال: {resp.text}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'خطا: {str(e)}'})
+
 @dashboard_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
@@ -525,30 +544,88 @@ def run_valuation():
 @dashboard_bp.route('/maintenance/close_fiscal_year', methods=['POST'])
 @login_required
 def close_fiscal_year():
-    """بستن حساب‌های موقت در پایان سال مالی"""
+    """بستن حساب‌های موقت در بازه ماه/فصل/سال"""
+    from app.models import JournalEntry, Account, JournalEntryLine, Transaction
+    from sqlalchemy import func
+
     if current_user.role != 'مدیر':
         flash('دسترسی محدود است.', 'danger')
         return redirect(url_for('dashboard.index'))
 
-    from app.models import JournalEntry
+    period = request.form.get('period', 'year')
+    now = datetime.now(UTC)
+    if period == 'month':
+        start = now.replace(day=1)
+        period_label = 'ماه جاری'
+    elif period == 'quarter':
+        q_start = ((now.month - 1) // 3) * 3 + 1
+        start = now.replace(month=q_start, day=1)
+        period_label = 'فصل جاری'
+    else:
+        start = now.replace(month=1, day=1)
+        period_label = 'سال جاری'
+
     existing = JournalEntry.query.filter(
-        JournalEntry.description.like('بستن حساب‌های موقت%')
+        JournalEntry.description.ilike(f'%بستن حساب‌های دوره {period_label}%')
     ).first()
-    if existing:
-        flash(f'⚠️ حساب‌های موقت قبلاً بسته شده‌اند (سند {existing.entry_number}). ابتدا سند برگشتی صادر کنید.', 'warning')
+    if existing and period == 'year':
+        flash(f'قبلاً حساب‌های سال جاری بسته شده است (سند {existing.entry_number}).', 'warning')
         return redirect(request.referrer or url_for('finance.period_closing'))
 
     try:
-        entry = AccountingEngine.close_temporary_accounts()
+        if period == 'year':
+            entry = AccountingEngine.close_temporary_accounts()
+        else:
+            desc = f"بستن حساب‌های دوره {period_label} - از {start.date()} تا {now.date()}"
+            entry = JournalEntry(
+                entry_number=AccountingEngine.generate_entry_number(),
+                date=now.date(), description=desc
+            )
+            db.session.add(entry)
+            db.session.flush()
+
+            def _dec(q):
+                raw = q.scalar()
+                return Decimal(str(raw)) if raw is not None else Decimal('0')
+
+            total_rev = _dec(db.session.query(func.sum(JournalEntryLine.credit)).join(Account).join(
+                JournalEntryLine.journal_entry).filter(
+                Account.code.startswith('4'), JournalEntry.date >= start, JournalEntry.date <= now.date()))
+            total_exp = _dec(db.session.query(func.sum(JournalEntryLine.debit)).join(Account).join(
+                JournalEntryLine.journal_entry).filter(
+                Account.code.startswith('5'), JournalEntry.date >= start, JournalEntry.date <= now.date()))
+            net = total_rev - total_exp
+
+            tx_ids = db.session.query(JournalEntry.transaction_id).filter(
+                JournalEntry.date >= start, JournalEntry.date <= now.date(), JournalEntry.transaction_id.isnot(None)
+            ).all()
+            tx_ids = [t[0] for t in tx_ids if t[0]]
+            if tx_ids:
+                Transaction.query.filter(Transaction.id.in_(tx_ids)).update(
+                    {Transaction.is_archived: True}, synchronize_session=False)
+
+            acc_retained = AccountingEngine.get_account('3020') or AccountingEngine.get_account('3010')
+            if total_rev > 0:
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id,
+                    account_id=(AccountingEngine.get_account('4999') or acc_retained).id,
+                    debit=total_rev, credit=Decimal('0'), description=f"خلاصه درآمد {period_label}"))
+            if total_exp > 0:
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id,
+                    account_id=(AccountingEngine.get_account('5999') or acc_retained).id,
+                    debit=Decimal('0'), credit=total_exp, description=f"خلاصه هزینه {period_label}"))
+            if abs(net) > 0 and acc_retained:
+                if net > 0:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_retained.id,
+                        debit=Decimal('0'), credit=net, description=f"سود خالص {period_label}"))
+                else:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_retained.id,
+                        debit=abs(net), credit=Decimal('0'), description=f"زیان خالص {period_label}"))
+
         db.session.commit()
-        line_count = len(entry.lines)
-        total_debit = sum(l.debit for l in entry.lines)
-        total_credit = sum(l.credit for l in entry.lines)
-        flash(f'✅ حساب‌های موقت بسته شدند. سند <b>{entry.entry_number}</b> با {line_count} آرتیکل صادر شد. '
-              f'(جمع بدهکار: {total_debit:,.0f} — جمع بستانکار: {total_credit:,.0f})', 'success')
+        flash(f'بستن حساب‌های {period_label} با موفقیت انجام شد (سند {entry.entry_number}).', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'❌ خطا در بستن حساب‌ها: {str(e)}', 'danger')
+        flash(f'خطا در بستن حساب‌ها: {str(e)}', 'danger')
 
     return redirect(request.referrer or url_for('finance.period_closing'))
 
@@ -649,8 +726,13 @@ def run_daily_feed():
             total_needed = float(sched.amount_kg) * sheep_count
             consumption_map[item_id] = consumption_map.get(item_id, 0) + total_needed
 
+    if not consumption_map:
+        flash('⚠️ برنامه تغذیه‌ای برای هیچ دامی ثبت نشده است. ابتدا جیره‌های تغذیه را تعریف کنید.', 'warning')
+        return redirect(url_for('dashboard.index'))
+
     try:
         total_cost = 0
+        skipped_items = []
         for item_id, qty in consumption_map.items():
             item = InventoryItem.query.get(item_id)
             if item and item.quantity >= qty:
@@ -661,11 +743,18 @@ def run_daily_feed():
                     transaction_price=item.unit_price, date=today, 
                     notes="کسر اتوماتیک جیره روزانه سیستم"
                 ))
+            elif item:
+                skipped_items.append(f"{item.name} (موجودی: {item.quantity}, نیاز: {qty})")
+        
+        if skipped_items:
+            flash(f'⚠️ مواد خوراکی زیر موجودی کافی نداشتند و کسر نشدند: {", ".join(skipped_items)}', 'warning')
         
         if total_cost > 0:
             AccountingEngine.record_feed_consumption(total_cost)
             db.session.commit()
             flash('مصرف روزانه بر اساس برنامه تغذیه با موفقیت کسر شد.', 'success')
+        else:
+            flash('هیچ مصرفی ثبت نشد. موجودی انبار کافی نیست.', 'warning')
     except Exception as e:
         db.session.rollback()
         flash(f'خطا در ثبت خودکار: {str(e)}', 'danger')
@@ -879,6 +968,7 @@ def audit_logs():
     page = request.args.get('page', 1, type=int)
     search_q = request.args.get('search', '').strip()
     user_filter = request.args.get('user', '').strip()
+    target_filter = request.args.get('target', '').strip()
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     
@@ -886,6 +976,8 @@ def audit_logs():
     
     if search_q:
         query = query.filter(AuditLog.action.ilike(f"%{search_q}%"))
+    if target_filter:
+        query = query.filter(AuditLog.action.ilike(f"%{target_filter}%"))
     if user_filter:
         query = query.filter(AuditLog.user_name.ilike(f"%{user_filter}%"))
     if date_from:
@@ -902,7 +994,66 @@ def audit_logs():
     page_size = int(get_setting('page_size', 50))    
     logs = query.order_by(AuditLog.timestamp.desc()).paginate(page=page, per_page=page_size, error_out=False)
     return render_template('dashboard/audit.html', logs=logs, search_q=search_q, user_filter=user_filter,
-                           date_from=date_from, date_to=date_to)
+                           target_filter=target_filter, date_from=date_from, date_to=date_to)
+
+@dashboard_bp.route('/close_preview')
+@login_required
+def close_preview():
+    """پیش‌نمایش عملکرد مالی قبل از بستن دوره"""
+    from app.models import Account, JournalEntryLine
+    from sqlalchemy import func
+    import json
+
+    period = request.args.get('period', 'year')
+    now = datetime.now(UTC)
+    if period == 'month':
+        start = now.replace(day=1)
+    elif period == 'quarter':
+        q_start = ((now.month - 1) // 3) * 3 + 1
+        start = now.replace(month=q_start, day=1)
+    else:
+        start = now.replace(month=1, day=1)
+
+    def _dec(q):
+        raw = q.scalar()
+        return float(raw) if raw is not None else 0.0
+
+    from app.models import JournalEntry
+    total_rev = _dec(db.session.query(func.sum(JournalEntryLine.credit)).join(Account).join(
+        JournalEntryLine.journal_entry).filter(
+        Account.code.startswith('4'), JournalEntry.date >= start))
+    total_exp = _dec(db.session.query(func.sum(JournalEntryLine.debit)).join(Account).join(
+        JournalEntryLine.journal_entry).filter(
+        Account.code.startswith('5'), JournalEntry.date >= start))
+    net = total_rev - total_exp
+
+    accounts_list = []
+    for code_prefix, nature in [('4', 'درآمد'), ('5', 'هزینه')]:
+        accs = Account.query.filter(Account.code.startswith(code_prefix)).all()
+        for acc in accs:
+            bal = _dec(db.session.query(func.sum(JournalEntryLine.credit - JournalEntryLine.debit)).join(
+                JournalEntryLine.journal_entry).filter(
+                JournalEntryLine.account_id == acc.id, JournalEntry.date >= start))
+            if abs(bal) > 0:
+                accounts_list.append({'name': acc.name, 'balance': bal, 'nature': nature})
+
+    from flask import jsonify
+    unit = get_system_setting('currency_unit', 'تومان')
+    factor = 10.0 if unit == 'ریال' else 1.0
+    total_rev *= factor
+    total_exp *= factor
+    net *= factor
+    for a in accounts_list:
+        a['balance'] *= factor
+    return jsonify({
+        'total_revenue': total_rev,
+        'total_expense': total_exp,
+        'net_profit': net,
+        'period': period,
+        'accounts': accounts_list,
+        'is_balanced': abs(total_rev - total_exp - net) < 1,
+        'currency_unit': unit
+    })
 
 @dashboard_bp.route('/maintenance/cleanup_logs', methods=['POST'])
 @login_required

@@ -220,6 +220,8 @@ class Transaction(db.Model):
     is_archived = db.Column(db.Boolean, default=False) # وضعیت بایگانی
     moadian_status = db.Column(db.String(20), default='منتظر ارسال') # وضعیت سامانه مودیان
     moadian_sent_at = db.Column(db.DateTime, nullable=True) # تاریخ ارسال به مودیان
+    inventory_item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=True) # کالای مرتبط در انبار
+    inventory_quantity = db.Column(Numeric(18, 2), nullable=True) # مقدار کالا در این فاکتور
     
     documents = db.relationship('TransactionDocument', backref='transaction', lazy=True, cascade="all, delete-orphan")
 

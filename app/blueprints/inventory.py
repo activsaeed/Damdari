@@ -152,7 +152,7 @@ def transaction():
                 item.quantity = new_total_qty
 
                 # ثبت خودکار هزینه در دفتر کل
-                new_tx = Transaction(t_type='هزینه', category='خرید انبار (خودکار)', amount=total_price, t_date=today, is_archived=False, description=f"خرید {amount} {item.unit.name if item.unit else ''} {item.name}")
+                new_tx = Transaction(t_type='هزینه', category='خرید انبار (خودکار)', amount=total_price, t_date=today, is_archived=False, inventory_item_id=item.id, inventory_quantity=amount, description=f"خرید {amount} {item.unit.name if item.unit else ''} {item.name}")
                 db.session.add(new_tx)
                 db.session.flush()
                 AccountingEngine.record_expense(new_tx)

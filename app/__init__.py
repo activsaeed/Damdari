@@ -222,21 +222,20 @@ def create_app():
     def observe_transaction_deletion(session, flush_context, instances):
         for obj in session.deleted:
             if isinstance(obj, Transaction) and obj.category == 'خرید انبار (خودکار)':
-                import re
-                # استخراج مقدار و نام کالا از شرح فاکتور
-                match = re.search(r"خرید ([\d.]+) .* (.*)$", obj.description)
-                if match:
-                    try:
+                amount = obj.inventory_quantity
+                item = InventoryItem.query.get(obj.inventory_item_id) if obj.inventory_item_id else None
+                if not item and amount is None:
+                    import re
+                    match = re.search(r"خرید ([\d.]+) .* (.*)$", obj.description)
+                    if match:
                         amount = Decimal(match.group(1))
-                        item_name = match.group(2).strip()
-                        item = InventoryItem.query.filter_by(name=item_name).first()
-                        if item:
-                            # جلوگیری از منفی شدن موجودی در صورت حذف اشتباه
-                            if item.quantity >= amount:
-                                item.quantity -= amount
-                                # نکته حسابرسی: در سیستم‌های پیشرفته اینجا باید Recalculate Unit Price فراخوانی شود
-                            else:
-                                raise Exception(f"خطای حسابرسی: حذف این فاکتور باعث منفی شدن موجودی {item.name} می‌شود.")
+                        item = InventoryItem.query.filter_by(name=match.group(2).strip()).first()
+                if item and amount:
+                    try:
+                        if item.quantity >= amount:
+                            item.quantity -= amount
+                        else:
+                            raise Exception(f"خطای حسابرسی: حذف این فاکتور باعث منفی شدن موجودی {item.name} می‌شود.")
                     except Exception as e:
                         if "خطای حسابرسی" in str(e): raise e
 

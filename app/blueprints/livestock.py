@@ -796,7 +796,8 @@ def pen_dashboard():
                            sheeps=sheeps_pagination,
                            current_search=search_q, current_gender=gender_q, 
                            current_breed=breed_q, current_status=status_q, current_starred=starred_q,
-                           current_min_w=min_w, current_max_w=max_w, breeds=BreedCategory.query.all())
+                           current_min_w=min_w, current_max_w=max_w, breeds=BreedCategory.query.all(),
+                           rations=FeedRation.query.all(), statuses=StatusCategory.query.all())
 
 @livestock_bp.route('/api/pen/<int:pen_id>/sensor')
 @login_required

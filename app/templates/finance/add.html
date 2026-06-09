@@ -26,7 +26,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-bold">تاریخ فاکتور (شمسی)</label>
-                    <input type="text" class="form-control jalali-datepicker" required>
+                    <input type="text" name="t_date_jalali" class="form-control jalali-datepicker" required>
                     <input type="hidden" name="t_date" class="gregorian-hidden-field" value="{{ today_str }}">
                 </div>
             </div>
@@ -58,7 +58,7 @@
                 </div>
                 <div class="col-md-4" id="due_date_div" style="display:none;">
                     <label class="form-label fw-bold text-danger">تاریخ سررسید پرداخت</label>
-                    <input type="text" class="form-control jalali-datepicker border-danger">
+                    <input type="text" name="due_date_jalali" class="form-control jalali-datepicker border-danger">
                     <input type="hidden" name="due_date" class="gregorian-hidden-field">
                 </div>
                 <div class="col-md-4">
@@ -78,6 +78,7 @@
                     <label class="form-label fw-bold text-primary">مبلغ پایه (خالص)</label>
                     <input type="text" class="form-control text-center fw-bold text-primary" placeholder="مثال: 5,000,000" onkeyup="calcFinancials(this, 'raw_amount')" required>
                     <input type="hidden" id="raw_amount" name="amount" required>
+                    <div class="invalid-feedback">مبلغ باید بیشتر از صفر باشد.</div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-bold">مبلغ تخفیف</label>
@@ -176,6 +177,11 @@
         // ۱. بروزرسانی فیلد مخفی و فرمت کردن عدد ورودی
         if (input && hiddenId) {
             let cleanVal = input.value.replace(/\D/g, "");
+            if (hiddenId === 'raw_amount' && cleanVal === '0') {
+                input.classList.add('is-invalid');
+            } else if (hiddenId === 'raw_amount') {
+                input.classList.remove('is-invalid');
+            }
             document.getElementById(hiddenId).value = cleanVal;
             input.value = cleanVal ? Number(cleanVal).toLocaleString('en-US') : "";
         }

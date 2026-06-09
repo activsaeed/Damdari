@@ -191,6 +191,7 @@ def index():
 
     # 5. گزارش مصرف انبار (رفع باگ صفر بودن نمودار) - استفاده از SQL بجای حلقه
     date_filter = request.args.get('date_filter', '30')
+    starred_filter = request.args.get('starred', '')
     if date_filter == '30': filter_date = month_ago
     elif date_filter == '180': filter_date = six_months_ago
     elif date_filter == '365': filter_date = year_ago

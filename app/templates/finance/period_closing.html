@@ -6,43 +6,51 @@
 
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message|safe }}</div>{% endfor %}{% endif %}{% endwith %}
 
-<!-- پیش‌نمایش عملکرد سال جاری -->
-<div class="card border-0 shadow-sm mb-4 border-0 bg-gradient" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
-    <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold text-warning mb-0"><i class="fa-solid fa-chart-line me-2"></i> پیش‌نمایش عملکرد سال جاری</h5>
-            <span class="badge bg-light text-dark fs-6">{{ entries_count }} سند صادر شده</span>
+<!-- پیش‌نمایش عملکرد با قابلیت انتخاب دوره -->
+<div class="card border-0 shadow-sm mb-4 border-top border-warning border-4">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="fw-bold text-dark mb-0"><i class="fa-solid fa-chart-line text-warning me-2"></i> پیش‌نمایش عملکرد مالی</h5>
+        <div class="d-flex align-items-center gap-2">
+            <span class="small text-muted">{{ entries_count }} سند صادر شده</span>
+            <select id="previewPeriodSelect" class="form-select form-select-sm w-auto" onchange="loadPeriodPreview()">
+                <option value="month">ماه جاری</option>
+                <option value="quarter">فصل جاری</option>
+                <option value="year" selected>سال جاری</option>
+            </select>
         </div>
-        <div class="row g-3">
-            <div class="col-md-3">
-                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
-                    <small class="text-white-50 d-block">کل درآمد (کد ۴)</small>
-                    <strong class="fs-4 text-success">{{ total_revenue|currency }}</strong>
+    </div>
+    <div class="card-body" id="previewBody">
+        <div class="row g-3" id="previewSummaryRow">
+            <div class="col-md-3 col-6">
+                <div class="p-3 bg-success bg-opacity-10 rounded-3 text-center border border-success border-opacity-25">
+                    <small class="text-muted d-block">کل درآمد</small>
+                    <strong class="fs-4 text-success" id="previewRevenue">{{ total_revenue|currency }}</strong>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
-                    <small class="text-white-50 d-block">کل هزینه (کد ۵)</small>
-                    <strong class="fs-4 text-danger">{{ total_expense|currency }}</strong>
+            <div class="col-md-3 col-6">
+                <div class="p-3 bg-danger bg-opacity-10 rounded-3 text-center border border-danger border-opacity-25">
+                    <small class="text-muted d-block">کل هزینه</small>
+                    <strong class="fs-4 text-danger" id="previewExpense">{{ total_expense|currency }}</strong>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
-                    <small class="text-white-50 d-block">سود / زیان خالص</small>
-                    <strong class="fs-4 {% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}">{{ net_profit|currency }}</strong>
+            <div class="col-md-3 col-6">
+                <div class="p-3 bg-{{ 'success' if net_profit > 0 else 'danger' }} bg-opacity-10 rounded-3 text-center border border-{{ 'success' if net_profit > 0 else 'danger' }} border-opacity-25">
+                    <small class="text-muted d-block">سود / زیان خالص</small>
+                    <strong class="fs-4 {% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}" id="previewNetProfit">{{ net_profit|currency }}</strong>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
-                    <small class="text-white-50 d-block">ارزش دفتری انبار</small>
-                    <strong class="fs-4 text-info">{{ inv_book_value|currency }}</strong>
+            <div class="col-md-3 col-6">
+                <div class="p-3 bg-info bg-opacity-10 rounded-3 text-center border border-info border-opacity-25">
+                    <small class="text-muted d-block">ارزش دفتری انبار</small>
+                    <strong class="fs-4 text-info" id="previewInventory">{{ inv_book_value|currency }}</strong>
                 </div>
             </div>
         </div>
+        <div id="previewDetails" class="mt-3"></div>
         <div class="mt-3 d-flex gap-2 justify-content-center flex-wrap">
-            <a href="{{ url_for('finance.trial_balance') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-list"></i> تراز آزمایشی</a>
-            <a href="{{ url_for('finance.statements') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-scale-balanced"></i> صورت‌های مالی</a>
-            <a href="{{ url_for('finance.journal_entries') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-book"></i> دفتر روزنامه</a>
+            <a href="{{ url_for('finance.trial_balance') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-list"></i> تراز آزمایشی</a>
+            <a href="{{ url_for('finance.statements') }}" class="btn btn-outline-success btn-sm"><i class="fa-solid fa-scale-balanced"></i> صورت‌های مالی</a>
+            <a href="{{ url_for('finance.journal_entries') }}" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-book"></i> دفتر روزنامه</a>
         </div>
     </div>
 </div>
@@ -106,7 +114,7 @@
                 <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را با دفتر کل تطبیق می‌دهد. در صورت مغایرت، سند تعدیل صادر می‌شود.</p>
                 <div class="p-2 bg-light rounded mb-3 text-center">
                     <small class="text-muted d-block">ارزش دفتری فعلی انبار (حساب ۱۰۲۰)</small>
-                    <strong class="text-info fs-5">{{ inv_book_value|currency }}</strong>
+                    <strong class="text-info fs-5" id="closeInventory">{{ inv_book_value|currency }}</strong>
                 </div>
                 <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
@@ -121,36 +129,54 @@
         <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
             <div class="card-header bg-white py-3 d-flex align-items-center">
                 <span class="badge bg-primary text-white rounded-circle ms-2 fs-6">۳</span>
-                <h5 class="mb-0 fw-bold">بستن حساب‌های موقت (پایان سال)</h5>
+                <h5 class="mb-0 fw-bold">بستن حساب‌های موقت</h5>
+                <i class="fa-solid fa-circle-question text-primary ms-2" data-bs-toggle="tooltip"
+                   title="حساب‌های درآمد و هزینه را صفر کرده و سود/زیان خالص را به سود انباشته منتقل می‌کند."></i>
             </div>
             <div class="card-body d-flex flex-column">
-                <p class="text-muted small">مانده تمام حساب‌های درآمد (کد ۴) و هزینه (کد ۵) را صفر کرده و سود یا زیان خالص را به «سود انباشته» (کد ۳۰۲۰) منتقل می‌کند.</p>
+                <p class="text-muted small">مانده حساب‌های درآمد (کد ۴) و هزینه (کد ۵) صفر و سود/زیان به سود انباشته (۳۰۲۰) منتقل می‌شود.</p>
                 <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <div class="p-2 bg-light rounded text-center">
-                            <small class="text-muted d-block">قابل انتقال به سود انباشته</small>
-                            <strong class="{% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}">{{ net_profit|currency }}</strong>
+                    <div class="col-4">
+                        <div class="p-2 bg-success bg-opacity-10 rounded text-center border border-success border-opacity-25">
+                            <small class="text-muted d-block">درآمد</small>
+                            <strong class="text-success" id="closeRevenue">{{ total_revenue|currency }}</strong>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="p-2 bg-light rounded text-center">
-                            <small class="text-muted d-block">وضعیت</small>
-                            {% if net_profit > 0 %}
-                            <strong class="text-success">سود خالص</strong>
-                            {% elif net_profit < 0 %}
-                            <strong class="text-danger">زیان خالص</strong>
-                            {% else %}
-                            <strong class="text-muted">صفر</strong>
-                            {% endif %}
+                    <div class="col-4">
+                        <div class="p-2 bg-danger bg-opacity-10 rounded text-center border border-danger border-opacity-25">
+                            <small class="text-muted d-block">هزینه</small>
+                            <strong class="text-danger" id="closeExpense">{{ total_expense|currency }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-{{ 'success' if net_profit > 0 else 'danger' }} bg-opacity-10 rounded text-center border border-{{ 'success' if net_profit > 0 else 'danger' }} border-opacity-25">
+                            <small class="text-muted d-block">خالص</small>
+                            <strong class="{% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}" id="closeNetProfit">{{ net_profit|currency }}</strong>
                         </div>
                     </div>
                 </div>
-                <div class="alert alert-warning py-2 small border-0 mb-2">
-                    <i class="fa-solid fa-triangle-exclamation"></i> فقط یک بار در پایان سال مالی. غیرقابل بازگشت.
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">دوره بستن حساب‌ها:</label>
+                    <select id="closePeriodSelect" class="form-select form-select-sm w-auto" onchange="loadClosingPreview()">
+                        <option value="month">پایان ماه جاری</option>
+                        <option value="quarter">پایان فصل جاری</option>
+                        <option value="year" selected>پایان سال مالی</option>
+                    </select>
                 </div>
-                <form action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" class="mt-auto"
-                      onsubmit="return confirm('هشدار: آیا از بستن دفاتر مالی اطمینان دارید؟ این عملیات قابل بازگشت نیست.')">
-                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">بستن دفاتر و انتقال سود/زیان</button>
+
+                <div class="alert alert-danger py-2 small border-0 mb-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <strong>هشدار:</strong> با بستن حساب‌ها، تراکنش‌های دوره بایگانی شده و دیگر قابل ویرایش نیستند. عملیات سالانه غیرقابل بازگشت است.
+                </div>
+
+                <form id="closeForm" action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" class="mt-auto"
+                      onsubmit="document.getElementById('closeBtn').disabled = true; document.getElementById('closeBtn').innerHTML = 'در حال پردازش...';">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="period" id="closePeriodInput" value="year">
+                    <button type="button" class="btn btn-primary w-100 fw-bold py-2" id="closeBtn" onclick="confirmCloseSubmit()">
+                        <i class="fa-solid fa-lock"></i> بستن حساب‌های دوره
+                    </button>
                 </form>
             </div>
         </div>
@@ -176,6 +202,124 @@
         </div>
     </div>
 </div>
+
+<script>
+const currencyUnit = '{{ get_system_currency_from_settings() }}';
+
+function fmt(v) {
+    return Number(v).toLocaleString() + ' ' + currencyUnit;
+}
+
+function updatePreviewCards(data) {
+    document.getElementById('previewRevenue').textContent = fmt(data.total_revenue);
+    document.getElementById('previewExpense').textContent = fmt(data.total_expense);
+    const netEl = document.getElementById('previewNetProfit');
+    netEl.textContent = fmt(data.net_profit);
+    netEl.className = 'fs-4 ' + (data.net_profit > 0 ? 'text-success' : 'text-danger');
+    const netCard = netEl.closest('.p-3');
+    if (netCard) {
+        netCard.className = 'p-3 bg-' + (data.net_profit > 0 ? 'success' : 'danger') + ' bg-opacity-10 rounded-3 text-center border border-' + (data.net_profit > 0 ? 'success' : 'danger') + ' border-opacity-25';
+    }
+}
+
+function updateCloseCards(data) {
+    document.getElementById('closeRevenue').textContent = fmt(data.total_revenue);
+    document.getElementById('closeExpense').textContent = fmt(data.total_expense);
+    const netEl = document.getElementById('closeNetProfit');
+    netEl.textContent = fmt(data.net_profit);
+    netEl.className = (data.net_profit > 0 ? 'text-success' : 'text-danger');
+    const netCard = netEl.closest('.p-2');
+    if (netCard) {
+        netCard.className = 'p-2 bg-' + (data.net_profit > 0 ? 'success' : 'danger') + ' bg-opacity-10 rounded text-center border border-' + (data.net_profit > 0 ? 'success' : 'danger') + ' border-opacity-25';
+    }
+}
+
+function loadPeriodPreview() {
+    const period = document.getElementById('previewPeriodSelect').value;
+    const details = document.getElementById('previewDetails');
+    details.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm text-primary"></div> در حال بارگذاری...</div>';
+
+    fetch('{{ url_for("dashboard.close_preview") }}?period=' + period)
+        .then(r => r.json())
+        .then(data => {
+            updatePreviewCards(data);
+            let periodLabel = {month: 'ماه', quarter: 'فصل', year: 'سال'}[period] || 'دوره';
+            let rows = (data.accounts || []).map(a =>
+                `<tr><td>${a.name}</td><td class="text-center"><span class="badge bg-${a.nature === 'درآمد' ? 'success' : 'danger'} bg-opacity-10 text-${a.nature === 'درآمد' ? 'success' : 'danger'}">${a.nature}</span></td><td class="fw-bold text-end">${fmt(a.balance)}</td></tr>`
+            ).join('');
+
+            details.innerHTML = `
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4 col-6">
+                        <div class="p-2 bg-light rounded text-center">
+                            <small class="text-muted d-block">تعداد حساب‌های درآمدی</small>
+                            <strong>${(data.accounts||[]).filter(a => a.nature === 'درآمد').length}</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-6">
+                        <div class="p-2 bg-light rounded text-center">
+                            <small class="text-muted d-block">تعداد حساب‌های هزینه</small>
+                            <strong>${(data.accounts||[]).filter(a => a.nature === 'هزینه').length}</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-6">
+                        <div class="p-2 bg-light rounded text-center">
+                            <small class="text-muted d-block">وضعیت تراز</small>
+                            <strong class="text-${data.is_balanced ? 'success' : 'danger'}">${data.is_balanced ? 'متوازن ✓' : 'نامتوازن ✗'}</strong>
+                        </div>
+                    </div>
+                </div>
+                ${rows ? `
+                <div class="small">
+                    <strong class="text-muted">تفکیک حساب‌های ${periodLabel}:</strong>
+                    <div class="table-responsive" style="max-height:180px;overflow-y:auto">
+                        <table class="table table-sm table-bordered mb-0 mt-1">
+                            <thead class="table-light"><tr><th>حساب</th><th>نوع</th><th class="text-end">مانده</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>` : '<p class="text-muted small text-center mt-2">همه حساب‌های این دوره صفر هستند.</p>'}
+            `;
+        })
+        .catch(e => {
+            details.innerHTML = '<div class="alert alert-danger small py-1">خطا در دریافت پیش‌نمایش</div>';
+        });
+}
+
+function loadClosingPreview() {
+    const period = document.getElementById('closePeriodSelect').value;
+    fetch('{{ url_for("dashboard.close_preview") }}?period=' + period)
+        .then(r => r.json())
+        .then(data => updateCloseCards(data))
+        .catch(() => {});
+}
+
+function confirmCloseSubmit() {
+    const period = document.getElementById('closePeriodSelect').value;
+    document.getElementById('closePeriodInput').value = period;
+
+    const names = {month: 'ماه جاری', quarter: 'فصل جاری', year: 'سال مالی'};
+    const isYear = period === 'year';
+    let msg = 'آیا از بستن حساب‌های ' + names[period] + ' اطمینان دارید؟\n\n';
+    if (isYear) {
+        msg += '⚠️ این عملیات غیرقابل بازگشت است!\n';
+        msg += '• تمام حساب‌های درآمد و هزینه صفر می‌شوند\n';
+        msg += '• سود/زیان خالص به سود انباشته منتقل می‌شود\n';
+    } else {
+        msg += '• تراکنش‌های این دوره بایگانی می‌شوند\n';
+        msg += '• سند خلاصه سود/زیان صادر می‌شود\n';
+    }
+    msg += '\nآیا ادامه می‌دهید؟';
+
+    if (confirm(msg)) {
+        document.getElementById('closeForm').submit();
+    }
+}
+
+// بارگذاری اولیه
+loadPeriodPreview();
+loadClosingPreview();
+</script>
 
 <!-- آخرین اسناد حسابداری -->
 <div class="card border-0 shadow-sm mt-4 border-top border-info border-4">

@@ -354,8 +354,23 @@ http.end();</pre>
                                     <div class="mb-3">
                                         <label class="form-label small fw-bold text-danger">تنظیمات پنل پیامک</label>
                                         <input type="text" name="sms_api_key" class="form-control mb-2" placeholder="API Key" value="{{ settings.get('sms_api_key', '') }}">
-                                        <input type="text" name="sms_sender_number" class="form-control" placeholder="شماره فرستنده" value="{{ settings.get('sms_sender_number', '') }}">
+                                        <input type="text" name="sms_sender_number" class="form-control mb-2" placeholder="شماره فرستنده" value="{{ settings.get('sms_sender_number', '') }}">
+                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="testSms(this)">تست پیامک</button>
+                                        <div id="smsTestResult" class="mt-1 small"></div>
                                     </div>
+                                    <script>
+                                    function testSms(btn) {
+                                        btn.disabled = true;
+                                        btn.innerHTML = 'در حال بررسی...';
+                                        const resultEl = document.getElementById('smsTestResult');
+                                        fetch('{{ url_for("dashboard.test_sms") }}', {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'}})
+                                            .then(r => r.json()).then(d => {
+                                                resultEl.innerHTML = d.success ? '<span class="text-success">✓ ' + d.message + '</span>' : '<span class="text-danger">✗ ' + d.message + '</span>';
+                                            }).catch(e => {
+                                                resultEl.innerHTML = '<span class="text-danger">✗ خطا در ارتباط با سرور</span>';
+                                            }).finally(() => { btn.disabled = false; btn.innerHTML = 'تست پیامک'; });
+                                    }
+                                    </script>
                                 </div>
                             </div>
                             <div class="card border-0 shadow-sm mt-4">
@@ -396,18 +411,6 @@ http.end();</pre>
 </div>
 
 
-
-<div class="card border-0 shadow-sm mb-4 border-top border-warning border-4">
-    <div class="card-body d-flex justify-content-between align-items-center py-3">
-        <div>
-            <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-invoice-dollar text-warning"></i> عملیات پایان دوره حسابداری</h6>
-            <p class="text-muted small mb-0">ارزیابی گله، تطبیق انبار، بستن حساب‌ها و صدور سند افتتاحیه به صفحه تخصصی حسابداری منتقل شد.</p>
-        </div>
-        <a href="{{ url_for('finance.period_closing') }}" class="btn btn-warning fw-bold shadow-sm px-4">
-            <i class="fa-solid fa-arrow-left"></i> ورود به عملیات حسابداری
-        </a>
-    </div>
-</div>
 
 <!-- بخش جدید: ابزارهای نگهداری و سبک‌سازی دیتابیس -->
 <div class="card border-0 shadow-sm rounded-4 border-top border-danger border-5 mb-4">

@@ -57,7 +57,8 @@ class AccountingEngine:
                 amount = transaction.amount
                 vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')
                 discount_amount = transaction.discount_amount or Decimal('0')
-                total_amount = (amount - discount_amount) + vat_amount
+                net_amount = amount - discount_amount
+                total_amount = net_amount + vat_amount
 
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
@@ -72,20 +73,17 @@ class AccountingEngine:
                 
                 # تشخیص حساب بدهکار بر اساس نوع شخص و روش پرداخت
                 if transaction.payment_method == 'نسیه' and effective_contact_id:
-                    from app.models import Contact
-                    contact = db.session.get(Contact, effective_contact_id)
-                    if contact and contact.contact_type and 'تامین' in contact.contact_type:
-                        debit_acc_id = cash_account.id  # تامین‌کننده -> نقدی
-                    else:
-                        debit_acc_id = receivable_account.id  # مشتری -> دریافتنی
+                    debit_acc_id = receivable_account.id  # در فروش نسیه، همیشه دریافتنی ثبت می‌شود
                 else:
                     debit_acc_id = cash_account.id
                 
                 db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=debit_acc_id, contact_id=effective_contact_id, debit=total_amount, credit=0.0))
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=amount))
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=sales_account.id, debit=0.0, credit=net_amount))
 
                 if vat_amount > 0 and vat_payable:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_payable.id, debit=0.0, credit=vat_amount))
+                elif vat_amount > 0 and not vat_payable:
+                    raise ValueError("حساب مالیات پرداختنی (2030) در سیستم تعریف نشده است. لطفاً ابتدا آن را ایجاد کنید.")
         except Exception as e:
             db.session.rollback()
             raise Exception(f"خطا در ثبت فاکتور فروش: {str(e)}")
@@ -103,7 +101,8 @@ class AccountingEngine:
                 amount = transaction.amount
                 vat_amount = transaction.vat_amount or Decimal('0') if include_vat else Decimal('0')
                 discount_amount = transaction.discount_amount or Decimal('0')
-                total_amount = (amount - discount_amount) + vat_amount
+                net_amount = amount - discount_amount
+                total_amount = net_amount + vat_amount
 
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
@@ -114,21 +113,18 @@ class AccountingEngine:
                 db.session.add(entry)
                 db.session.flush()
 
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=amount, credit=0.0))
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=expense_account.id, debit=net_amount, credit=0.0))
 
                 if vat_amount > 0 and vat_receivable:
                     db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=vat_receivable.id, debit=vat_amount, credit=0.0))
+                elif vat_amount > 0 and not vat_receivable:
+                    raise ValueError("حساب اعتبار مالیاتی (1040) در سیستم تعریف نشده است. لطفاً ابتدا آن را ایجاد کنید.")
 
                 effective_contact_id = contact_id or transaction.contact_id
                 
                 # تشخیص حساب بستانکار بر اساس نوع شخص و روش پرداخت
                 if transaction.payment_method == 'نسیه' and effective_contact_id:
-                    from app.models import Contact
-                    contact = db.session.get(Contact, effective_contact_id)
-                    if contact and contact.contact_type and 'مشتری' in contact.contact_type:
-                        credit_acc_id = cash_account.id  # مشتری -> نقدی
-                    else:
-                        credit_acc_id = payable_account.id  # تامین‌کننده -> پرداختنی
+                    credit_acc_id = payable_account.id  # در خرید نسیه، همیشه پرداختنی ثبت می‌شود
                 else:
                     credit_acc_id = cash_account.id
                 
