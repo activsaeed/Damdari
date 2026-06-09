@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -100,6 +101,7 @@
 </div>
 
 <form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2 bg-light p-2 rounded border">
         <span class="fw-bold text-muted small"><i class="fa-solid fa-layer-group"></i> عملیات روی انتخاب شده‌ها:</span>
         <select name="bulk_action_type" class="form-select form-select-sm w-auto" onchange="toggleBulkSaleFields()">
@@ -112,7 +114,7 @@
         <select name="new_pen_id" class="form-select form-select-sm w-auto"><option value="">انتخاب بهاربند...</option>{% for p in pens %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
         <input type="number" name="bulk_sale_price" class="form-control form-control-sm w-auto" id="bulkSalePrice" placeholder="قیمت فروش (ریال)" style="display: none;" step="0.01">
         <input type="date" name="bulk_sale_date" class="form-control form-control-sm w-auto" id="bulkSaleDate" style="display: none;">
-        <button type="submit" class="btn btn-sm btn-dark" onclick="return confirm('تغییرات اعمال شود؟')">اعمال گروهی</button>
+        <button type="submit" class="btn btn-sm btn-dark" onclick="return validateBulkAction()">اعمال گروهی</button>
     </div>
 
     <div class="card shadow-sm border-0 mb-3">
@@ -243,6 +245,15 @@
             }
         })
         .catch(err => console.error('Error toggling star:', err));
+    }
+
+    function validateBulkAction() {
+        const checked = document.querySelectorAll('.sheep-checkbox:checked');
+        if (checked.length === 0) {
+            alert('لطفاً ابتدا حداقل یک دام را با تیک چک‌باکس انتخاب کنید.');
+            return false;
+        }
+        return confirm('تغییرات اعمال شود؟');
     }
 
     function toggleBulkSaleFields() {

@@ -530,6 +530,14 @@ def close_fiscal_year():
         flash('دسترسی محدود است.', 'danger')
         return redirect(url_for('dashboard.index'))
 
+    from app.models import JournalEntry
+    existing = JournalEntry.query.filter(
+        JournalEntry.description.like('بستن حساب‌های موقت%')
+    ).first()
+    if existing:
+        flash(f'⚠️ حساب‌های موقت قبلاً بسته شده‌اند (سند {existing.entry_number}). ابتدا سند برگشتی صادر کنید.', 'warning')
+        return redirect(request.referrer or url_for('finance.period_closing'))
+
     try:
         entry = AccountingEngine.close_temporary_accounts()
         db.session.commit()
@@ -549,6 +557,15 @@ def close_fiscal_year():
 def issue_opening_entry():
     """صدور سند افتتاحیه جهت انتقال مانده‌ها به سال جدید"""
     if current_user.role != 'مدیر': return redirect(url_for('dashboard.index'))
+
+    from app.models import JournalEntry
+    existing = JournalEntry.query.filter(
+        JournalEntry.description.like('سند افتتاحیه%')
+    ).first()
+    if existing:
+        flash(f'⚠️ سند افتتاحیه قبلاً صادر شده (سند {existing.entry_number}).', 'warning')
+        return redirect(request.referrer or url_for('finance.period_closing'))
+
     try:
         entry = AccountingEngine.record_opening_entry()
         db.session.commit()

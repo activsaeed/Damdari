@@ -640,6 +640,19 @@ def medical_overview():
     upcoming_meds = MedicalRecord.query.filter(MedicalRecord.next_date != None, MedicalRecord.next_date <= today + timedelta(days=7)).order_by(MedicalRecord.next_date.asc()).all()
     return render_template('livestock/medical.html', sick_sheep=sick_sheep, upcoming_meds=upcoming_meds, today=today)
 
+@livestock_bp.route('/mating-suggestion')
+@login_required
+@permission_required('can_view_livestock')
+def mating_suggestion():
+    rams = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).all()
+    ewes = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).all()
+    from sqlalchemy import func as sf
+    total_rams = len(rams)
+    total_ewes = len(ewes)
+    avg_weight_rams = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).scalar() or 0
+    avg_weight_ewes = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).scalar() or 0
+    return render_template('livestock/mating_suggestion.html', rams=rams, ewes=ewes, total_rams=total_rams, total_ewes=total_ewes, avg_weight_rams=round(float(avg_weight_rams), 1), avg_weight_ewes=round(float(avg_weight_ewes), 1), today=datetime.now(UTC).date())
+
 @livestock_bp.route('/mark_healthy/<int:id>')
 @login_required
 @permission_required('can_view_livestock')

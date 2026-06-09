@@ -303,23 +303,66 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // نمودار دایره‌ای نژادها
+    // نمودار دایره‌ای توزیع نژادهای گله با درصد داخل و راهنمای کناری
+    function addPctToLabel(label, val, total) {
+        return label + ' (' + (total > 0 ? ((val / total) * 100).toFixed(1) : '0.0') + '%)';
+    }
     const breedCtx = document.getElementById('breedChart').getContext('2d');
+    const breedLabels = {{ breed_stats.keys() | list | tojson }};
+    const breedData = {{ breed_stats.values() | list | tojson }};
+    const breedTotal = breedData.reduce((a, b) => a + b, 0);
+    const breedColors = ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71', '#9b59b6', '#34495e'];
+
     new Chart(breedCtx, {
         type: 'doughnut',
         data: {
-            labels: {{ breed_stats.keys() | list | tojson }},
+            labels: breedLabels.map((l,i) => addPctToLabel(l, breedData[i], breedTotal)),
             datasets: [{
-                data: {{ breed_stats.values() | list | tojson }},
-                backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71', '#9b59b6', '#34495e'],
-                borderWidth: 0
+                data: breedData,
+                backgroundColor: breedColors,
+                borderWidth: 1,
+                borderColor: '#fff',
+                hoverOffset: Array(breedData.length).fill(0) // مقدار اولیه برای hoverOffset
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '60%',
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { 
+                    display: true, 
+                    position: 'right',
+                    rtl: true,
+                    labels: {
+                        font: { family: 'Vazirmatn', size: 11 },
+                        padding: 15,
+                        boxWidth: 12
+                    },
+                    onHover: function(event, legendItem, legend) {
+                        event.native.target.style.cursor = 'pointer';
+                        const chart = legend.chart;
+                        chart.data.datasets[0].hoverOffset[legendItem.index] = 10; // مقدار برجستگی
+                        chart.update();
+                    },
+                    onLeave: function(event, legendItem, legend) {
+                        event.native.target.style.cursor = 'default';
+                        const chart = legend.chart;
+                        chart.data.datasets[0].hoverOffset[legendItem.index] = 0;
+                        chart.update();
+                    }
+                },
+                tooltip: {
+                    rtl: true,
+                    callbacks: {
+                        label: function(ctx) {
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            const val = ctx.parsed;
+                            const pct = ((val / total) * 100).toFixed(1);
+                            return ctx.label + ': ' + val.toLocaleString() + ' رأس';
+                        }
+                    }
+                }
             }
         }
     });

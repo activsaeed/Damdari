@@ -6,38 +6,89 @@
 
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message|safe }}</div>{% endfor %}{% endif %}{% endwith %}
 
+<!-- پیش‌نمایش عملکرد سال جاری -->
+<div class="card border-0 shadow-sm mb-4 border-0 bg-gradient" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-warning mb-0"><i class="fa-solid fa-chart-line me-2"></i> پیش‌نمایش عملکرد سال جاری</h5>
+            <span class="badge bg-light text-dark fs-6">{{ entries_count }} سند صادر شده</span>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
+                    <small class="text-white-50 d-block">کل درآمد (کد ۴)</small>
+                    <strong class="fs-4 text-success">{{ total_revenue|currency }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
+                    <small class="text-white-50 d-block">کل هزینه (کد ۵)</small>
+                    <strong class="fs-4 text-danger">{{ total_expense|currency }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
+                    <small class="text-white-50 d-block">سود / زیان خالص</small>
+                    <strong class="fs-4 {% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}">{{ net_profit|currency }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 rounded-3 bg-white bg-opacity-10 text-center">
+                    <small class="text-white-50 d-block">ارزش دفتری انبار</small>
+                    <strong class="fs-4 text-info">{{ inv_book_value|currency }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="mt-3 d-flex gap-2 justify-content-center flex-wrap">
+            <a href="{{ url_for('finance.trial_balance') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-list"></i> تراز آزمایشی</a>
+            <a href="{{ url_for('finance.statements') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-scale-balanced"></i> صورت‌های مالی</a>
+            <a href="{{ url_for('finance.journal_entries') }}" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-book"></i> دفتر روزنامه</a>
+        </div>
+    </div>
+</div>
+
+<!-- راهنمای ترتیب عملیات -->
+<div class="alert alert-info border-0 shadow-sm mb-4 d-flex align-items-center">
+    <i class="fa-solid fa-list-ol fs-3 me-3"></i>
+    <div>
+        <strong>ترتیب صحیح عملیات پایان سال:</strong>
+        ابتدا <b>ارزیابی گله</b>، سپس <b>تطبیق انبار</b>، بعد <b>بستن حساب‌ها</b>، و در نهایت <b>صدور سند افتتاحیه</b> سال جدید.
+    </div>
+</div>
+
 <div class="row g-4">
     <!-- کارت ارزیابی ارزش منصفانه -->
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100 border-top border-warning border-4">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa-solid fa-scale-balanced text-warning fs-4 me-2"></i>
-                <h5 class="mb-0 fw-bold">۱. ارزیابی ارزش منصفانه گله (استاندارد ۲۶)</h5>
+                <span class="badge bg-warning text-dark rounded-circle ms-2 fs-6">۱</span>
+                <h5 class="mb-0 fw-bold">ارزیابی ارزش منصفانه گله</h5>
                 <i class="fa-solid fa-circle-question text-primary ms-2" data-bs-toggle="tooltip"
                    title="طبق استاندارد ۲۶ حسابداری، گله باید به ارزش منصفانه (قیمت بازار) ارزیابی شود."></i>
             </div>
             <div class="card-body d-flex flex-column">
-                <div class="row g-3 mb-3">
+                <p class="text-muted small">ارزش روز گله را محاسبه کرده و سند تعدیل ارزش منصفانه صادر می‌کند.</p>
+                <div class="row g-2 mb-3">
                     <div class="col-6">
-                        <div class="p-3 bg-light rounded text-center">
+                        <div class="p-2 bg-light rounded text-center">
                             <small class="text-muted d-block">وزن کل گله</small>
-                            <strong class="fs-4">{{ "{:,.0f}".format(total_weight) }} کیلو</strong>
+                            <strong>{{ "{:,.0f}".format(total_weight) }} کیلو</strong>
                         </div>
                     </div>
                     <div class="col-6">
-                        <div class="p-3 bg-light rounded text-center">
+                        <div class="p-2 bg-light rounded text-center">
                             <small class="text-muted d-block">قیمت پایه هر کیلو</small>
-                            <strong class="fs-4 text-primary">{{ settings.get('market_price', '0')|currency }}</strong>
+                            <strong class="text-primary">{{ (settings.get('market_price', '0')|float)|currency }}</strong>
                         </div>
                     </div>
                 </div>
                 <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
-                    <label class="form-label fw-bold small">قیمت جدید هر کیلو (تومان):</label>
+                    <label class="form-label small fw-bold">قیمت جدید هر کیلوگرم (تومان):</label>
                     <div class="input-group">
-                        <input type="text" name="market_price" class="form-control fw-bold text-primary"
+                        <input type="text" name="market_price" class="form-control fw-bold"
                                value="{{ settings.get('market_price', '250000') }}">
-                        <button type="submit" class="btn btn-warning fw-bold px-4">بروزرسانی ارزش و صدور سند</button>
+                        <button type="submit" class="btn btn-warning fw-bold px-4">بروزرسانی و صدور سند</button>
                     </div>
                 </form>
             </div>
@@ -48,16 +99,15 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100 border-top border-secondary border-4">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa-solid fa-warehouse text-secondary fs-4 me-2"></i>
-                <h5 class="mb-0 fw-bold">۲. تطبیق و انتقال مانده انبار</h5>
+                <span class="badge bg-secondary text-white rounded-circle ms-2 fs-6">۲</span>
+                <h5 class="mb-0 fw-bold">تطبیق و انتقال مانده انبار</h5>
             </div>
             <div class="card-body d-flex flex-column">
-                <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را محاسبه کرده و مانده حساب دارایی (۱۰۲۰) را به‌روز می‌کند. در صورت مغایرت، سند تعدیل صادر می‌شود.</p>
-                <ul class="small text-muted mb-3">
-                    <li>کالاهای موجود با قیمت روز ارزیابی می‌شوند</li>
-                    <li>هزینه مصرف کالا (بهای تمام شده) شناسایی می‌گردد</li>
-                    <li>سند حسابداری به صورت خودکار صادر می‌شود</li>
-                </ul>
+                <p class="text-muted small">ارزش واقعی کالاهای موجود در انبار را با دفتر کل تطبیق می‌دهد. در صورت مغایرت، سند تعدیل صادر می‌شود.</p>
+                <div class="p-2 bg-light rounded mb-3 text-center">
+                    <small class="text-muted d-block">ارزش دفتری فعلی انبار (حساب ۱۰۲۰)</small>
+                    <strong class="text-info fs-5">{{ inv_book_value|currency }}</strong>
+                </div>
                 <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
                     <button type="submit" class="btn btn-outline-secondary w-100 fw-bold py-2">شروع تطبیق و صدور سند</button>
@@ -70,17 +120,37 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa-solid fa-lock text-primary fs-4 me-2"></i>
-                <h5 class="mb-0 fw-bold">۳. بستن حساب‌های موقت (سال مالی)</h5>
+                <span class="badge bg-primary text-white rounded-circle ms-2 fs-6">۳</span>
+                <h5 class="mb-0 fw-bold">بستن حساب‌های موقت (پایان سال)</h5>
             </div>
             <div class="card-body d-flex flex-column">
                 <p class="text-muted small">مانده تمام حساب‌های درآمد (کد ۴) و هزینه (کد ۵) را صفر کرده و سود یا زیان خالص را به «سود انباشته» (کد ۳۰۲۰) منتقل می‌کند.</p>
-                <div class="alert alert-warning py-2 small border-0">
-                    <i class="fa-solid fa-triangle-exclamation"></i> این عملیات فقط یک بار در پایان سال مالی انجام می‌شود.
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded text-center">
+                            <small class="text-muted d-block">قابل انتقال به سود انباشته</small>
+                            <strong class="{% if net_profit > 0 %}text-success{% else %}text-danger{% endif %}">{{ net_profit|currency }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded text-center">
+                            <small class="text-muted d-block">وضعیت</small>
+                            {% if net_profit > 0 %}
+                            <strong class="text-success">سود خالص</strong>
+                            {% elif net_profit < 0 %}
+                            <strong class="text-danger">زیان خالص</strong>
+                            {% else %}
+                            <strong class="text-muted">صفر</strong>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-warning py-2 small border-0 mb-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i> فقط یک بار در پایان سال مالی. غیرقابل بازگشت.
                 </div>
                 <form action="{{ url_for('dashboard.close_fiscal_year') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('هشدار: آیا از بستن دفاتر مالی اطمینان دارید؟ این عملیات قابل بازگشت نیست.')">
-                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">بستن دفاتر مالی و انتقال سود/زیان</button>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">بستن دفاتر و انتقال سود/زیان</button>
                 </form>
             </div>
         </div>
@@ -90,13 +160,13 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100 border-top border-success border-4">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa-solid fa-door-open text-success fs-4 me-2"></i>
-                <h5 class="mb-0 fw-bold">۴. صدور سند افتتاحیه</h5>
+                <span class="badge bg-success text-white rounded-circle ms-2 fs-6">۴</span>
+                <h5 class="mb-0 fw-bold">صدور سند افتتاحیه سال جدید</h5>
             </div>
             <div class="card-body d-flex flex-column">
-                <p class="text-muted small">مانده نهایی تمام حساب‌های دائمی (دارایی، بدهی، سرمایه) را به عنوان «موجودی اول دوره» در سال جدید ثبت می‌کند.</p>
+                <p class="text-muted small">مانده نهایی حساب‌های دائمی (دارایی، بدهی، سرمایه) را به عنوان «موجودی اول دوره» سال جدید ثبت می‌کند.</p>
                 <div class="alert alert-info py-2 small border-0">
-                    <i class="fa-solid fa-circle-info"></i> این سند اولین سند سال مالی جدید خواهد بود.
+                    <i class="fa-solid fa-circle-info"></i> <b>آخرین مرحله:</b> بعد از بستن حساب‌ها، این سند اولین سند سال مالی جدید خواهد بود.
                 </div>
                 <form action="{{ url_for('dashboard.issue_opening_entry') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از صدور سند افتتاحیه سال جدید اطمینان دارید؟')">

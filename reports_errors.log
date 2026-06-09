@@ -71,3 +71,136 @@ Traceback (most recent call last):
     # بهینه‌سازی: استفاده از یک کوئری واحد با گروه‌بندی ماهانه برای روند ۶ ماهه
 NameError: name 'AccountingEngine' is not defined
 
+2026-06-09 16:16:59,461 - ERROR - Function: index | Error: 'dead_genders' is undefined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 38, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 566, in index
+    cashflow_out = [cf_1m['out'], cf_2m['out'], cf_3m['out']]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<34 lines>...
+                           demand_data=demand_data,
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 1, in top-level template code
+    {% extends 'base.html' %}
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\base.html", line 163, in top-level template code
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+    ^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 196, in block 'content'
+    {% for gen, count in dead_genders.items() %}<span class="badge bg-danger mb-1">{{ count }} سر {{ gen }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
+    ^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 490, in getattr
+    return getattr(obj, attribute)
+jinja2.exceptions.UndefinedError: 'dead_genders' is undefined
+
+2026-06-09 16:17:18,585 - ERROR - Function: index | Error: 'dead_genders' is undefined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 38, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 566, in index
+    cashflow_out = [cf_1m['out'], cf_2m['out'], cf_3m['out']]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<34 lines>...
+                           demand_data=demand_data,
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 1, in top-level template code
+    {% extends 'base.html' %}
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\base.html", line 163, in top-level template code
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+    ^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 196, in block 'content'
+    {% for gen, count in dead_genders.items() %}<span class="badge bg-danger mb-1">{{ count }} سر {{ gen }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
+    ^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 490, in getattr
+    return getattr(obj, attribute)
+jinja2.exceptions.UndefinedError: 'dead_genders' is undefined
+
+2026-06-09 16:39:34,767 - ERROR - Function: index | Error: 'dead_genders' is undefined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 38, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 566, in index
+    cashflow_out = [cf_1m['out'], cf_2m['out'], cf_3m['out']]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<34 lines>...
+                           demand_data=demand_data,
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 1, in top-level template code
+    {% extends 'base.html' %}
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\base.html", line 163, in top-level template code
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+    ^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 196, in block 'content'
+    {% for gen, count in dead_genders.items() %}<span class="badge bg-danger mb-1">{{ count }} سر {{ gen }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
+    ^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 490, in getattr
+    return getattr(obj, attribute)
+jinja2.exceptions.UndefinedError: 'dead_genders' is undefined
+
+2026-06-09 16:40:00,927 - ERROR - Function: index | Error: 'dead_genders' is undefined
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 38, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 566, in index
+    cashflow_out = [cf_1m['out'], cf_2m['out'], cf_3m['out']]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<34 lines>...
+                           demand_data=demand_data,
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 1, in top-level template code
+    {% extends 'base.html' %}
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\base.html", line 163, in top-level template code
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+    ^^^^^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\templates\reports\index.html", line 196, in block 'content'
+    {% for gen, count in dead_genders.items() %}<span class="badge bg-danger mb-1">{{ count }} سر {{ gen }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
+    ^^^^^^^^^
+  File "C:\Users\saeed 2025-10-20\AppData\Local\Programs\Python\Python313\Lib\site-packages\jinja2\environment.py", line 490, in getattr
+    return getattr(obj, attribute)
+jinja2.exceptions.UndefinedError: 'dead_genders' is undefined
+
+2026-06-09 17:14:31,163 - ERROR - Function: index | Error: unsupported operand type(s) for /: 'float' and 'decimal.Decimal'
+Traceback (most recent call last):
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 38, in wrapper
+    return f(*args, **kwargs)
+  File "C:\Users\saeed 2025-10-20\Desktop\Dam2\app\blueprints\reports.py", line 262, in index
+    insurance_cost_per_kg = (total_insurance_expenses / total_live_weight) if total_live_weight > 0 else 0
+                             ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'float' and 'decimal.Decimal'
+

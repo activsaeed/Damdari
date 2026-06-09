@@ -1961,23 +1961,51 @@ def update_weight_iot():
 @permission_required('can_view_finance')
 def period_closing():
     """عملیات پایان دوره حسابداری (ارزیابی، بستن حساب‌ها، افتتاحیه)"""
-    from app.models import JournalEntry, Equipment, SystemSetting, Account
+    from decimal import Decimal
+    from app.models import JournalEntry, JournalEntryLine, Equipment, SystemSetting, Account
     from app.blueprints.dashboard import get_setting
 
     system_settings = {s.key: s.value for s in SystemSetting.query.all()}
-    
-    # دستگاه‌های قابل استهلاک
     equipments = Equipment.query.order_by(Equipment.name).all()
+
+    # --- پیش‌نمایش عملکرد سال جاری ---
+    def _dec(query):
+        raw = query.scalar()
+        return Decimal(str(raw)) if raw is not None else Decimal('0')
+
+    total_revenue = _dec(db.session.query(func.sum(JournalEntryLine.credit)).join(Account).filter(Account.code.startswith('4')))
+    total_expense = _dec(db.session.query(func.sum(JournalEntryLine.debit)).join(Account).filter(Account.code.startswith('5')))
+    net_profit = total_revenue - total_expense
+
+    # ارزش دفتری انبار از دفتر کل
+    acc_inv = Account.query.filter_by(code='1020').first()
+    inv_book_value = Decimal('0')
+    if acc_inv:
+        inv_d = _dec(db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc_inv.id))
+        inv_c = _dec(db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc_inv.id))
+        inv_book_value = inv_d - inv_c
+
+    # تعداد اسناد سال جاری
+    from datetime import time
+    current_year_start = datetime(datetime.now(UTC).year, 1, 1).date()
+    entries_count = JournalEntry.query.filter(JournalEntry.date >= current_year_start).count()
 
     # آخرین اسناد خودکار حسابداری
     last_entries = JournalEntry.query.filter(
         JournalEntry.is_auto_generated == True
     ).order_by(JournalEntry.date.desc()).limit(10).all()
 
+    total_weight = db.session.query(func.sum(Sheep.weight)).filter(
+        Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
+    ).scalar() or 0
+
     return render_template('finance/period_closing.html',
                            settings=system_settings,
                            equipments=equipments,
                            last_entries=last_entries,
-                           total_weight = db.session.query(func.sum(Sheep.weight)).filter(
-                               Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-                           ).scalar() or 0)
+                           total_weight=total_weight,
+                           total_revenue=total_revenue,
+                           total_expense=total_expense,
+                           net_profit=net_profit,
+                           inv_book_value=inv_book_value,
+                           entries_count=entries_count)

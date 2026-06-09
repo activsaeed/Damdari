@@ -58,17 +58,18 @@ def index():
     ai_insights = [] # بازگردانی لیست برای جلوگیری از خطای NameError و TypeError
 
     # 1. آمار زایش و فرزندان - استفاده از SQL
+    born_filter = or_(Sheep.mother_id != None, Sheep.gender.ilike('%بره%'))
     born_stats = db.session.query(
         Sheep.gender,
         func.count(Sheep.id).label('count')
-    ).filter(Sheep.mother_id != None).group_by(Sheep.gender).all()
+    ).filter(born_filter).group_by(Sheep.gender).all()
 
     born_genders = {row[0]: row[1] for row in born_stats} if born_stats else {}
 
     breed_birth_stats = db.session.query(
         func.coalesce(Sheep.breed, 'نامشخص').label('breed'),
         func.count(Sheep.id).label('count')
-    ).filter(Sheep.mother_id != None).group_by(Sheep.breed).all()
+    ).filter(born_filter).group_by(Sheep.breed).all()
 
     born_breeds = {row[0]: row[1] for row in breed_birth_stats} if breed_birth_stats else {}
 
@@ -115,6 +116,16 @@ def index():
 
     death_causes = {row[0]: row[1] for row in dead_reason_stats} if dead_reason_stats else {}
 
+    dead_gender_stats = db.session.query(
+        Sheep.gender, func.count(Sheep.id).label('count')
+    ).filter(Sheep.status.in_(['تلف شده', 'مرده'])).group_by(Sheep.gender).all()
+    dead_genders = {row[0]: row[1] for row in dead_gender_stats} if dead_gender_stats else {}
+
+    dead_breed_stats = db.session.query(
+        func.coalesce(Sheep.breed, 'نامشخص').label('breed'), func.count(Sheep.id).label('count')
+    ).filter(Sheep.status.in_(['تلف شده', 'مرده'])).group_by(Sheep.breed).all()
+    dead_breeds = {row[0]: row[1] for row in dead_breed_stats} if dead_breed_stats else {}
+
     dead_sheep_count = db.session.query(func.count(Sheep.id)).filter(
         Sheep.status.in_(['تلف شده', 'مرده'])
     ).scalar() or 0
@@ -146,6 +157,11 @@ def index():
     stats_6m = {'dead': s_agg[1] or 0, 'sold': s_agg[4] or 0, 'born': b_agg[1] or 0}
     stats_1y = {'dead': s_agg[2] or 0, 'sold': s_agg[5] or 0, 'born': b_agg[2] or 0}
 
+    combined_chart_labels = ['۳۰ روز', '۶ ماه', 'یک سال']
+    combined_chart_born = [stats_1m['born'], stats_6m['born'], stats_1y['born']]
+    combined_chart_sold = [stats_1m['sold'], stats_6m['sold'], stats_1y['sold']]
+    combined_chart_dead = [stats_1m['dead'], stats_6m['dead'], stats_1y['dead']]
+
     # 4. تفکیک دقیق درآمد و هزینه
     income_transactions = db.session.query(
         Transaction.category,
@@ -156,13 +172,13 @@ def index():
         ~Transaction.category.ilike('%هزینه%')
     ).group_by(Transaction.category).all()
 
-    income_breakdown = {row[0]: row[1] for row in income_transactions} if income_transactions else {}
-    total_income_val = sum(row[1] for row in income_transactions) if income_transactions else 0
+    income_breakdown = {row[0]: float(row[1]) for row in income_transactions} if income_transactions else {}
+    total_income_val = sum(float(row[1]) for row in income_transactions) if income_transactions else 0
 
-    milk_income = db.session.query(func.sum(Transaction.amount)).filter(
+    milk_income = float(db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.t_type == 'درآمد',
         Transaction.category.ilike('%شیر%')
-    ).scalar() or 0
+    ).scalar() or 0)
 
     expense_transactions = db.session.query(
         Transaction.category,
@@ -171,7 +187,7 @@ def index():
         (Transaction.t_type == 'هزینه') | (Transaction.category.ilike('%خرید%'))
     ).group_by(Transaction.category).all()
 
-    expense_breakdown = {row[0]: row[1] for row in expense_transactions} if expense_transactions else {}
+    expense_breakdown = {row[0]: float(row[1]) for row in expense_transactions} if expense_transactions else {}
 
     # 5. گزارش مصرف انبار (رفع باگ صفر بودن نمودار) - استفاده از SQL بجای حلقه
     date_filter = request.args.get('date_filter', '30')
@@ -207,7 +223,7 @@ def index():
         unit_name = row[1] or '-'
 
         feed_consumption[row[0]] = {
-            'amount': row[2] or 0,
+            'amount': float(row[2] or 0),
             'unit': unit_name,
             'cost': cost
         }
@@ -215,10 +231,10 @@ def index():
     # 6. بهای تمام شده پیشرفته - استفاده از SQL
     dep_acc_ids = db.session.query(Account.id).filter(Account.code.in_(['5010'])).all()
     dep_acc_ids = [a[0] for a in dep_acc_ids] if dep_acc_ids else []
-    total_depreciation = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
+    total_depreciation = float(db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntry.description.ilike('%استهلاک%')
-    ).scalar() or 0
+    ).scalar() or 0)
 
     # گزارش سالانه استهلاک برای نمودار یا جدول
     annual_depreciation_report = db.session.query(
@@ -229,19 +245,19 @@ def index():
              JournalEntry.description.ilike('%استهلاک%'))\
      .group_by('year').order_by('year').all()
 
-    total_live_weight = db.session.query(func.sum(Sheep.weight)).filter(
+    total_live_weight = float(db.session.query(func.sum(Sheep.weight)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده']),
         Sheep.weight.isnot(None)
-    ).scalar() or 0
+    ).scalar() or 0)
 
-    total_purchase_cost = db.session.query(func.sum(Sheep.purchase_price)).filter(
+    total_purchase_cost = float(db.session.query(func.sum(Sheep.purchase_price)).filter(
         Sheep.status.notin_(['تلف شده', 'مرده', 'فروخته شده'])
-    ).scalar() or 0
+    ).scalar() or 0)
 
-    total_insurance_expenses = db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
+    total_insurance_expenses = float(db.session.query(func.sum(JournalEntryLine.debit)).join(JournalEntry).filter(
         JournalEntryLine.account_id.in_(dep_acc_ids),
         JournalEntryLine.description.ilike('%بیمه سهم کارفرما%')
-    ).scalar() or 0
+    ).scalar() or 0)
 
     insurance_cost_per_kg = (total_insurance_expenses / total_live_weight) if total_live_weight > 0 else 0
     cost_per_kg = ((0 + total_purchase_cost + total_depreciation + total_insurance_expenses) / total_live_weight) if total_live_weight > 0 else 0
@@ -565,8 +581,13 @@ def index():
         })
     return render_template('reports/index.html',
                            stats_1m=stats_1m, stats_6m=stats_6m, stats_1y=stats_1y,
+                           combined_chart_labels=combined_chart_labels,
+                           combined_chart_born=combined_chart_born,
+                           combined_chart_sold=combined_chart_sold,
+                           combined_chart_dead=combined_chart_dead,
                            born_genders=born_genders, born_breeds=born_breeds, 
                            sold_genders=sold_genders, sold_breeds=sold_breeds, 
+                           dead_genders=dead_genders, dead_breeds=dead_breeds,
                            death_causes=death_causes, total_financial_loss=total_financial_loss,
                            ai_insights=ai_insights, top_sheep=top_sheep,
                            cost_per_kg=cost_per_kg, milk_income=milk_income,

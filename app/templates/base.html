@@ -15,6 +15,7 @@
     <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
     <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
         /* استایل برای منوی فعال */
@@ -84,9 +85,10 @@
                     
                     {% if current_user.role in ['مدیر', 'دامپزشک'] %}
                     <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
-                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
+                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.mating_suggestion'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه</a>
                         <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
+                        <a href="{{ url_for('livestock.mating_suggestion') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.mating_suggestion') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-heart"></i> پیشنهاد جفت‌گیری</a>
                     </div>
                     {% endif %}
                     {% endif %}

@@ -137,6 +137,20 @@
 </div>
 
 <!-- ردیف آمار تفکیکی پیشرفته -->
+<!-- نمودار ترکیبی تولد / فروش / تلفات -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4 border-top border-info border-4">
+            <div class="card-header bg-white fw-bold py-3">
+                <span class="text-info"><i class="fa-solid fa-chart-bar"></i> آمار مقایسه‌ای تولد، فروش و تلفات</span>
+            </div>
+            <div class="card-body">
+                <canvas id="combinedStatsChart" style="max-height: 280px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4">
     <!-- آمار زایش -->
     <div class="col-md-4">
@@ -192,6 +206,10 @@
                 {% else %}
                 <span class="text-muted">تلفاتی ثبت نشده است.</span>
                 {% endfor %}
+                <strong class="text-danger d-block mt-2 mb-1 border-bottom pb-1">تفکیک جنسیت:</strong>
+                {% for gen, count in dead_genders.items() %}<span class="badge bg-danger mb-1">{{ count }} سر {{ gen }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
+                <strong class="text-danger d-block mt-2 mb-1 border-bottom pb-1">تفکیک نژاد:</strong>
+                {% for br, count in dead_breeds.items() %}<span class="badge bg-dark mb-1">{{ count }} سر {{ br }}</span> {% else %}<span class="text-muted">ندارد</span>{% endfor %}
             </div>
         </div>
     </div>
@@ -463,31 +481,66 @@
         };
         new ApexCharts(document.querySelector("#purchaseTrendChart"), purchaseTrendOptions).render();
 
-        // نمودار دایره‌ای سهم اجزای بهای تمام شده
+        // نمودار دایره‌ای سهم اجزای بهای تمام شده با درصد
         const costCompCtx = document.getElementById('costComponentsChart');
         if (costCompCtx) {
+            const costData = {{ cost_components | tojson | safe }};
+            const costLabels = ['خرید دام', 'خوراک مصرفی', 'استهلاک تجهیزات', 'بیمه پرسنل'];
+            const costTotal = costData.reduce((a, b) => a + b, 0);
+            const costLabelsWithPct = costLabels.map((l, i) => `${l} (${pctStr(costData[i], costTotal)}%)`);
             new Chart(costCompCtx.getContext('2d'), {
                 type: 'pie',
                 data: {
-                    labels: ['خرید دام', 'خوراک مصرفی', 'استهلاک تجهیزات', 'بیمه پرسنل'],
+                    labels: costLabelsWithPct,
                     datasets: [{
-                        data: {{ cost_components | tojson | safe }},
+                        data: costData,
                         backgroundColor: ['#34495e', '#f1c40f', '#e74c3c', '#3498db'],
                         borderWidth: 2
                     }]
                 },
-                options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { family: 'Vazirmatn' } } } } }
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: 'Vazirmatn' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const val = ctx.parsed;
+                                    return ctx.label + ': ' + val.toLocaleString() + ' (' + pctStr(val, total) + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
 
-        // 1. نمودار درآمدها (ترکیب درآمد) - رفع باگ
+        // 1. نمودار درآمدها (ترکیب درآمد) - با درصد و مبلغ
+        function pctStr(val, total) { return total > 0 ? ((val / total) * 100).toFixed(1) : '0.0'; }
         const incLabels = {{ inc_labels | tojson | safe if inc_labels else '[]' }};
         const incData = {{ inc_data | tojson | safe if inc_data else '[]' }};
         if (incLabels.length > 0) {
+            const incTotal = incData.reduce((a, b) => a + b, 0);
+            const incLabelsWithPct = incLabels.map((l, i) => `${l} (${pctStr(incData[i], incTotal)}%)`);
             new Chart(document.getElementById('incomePieChart').getContext('2d'), {
                 type: 'doughnut',
-                data: { labels: incLabels, datasets: [{ data: incData, backgroundColor: ['#2ecc71', '#27ae60', '#1abc9c', '#16a085', '#f1c40f'] }] },
-                options: { responsive: true, plugins: { legend: { position: 'right' } } }
+                data: { labels: incLabelsWithPct, datasets: [{ data: incData, backgroundColor: ['#2ecc71', '#27ae60', '#1abc9c', '#16a085', '#f1c40f'] }] },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const val = ctx.parsed;
+                                    return ctx.label + ': ' + val.toLocaleString() + ' (' + pctStr(val, total) + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
 
@@ -565,6 +618,38 @@
                     options: { responsive: true, plugins: { legend: { position: 'right' } } }
                 });
             }
+        }
+
+        // 0. نمودار ترکیبی تولد / فروش / تلفات
+        const comboCtx = document.getElementById('combinedStatsChart');
+        if (comboCtx) {
+            new Chart(comboCtx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: {{ combined_chart_labels | tojson | safe }},
+                    datasets: [
+                        { label: 'تولد بره', data: {{ combined_chart_born | tojson | safe }}, backgroundColor: '#2ecc71', borderRadius: 4 },
+                        { label: 'فروش', data: {{ combined_chart_sold | tojson | safe }}, backgroundColor: '#3498db', borderRadius: 4 },
+                        { label: 'تلفات', data: {{ combined_chart_dead | tojson | safe }}, backgroundColor: '#e74c3c', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { family: 'Vazirmatn' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) { return ctx.dataset.label + ': ' + ctx.raw + ' سر'; }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                        x: { ticks: { font: { family: 'Vazirmatn' } } }
+                    }
+                }
+            });
         }
 
         // 3. نمودار ستونی انبار (رفع باگ صفر بودن)

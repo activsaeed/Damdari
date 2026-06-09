@@ -252,23 +252,25 @@ class AccountingEngine:
                 db.session.add(entry)
                 db.session.flush()
 
-                total_debit_adjustment = 0
-                total_credit_adjustment = 0
+                total_debit_adjustment = Decimal('0')
+                total_credit_adjustment = Decimal('0')
 
                 for acc in temp_accounts:
                     if not acc.type: continue
-                    debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
-                    credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
+                    raw_d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar()
+                    raw_c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar()
+                    debits = Decimal(str(raw_d)) if raw_d is not None else Decimal('0')
+                    credits = Decimal(str(raw_c)) if raw_c is not None else Decimal('0')
                     
                     if acc.type.nature == 'بدهکار':
                         balance = debits - credits
                         if balance > 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=0.0, credit=balance, description=f"بستن حساب {acc.name}"))
+                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=Decimal('0'), credit=balance, description=f"بستن حساب {acc.name}"))
                             total_credit_adjustment += balance
                     else:
                         balance = credits - debits
                         if balance > 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=balance, credit=0.0, description=f"بستن حساب {acc.name}"))
+                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=balance, credit=Decimal('0'), description=f"بستن حساب {acc.name}"))
                             total_debit_adjustment += balance
 
                 net_result = total_debit_adjustment - total_credit_adjustment
@@ -276,13 +278,13 @@ class AccountingEngine:
                 if net_result > 0:
                     db.session.add(JournalEntryLine(
                         journal_entry_id=entry.id, account_id=acc_retained_earnings.id,
-                        debit=0.0, credit=net_result,
+                        debit=Decimal('0'), credit=net_result,
                         description="انتقال سود خالص دوره مالی به حساب سود و زیان انباشته"
                     ))
                 elif net_result < 0:
                     db.session.add(JournalEntryLine(
                         journal_entry_id=entry.id, account_id=acc_retained_earnings.id,
-                        debit=abs(net_result), credit=0.0,
+                        debit=abs(net_result), credit=Decimal('0'),
                         description="انتقال زیان خالص دوره مالی به حساب سود و زیان انباشته"
                     ))
                     
@@ -531,38 +533,55 @@ class AccountingEngine:
     @staticmethod
     def record_opening_entry():
         from sqlalchemy import func, or_
+        from app.models import Contact
         try:
             with db.session.begin_nested():
                 permanent_accounts = Account.query.filter(
                     or_(Account.code.startswith('1'), Account.code.startswith('2'), Account.code.startswith('3'))
                 ).all()
 
+                last_year = datetime.now(UTC).year - 1
+
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
                     date=datetime.now(UTC).date(),
-                    description="سند افتتاحیه - انتقال مانده حساب‌های دائمی از دوره قبل"
+                    description=f"سند افتتاحیه - انتقال مانده حساب‌های دائمی از سال {last_year}"
                 )
                 db.session.add(entry)
                 db.session.flush()
 
                 for acc in permanent_accounts:
                     if not acc.type: continue
-                    debits = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=acc.id).scalar() or 0.0
-                    credits = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=acc.id).scalar() or 0.0
-                    
-                    if acc.type.nature == 'بدهکار':
-                        balance = debits - credits
-                        if balance > 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=balance, credit=0.0, description=f"مانده اول دوره - {acc.name}"))
-                        elif balance < 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=0.0, credit=abs(balance), description=f"مانده اول دوره - {acc.name}"))
-                    else:
-                        balance = credits - debits
-                        if balance > 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=0.0, credit=balance, description=f"مانده اول دوره - {acc.name}"))
-                        elif balance < 0:
-                            db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, debit=abs(balance), credit=0.0, description=f"مانده اول دوره - {acc.name}"))
-                
+
+                    grouped = db.session.query(
+                        JournalEntryLine.contact_id,
+                        func.sum(JournalEntryLine.debit),
+                        func.sum(JournalEntryLine.credit)
+                    ).filter_by(account_id=acc.id).group_by(JournalEntryLine.contact_id).all()
+
+                    for contact_id, raw_d, raw_c in grouped:
+                        debits = float(raw_d) if raw_d is not None else 0.0
+                        credits = float(raw_c) if raw_c is not None else 0.0
+                        contact_label = ""
+                        if contact_id:
+                            c = db.session.get(Contact, contact_id)
+                            contact_label = f" ({c.name})" if c else ""
+
+                        if acc.type.nature == 'بدهکار':
+                            balance = debits - credits
+                            if abs(balance) < 1: continue
+                            if balance > 0:
+                                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, contact_id=contact_id, debit=balance, credit=0.0, description=f"منقول از {last_year}{contact_label} - {acc.name}"))
+                            else:
+                                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, contact_id=contact_id, debit=0.0, credit=abs(balance), description=f"منقول از {last_year}{contact_label} - {acc.name}"))
+                        else:
+                            balance = credits - debits
+                            if abs(balance) < 1: continue
+                            if balance > 0:
+                                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, contact_id=contact_id, debit=0.0, credit=balance, description=f"منقول از {last_year}{contact_label} - {acc.name}"))
+                            else:
+                                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc.id, contact_id=contact_id, debit=abs(balance), credit=0.0, description=f"منقول از {last_year}{contact_label} - {acc.name}"))
+
                 return entry
         except Exception as e:
             db.session.rollback()

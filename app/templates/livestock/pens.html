@@ -126,6 +126,7 @@
 </div>
 
 <form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <!-- نوار عملیات گروهی (حفظ شد در بیرون) -->
     <div class="d-flex align-items-center gap-2 mb-3 bg-light p-2 rounded border">
         <span class="fw-bold text-muted small ms-1 text-nowrap"><i class="fa-solid fa-layer-group"></i> عملیات گروهی:</span>
@@ -134,7 +135,7 @@
             <option value="">انتقال به سالن جدید...</option>
             {% for p in pens %}{% if p.id != selected_pen.id %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
         </select>
-        <button type="submit" class="btn btn-sm btn-dark px-4" onclick="return confirm('دام‌های انتخاب شده منتقل شوند؟')">انتقال</button>
+        <button type="submit" class="btn btn-sm btn-dark px-4" onclick="return validatePenBulkAction()">انتقال</button>
     </div>
 
     <div class="card shadow-sm border-0 mb-4">
@@ -330,6 +331,15 @@
             .catch(e => console.log("Live background update skipped..."));
     }
 
+    function validatePenBulkAction() {
+        const checked = document.querySelectorAll('.pen-sheep-checkbox:checked');
+        if (checked.length === 0) {
+            alert('لطفاً ابتدا حداقل یک دام را با تیک چک‌باکس انتخاب کنید.');
+            return false;
+        }
+        return confirm('دام‌های انتخاب شده منتقل شوند؟');
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         // شروع مانیتورینگ خودکار در پس‌زمینه بلافاصله پس از لود صفحه
         {% if selected_pen %}
@@ -339,18 +349,41 @@
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl) });
 
-        const chartOptions = { responsive: true, plugins: { legend: { position: 'right', labels: {font: {family: 'Vazirmatn'}} } } };
+        function addPctToLabel(label, val, total) {
+            return label + ' (' + (total > 0 ? ((val / total) * 100).toFixed(1) : '0.0') + '%)';
+        }
+        const chartOptions = {
+            responsive: true,
+            plugins: {
+                legend: { position: 'right', labels: {font: {family: 'Vazirmatn'}} },
+                datalabels: { display: false },
+                tooltip: { 
+                    callbacks: { 
+                        label: (ctx) => ctx.label + ': ' + ctx.parsed + ' رأس' 
+                    } 
+                }
+            }
+        };
 
         {% if stats.genders %}
-        new Chart(document.getElementById('genderChart').getContext('2d'), { type: 'pie', data: { labels: {{ stats.genders.keys() | list | tojson }}, datasets: [{ data: {{ stats.genders.values() | list | tojson }}, backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#9b59b6'] }] }, options: chartOptions });
+        const genLabels = {{ stats.genders.keys() | list | tojson }};
+        const genData = {{ stats.genders.values() | list | tojson }};
+        const genTotal = genData.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('genderChart').getContext('2d'), { type: 'pie', data: { labels: genLabels.map((l,i) => addPctToLabel(l, genData[i], genTotal)), datasets: [{ data: genData, backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#9b59b6'] }] }, options: chartOptions });
         {% endif %}
 
         {% if stats.statuses %}
-        new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: {{ stats.statuses.keys() | list | tojson }}, datasets: [{ data: {{ stats.statuses.values() | list | tojson }}, backgroundColor: ['#2ecc71', '#e74c3c', '#f39c12', '#34495e', '#1abc9c'] }] }, options: chartOptions });
+        const statLabels = {{ stats.statuses.keys() | list | tojson }};
+        const statData = {{ stats.statuses.values() | list | tojson }};
+        const statTotal = statData.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: statLabels.map((l,i) => addPctToLabel(l, statData[i], statTotal)), datasets: [{ data: statData, backgroundColor: ['#2ecc71', '#e74c3c', '#f39c12', '#34495e', '#1abc9c'] }] }, options: chartOptions });
         {% endif %}
 
         {% if stats.breeds %}
-        new Chart(document.getElementById('breedChart').getContext('2d'), { type: 'doughnut', data: { labels: {{ stats.breeds.keys() | list | tojson }}, datasets: [{ data: {{ stats.breeds.values() | list | tojson }}, backgroundColor: ['#34495e', '#7f8c8d', '#95a5a6', '#bdc3c7'] }] }, options: chartOptions });
+        const brLabels = {{ stats.breeds.keys() | list | tojson }};
+        const brData = {{ stats.breeds.values() | list | tojson }};
+        const brTotal = brData.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('breedChart').getContext('2d'), { type: 'doughnut', data: { labels: brLabels.map((l,i) => addPctToLabel(l, brData[i], brTotal)), datasets: [{ data: brData, backgroundColor: ['#34495e', '#7f8c8d', '#95a5a6', '#bdc3c7'] }] }, options: chartOptions });
         {% endif %}
     });
 

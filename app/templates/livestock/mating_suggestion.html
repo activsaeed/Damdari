@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-heart text-danger"></i> پیشنهاد جفت‌گیری هوشمند</h2>
+    <div>
+        <span class="badge bg-primary fs-6 me-1">{{ total_rams }} قوچ</span>
+        <span class="badge bg-success fs-6">{{ total_ewes }} میش</span>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="alert alert-info border-0 shadow-sm d-flex align-items-center">
+    <i class="fa-solid fa-calculator fs-3 me-3"></i>
+    <div><strong>پیشنهاد هوشمند:</strong> نسبت پیشنهادی ۱ قوچ به ازای هر ۲۰ میش. میانگین وزن قوچ‌ها: {{ avg_weight_rams }} کیلو — میانگین وزن میش‌ها: {{ avg_weight_ewes }} کیلو</div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-primary border-3">
+            <div class="card-header bg-white fw-bold py-3">قوچ‌های آماده جفت‌گیری</div>
+            <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover mb-0 text-center align-middle">
+                    <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>وزن</th><th>سن</th><th>بهاربند</th></tr></thead>
+                    <tbody>{% for ram in rams %}<tr><td class="fw-bold">{{ ram.ear_tag }}</td><td>{{ ram.breed }}</td><td>{{ ram.weight|round|int }} kg</td><td>{{ ((today - ram.birth_date).days // 30) if ram.birth_date else '?' }} ماه</td><td>{{ ram.pen.name if ram.pen else '-' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted py-4">قوچی یافت نشد</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-success border-3">
+            <div class="card-header bg-white fw-bold py-3">میش‌های آماده جفت‌گیری</div>
+            <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover mb-0 text-center align-middle">
+                    <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>وزن</th><th>سن</th><th>بهاربند</th></tr></thead>
+                    <tbody>{% for ewe in ewes %}<tr><td class="fw-bold">{{ ewe.ear_tag }}</td><td>{{ ewe.breed }}</td><td>{{ ewe.weight|round|int }} kg</td><td>{{ ((today - ewe.birth_date).days // 30) if ewe.birth_date else '?' }} ماه</td><td>{{ ewe.pen.name if ewe.pen else '-' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted py-4">میشی یافت نشد</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}{% endblock %}
