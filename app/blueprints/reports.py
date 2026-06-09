@@ -163,10 +163,17 @@ def index():
     combined_chart_dead = [stats_1m['dead'], stats_6m['dead'], stats_1y['dead']]
 
     # 4. تفکیک دقیق درآمد و هزینه
+    date_filter = request.args.get('date_filter', '30')
+    starred_filter = request.args.get('starred', '')
+
+    tx_filter_kwargs = {}
+    if starred_filter == '1':
+        tx_filter_kwargs['is_starred'] = True
+
     income_transactions = db.session.query(
         Transaction.category,
         func.sum(Transaction.amount).label('total')
-    ).filter(
+    ).filter_by(**tx_filter_kwargs).filter(
         Transaction.t_type == 'درآمد',
         ~Transaction.category.ilike('%خرید%'),
         ~Transaction.category.ilike('%هزینه%')
@@ -175,7 +182,7 @@ def index():
     income_breakdown = {row[0]: float(row[1]) for row in income_transactions} if income_transactions else {}
     total_income_val = sum(float(row[1]) for row in income_transactions) if income_transactions else 0
 
-    milk_income = float(db.session.query(func.sum(Transaction.amount)).filter(
+    milk_income = float(db.session.query(func.sum(Transaction.amount)).filter_by(**tx_filter_kwargs).filter(
         Transaction.t_type == 'درآمد',
         Transaction.category.ilike('%شیر%')
     ).scalar() or 0)
@@ -183,15 +190,13 @@ def index():
     expense_transactions = db.session.query(
         Transaction.category,
         func.sum(Transaction.amount).label('total')
-    ).filter(
+    ).filter_by(**tx_filter_kwargs).filter(
         (Transaction.t_type == 'هزینه') | (Transaction.category.ilike('%خرید%'))
     ).group_by(Transaction.category).all()
 
     expense_breakdown = {row[0]: float(row[1]) for row in expense_transactions} if expense_transactions else {}
 
     # 5. گزارش مصرف انبار (رفع باگ صفر بودن نمودار) - استفاده از SQL بجای حلقه
-    date_filter = request.args.get('date_filter', '30')
-    starred_filter = request.args.get('starred', '')
     if date_filter == '30': filter_date = month_ago
     elif date_filter == '180': filter_date = six_months_ago
     elif date_filter == '365': filter_date = year_ago
@@ -618,9 +623,10 @@ def index():
                            cost_components=[total_purchase_cost, total_feed_expenses, total_depreciation, total_insurance_expenses],
                            feed_comparison_labels=feed_comparison_labels,
                            feed_comparison_prices=feed_comparison_prices,
-                           purchase_trend_labels=purchase_trend_labels,
-                           barley_trend=barley_trend,
-                           corn_trend=corn_trend)
+                            purchase_trend_labels=purchase_trend_labels,
+                            barley_trend=barley_trend,
+                            corn_trend=corn_trend,
+                            starred_filter=starred_filter)
 
 @reports_bp.route('/sales')
 @login_required

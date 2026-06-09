@@ -123,6 +123,8 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix='/reports')
     from app.blueprints.assets import assets_bp
     app.register_blueprint(assets_bp, url_prefix='/assets')
+    from app.blueprints.audit import audit_bp
+    app.register_blueprint(audit_bp, url_prefix='/audit')
 
     @app.context_processor
     def inject_global_warnings():

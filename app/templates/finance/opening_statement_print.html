@@ -61,14 +61,14 @@
                     {% if ns.l == 0 and current_assets %}
                     <td class="cat-header" colspan="2">دارایی‌های جاری</td>
                     {% set ns.l = ns.l + 1 %}
-                    {% elif ns.l <= current_assets|length %}
+                    {% elif current_assets and ns.l <= current_assets|length %}
                     <td class="px-3">{{ current_assets[ns.l - 1].name }}</td>
                     <td class="text-center fw-bold">{{ current_assets[ns.l - 1].balance|currency }}</td>
                     {% set ns.l = ns.l + 1 %}
                     {% elif ns.l == current_assets|length + 1 and non_current_assets %}
                     <td class="cat-header" colspan="2">دارایی‌های غیرجاری</td>
                     {% set ns.l = ns.l + 1 %}
-                    {% elif ns.l <= current_assets|length + 1 + non_current_assets|length %}
+                    {% elif non_current_assets and ns.l <= current_assets|length + 1 + non_current_assets|length %}
                     <td class="px-3">{{ non_current_assets[ns.l - current_assets|length - 2].name }}</td>
                     <td class="text-center fw-bold">{{ non_current_assets[ns.l - current_assets|length - 2].balance|currency }}</td>
                     {% set ns.l = ns.l + 1 %}
@@ -87,18 +87,18 @@
                     {% if ns.r == 0 and current_liabilities %}
                     <td class="cat-header" colspan="2">بدهی‌های جاری</td>
                     {% set ns.r = ns.r + 1 %}
-                    {% elif ns.r <= current_liabilities|length %}
+                    {% elif current_liabilities and ns.r <= current_liabilities|length %}
                     <td class="px-3">{{ current_liabilities[ns.r - 1].name }}</td>
                     <td class="text-center fw-bold">{{ current_liabilities[ns.r - 1].balance|currency }}</td>
                     {% set ns.r = ns.r + 1 %}
                     {% elif ns.r == current_liabilities|length + 1 and non_current_liabilities %}
                     <td class="cat-header" colspan="2">بدهی‌های غیرجاری</td>
                     {% set ns.r = ns.r + 1 %}
-                    {% elif ns.r <= current_liabilities|length + 1 + non_current_liabilities|length %}
+                    {% elif non_current_liabilities and ns.r <= current_liabilities|length + 1 + non_current_liabilities|length %}
                     <td class="px-3">{{ non_current_liabilities[ns.r - current_liabilities|length - 2].name }}</td>
                     <td class="text-center fw-bold">{{ non_current_liabilities[ns.r - current_liabilities|length - 2].balance|currency }}</td>
                     {% set ns.r = ns.r + 1 %}
-                    {% elif ns.r <= current_liabilities|length + 1 + non_current_liabilities|length + equity_accounts|length %}
+                    {% elif equity_accounts and ns.r <= current_liabilities|length + 1 + non_current_liabilities|length + equity_accounts|length %}
                     {% set eq_idx = ns.r - current_liabilities|length - 1 - non_current_liabilities|length %}
                     <td class="px-3">{{ equity_accounts[eq_idx - 1].name }}</td>
                     <td class="text-center fw-bold">{{ equity_accounts[eq_idx - 1].balance|currency }}</td>

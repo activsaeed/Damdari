@@ -163,12 +163,14 @@ def parse_smart_date(date_str, default_val=None):
 def index():
     page = request.args.get('page', 1, type=int)
     
-    # فیلترهای جدید
     search_q = request.args.get('search', '').strip()
     date_from_q = request.args.get('date_from')
     date_to_q = request.args.get('date_to')
     starred_q = request.args.get('starred')
     show_archived = request.args.get('archived') == '1'
+    payment_method_q = request.args.get('payment_method', '').strip()
+    cost_center_q = request.args.get('cost_center', '').strip()
+    contact_id_q = request.args.get('contact_id', '').strip()
 
     query = Transaction.query.filter_by(is_archived=show_archived, is_deleted=False)
     
@@ -196,7 +198,13 @@ def index():
     if starred_q == '1':
         query = query.filter(Transaction.is_starred == True)
 
-    # بهینه‌سازی آمار: استفاده از ساب‌کوئری برای سرعت بیشتر در دیتای حجیم
+    if payment_method_q:
+        query = query.filter(Transaction.payment_method == payment_method_q)
+    if cost_center_q:
+        query = query.filter(Transaction.cost_center.ilike(f"%{cost_center_q}%"))
+    if contact_id_q:
+        query = query.filter(Transaction.contact_id == int(contact_id_q))
+
     tx_ids = query.with_entities(Transaction.id).subquery()
     raw_inc = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'درآمد').scalar()
     raw_exp = db.session.query(func.sum(Transaction.amount)).filter(Transaction.id.in_(tx_ids), Transaction.t_type == 'هزینه').scalar()
@@ -204,16 +212,22 @@ def index():
     total_expense = Decimal(str(raw_exp)) if raw_exp is not None else Decimal('0')
     net_profit = total_income - total_expense
     
-    # صفحه‌بندی بر اساس تنظیمات مدیر
     page_size = int(get_setting('page_size', 50))
     transactions_paginated = query.order_by(Transaction.t_date.desc(), Transaction.id.desc()).paginate(page=page, per_page=page_size, error_out=False)
+
+    from app.models import Contact
+    all_contacts = Contact.query.order_by(Contact.name).all()
 
     return render_template('finance/index.html', 
                            transactions=transactions_paginated, total_income=total_income,
                            total_expense=total_expense, net_profit=net_profit,
                            current_search=search_q, current_from=date_from_q, 
                            current_to=date_to_q, current_starred=starred_q,
-                           show_archived=show_archived)
+                           show_archived=show_archived,
+                           current_payment=payment_method_q,
+                           current_cost_center=cost_center_q,
+                           current_contact_id=contact_id_q,
+                           all_contacts=all_contacts)
 
 @finance_bp.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -2068,3 +2082,370 @@ def period_closing():
                            net_profit=net_profit,
                            inv_book_value=inv_book_value,
                            entries_count=entries_count)
+
+
+# ==========================================
+# مدیریت کدینگ حسابداری (Chart of Accounts)
+# ==========================================
+@finance_bp.route('/accounts')
+@login_required
+@permission_required('can_view_finance')
+def accounts():
+    if current_user.role != 'مدیر':
+        flash('دسترسی محدود به مدیریت است.', 'danger')
+        return redirect(url_for('dashboard.index'))
+    from app.models import Account, AccountType
+    account_types = AccountType.query.all()
+    accounts_list = Account.query.order_by(Account.code).all()
+    return render_template('finance/accounts.html', account_types=account_types, accounts=accounts_list)
+
+@finance_bp.route('/accounts/add', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def add_account():
+    if current_user.role != 'مدیر':
+        flash('دسترسی محدود است.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    code = request.form.get('code')
+    name = request.form.get('name')
+    account_type_id = request.form.get('account_type_id')
+    parent_id = request.form.get('parent_id')
+    if not code or not name or not account_type_id:
+        flash('کد، نام و نوع حساب الزامی است.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    if Account.query.filter_by(code=code).first():
+        flash(f'حساب با کد {code} قبلاً ثبت شده است.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    try:
+        acc = Account(code=code, name=name, account_type_id=int(account_type_id),
+                      parent_id=int(parent_id) if parent_id else None)
+        db.session.add(acc)
+        db.session.commit()
+        flash(f'حساب {name} با کد {code} ایجاد شد.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'خطا: {str(e)}', 'danger')
+    return redirect(url_for('finance.accounts'))
+
+@finance_bp.route('/accounts/edit/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def edit_account(id):
+    if current_user.role != 'مدیر':
+        flash('دسترسی محدود است.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    acc = Account.query.get_or_404(id)
+    acc.name = request.form.get('name', acc.name)
+    acc.account_type_id = int(request.form.get('account_type_id', acc.account_type_id))
+    parent_id = request.form.get('parent_id')
+    acc.parent_id = int(parent_id) if parent_id else None
+    try:
+        db.session.commit()
+        flash('حساب با موفقیت ویرایش شد.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'خطا: {str(e)}', 'danger')
+    return redirect(url_for('finance.accounts'))
+
+@finance_bp.route('/accounts/delete/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def delete_account(id):
+    if current_user.role != 'مدیر':
+        flash('دسترسی محدود است.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    acc = Account.query.get_or_404(id)
+    if acc.children:
+        flash('این حساب دارای زیرمجموعه است. ابتدا زیرمجموعه‌ها را حذف کنید.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    from app.models import JournalEntryLine
+    if JournalEntryLine.query.filter_by(account_id=acc.id).first():
+        flash('این حساب در اسناد حسابداری استفاده شده و قابل حذف نیست.', 'danger')
+        return redirect(url_for('finance.accounts'))
+    try:
+        db.session.delete(acc)
+        db.session.commit()
+        flash(f'حساب {acc.name} حذف شد.', 'warning')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'خطا: {str(e)}', 'danger')
+    return redirect(url_for('finance.accounts'))
+
+
+# ==========================================
+# تطبیق بانکی (Bank Reconciliation)
+# ==========================================
+@finance_bp.route('/bank_reconciliation')
+@login_required
+@permission_required('can_view_finance')
+def bank_reconciliation():
+    from app.models import Account, JournalEntryLine, Cheque
+    from sqlalchemy import func
+
+    cash_acc = Account.query.filter_by(code='1010').first()
+    bank_balance_str = request.args.get('bank_balance', '').strip()
+    bank_balance = Decimal(bank_balance_str) if bank_balance_str else None
+
+    # مانده دفتر کل
+    debit = Decimal('0')
+    credit = Decimal('0')
+    if cash_acc:
+        d = db.session.query(func.sum(JournalEntryLine.debit)).filter_by(account_id=cash_acc.id).scalar()
+        c = db.session.query(func.sum(JournalEntryLine.credit)).filter_by(account_id=cash_acc.id).scalar()
+        debit = Decimal(str(d)) if d else Decimal('0')
+        credit = Decimal(str(c)) if c else Decimal('0')
+        if cash_acc.type.nature == 'بدهکار':
+            gl_balance = debit - credit
+        else:
+            gl_balance = credit - debit
+    else:
+        gl_balance = Decimal('0')
+
+    # چک‌های در جریان (صادر شده ولی پاس نشده)
+    outstanding_cheques = Cheque.query.filter(
+        Cheque.is_deleted == False,
+        Cheque.status == 'در جریان'
+    ).order_by(Cheque.due_date).all()
+
+    reconciled = None
+    difference = None
+    if bank_balance is not None:
+        total_outstanding = sum(c.amount for c in outstanding_cheques)
+        adjusted_gl = gl_balance - total_outstanding
+        difference = abs(bank_balance - adjusted_gl)
+        reconciled = difference < Decimal('0.01')
+
+    return render_template('finance/bank_reconciliation.html',
+                           gl_balance=gl_balance,
+                           bank_balance=bank_balance,
+                           outstanding_cheques=outstanding_cheques,
+                           reconciled=reconciled,
+                           difference=difference)
+
+
+# ==========================================
+# صورت جریان وجوه نقد (Cash Flow Statement)
+# ==========================================
+@finance_bp.route('/cash_flow')
+@login_required
+@permission_required('can_view_finance')
+def cash_flow():
+    from decimal import Decimal
+    from app.models import Account, JournalEntry, JournalEntryLine
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    if date_from:
+        date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+    else:
+        date_from = datetime.now(UTC).date().replace(month=1, day=1)
+    if date_to:
+        date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+    else:
+        date_to = datetime.now(UTC).date()
+
+    def _balance(account_code, debit_side=True):
+        acc = Account.query.filter_by(code=account_code).first()
+        if not acc:
+            return Decimal('0')
+        lines = JournalEntryLine.query.join(JournalEntry).filter(
+            JournalEntryLine.account_id == acc.id,
+            JournalEntry.date >= date_from,
+            JournalEntry.date <= date_to
+        ).all()
+        d = sum(l.debit for l in lines)
+        c = sum(l.credit for l in lines)
+        if debit_side:
+            return d - c
+        return c - d
+
+    def _cash_effect(account_code, is_inflow):
+        acc = Account.query.filter_by(code=account_code).first()
+        if not acc:
+            return Decimal('0')
+        lines = JournalEntryLine.query.join(JournalEntry).filter(
+            JournalEntryLine.account_id == acc.id,
+            JournalEntry.date >= date_from,
+            JournalEntry.date <= date_to
+        ).all()
+        if is_inflow:
+            return sum(l.credit for l in lines)
+        return sum(l.debit for l in lines)
+
+    # فعالیت‌های عملیاتی
+    cash_from_sales = _cash_effect('4010', True)
+    cash_to_expenses = _cash_effect('5010', False)
+    cash_to_salary = _cash_effect('5030', False)
+    cash_to_depreciation = _cash_effect('5020', False)
+
+    net_operating = cash_from_sales - cash_to_expenses - cash_to_salary - cash_to_depreciation
+
+    # فعالیت‌های سرمایه‌گذاری
+    livestock_purchase = _cash_effect('1200', False)
+    equipment_purchase = sum(l.debit for l in JournalEntryLine.query.join(Account).filter(
+        Account.code.startswith('12'), JournalEntry.date >= date_from, JournalEntry.date <= date_to
+    ).all())
+    net_investing = -(equipment_purchase + livestock_purchase)
+
+    # فعالیت‌های تأمین مالی
+    capital_inflow = _cash_effect('3010', True)
+    net_financing = capital_inflow
+
+    net_change = net_operating + net_investing + net_financing
+    opening_cash = _balance('1010', True)
+    closing_cash = opening_cash + net_change
+
+    return render_template('finance/cash_flow.html',
+                           date_from=date_from, date_to=date_to,
+                           cash_from_sales=cash_from_sales,
+                           cash_to_expenses=cash_to_expenses,
+                           cash_to_salary=cash_to_salary,
+                           cash_to_depreciation=cash_to_depreciation,
+                           net_operating=net_operating,
+                           net_investing=net_investing,
+                           net_financing=net_financing,
+                           net_change=net_change,
+                           opening_cash=opening_cash,
+                           closing_cash=closing_cash)
+
+
+# ==========================================
+# گزارشات تفصیلی سررسید (Aging Reports)
+# ==========================================
+@finance_bp.route('/aging')
+@login_required
+@permission_required('can_view_finance')
+def aging_report():
+    from app.models import Contact, Account, JournalEntryLine
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    today = datetime.now(UTC).date()
+    report_type = request.args.get('type', 'دریافتنی')
+
+    recv_acc = Account.query.filter_by(code='1030').first()
+    pay_acc = Account.query.filter_by(code='2010').first()
+
+    contacts = Contact.query.all()
+    aging_data = []
+
+    for contact in contacts:
+        if report_type == 'دریافتنی':
+            lines = JournalEntryLine.query.filter(
+                JournalEntryLine.contact_id == contact.id,
+                JournalEntryLine.account_id == recv_acc.id
+            ).all() if recv_acc else []
+            balance = sum(l.debit for l in lines) - sum(l.credit for l in lines)
+        else:
+            lines = JournalEntryLine.query.filter(
+                JournalEntryLine.contact_id == contact.id,
+                JournalEntryLine.account_id == pay_acc.id
+            ).all() if pay_acc else []
+            balance = sum(l.credit for l in lines) - sum(l.debit for l in lines)
+
+        if abs(balance) < Decimal('1'):
+            continue
+
+        # پیدا کردن قدیمی‌ترین تراکنش
+        from app.models import Transaction
+        oldest_tx = Transaction.query.filter(
+            Transaction.contact_id == contact.id,
+            Transaction.t_type == ('درآمد' if report_type == 'دریافتنی' else 'هزینه'),
+            Transaction.is_deleted == False
+        ).order_by(Transaction.t_date.asc()).first()
+
+        days_past = 0
+        if oldest_tx and oldest_tx.due_date:
+            days_past = (today - oldest_tx.due_date).days
+        elif oldest_tx:
+            days_past = (today - oldest_tx.t_date).days
+
+        if days_past < 0:
+            period = 'سررسید نشده'
+        elif days_past <= 30:
+            period = 'کمتر از ۳۰ روز'
+        elif days_past <= 60:
+            period = '۳۰ تا ۶۰ روز'
+        elif days_past <= 90:
+            period = '۶۰ تا ۹۰ روز'
+        else:
+            period = 'بیش از ۹۰ روز'
+
+        aging_data.append({
+            'contact': contact,
+            'balance': balance,
+            'days_past': max(0, days_past),
+            'period': period,
+            'oldest_date': oldest_tx.t_date if oldest_tx else None
+        })
+
+    aging_data.sort(key=lambda x: x['days_past'], reverse=True)
+
+    total_current = sum(d['balance'] for d in aging_data if d['period'] == 'سررسید نشده')
+    total_30 = sum(d['balance'] for d in aging_data if d['period'] == 'کمتر از ۳۰ روز')
+    total_60 = sum(d['balance'] for d in aging_data if d['period'] == '۳۰ تا ۶۰ روز')
+    total_90 = sum(d['balance'] for d in aging_data if d['period'] == '۶۰ تا ۹۰ روز')
+    total_plus = sum(d['balance'] for d in aging_data if d['period'] == 'بیش از ۹۰ روز')
+
+    return render_template('finance/aging.html',
+                           report_type=report_type,
+                           aging_data=aging_data,
+                           total_current=total_current,
+                           total_30=total_30,
+                           total_60=total_60,
+                           total_90=total_90,
+                           total_plus=total_plus)
+
+
+# ==========================================
+# ثبت برگشت سند مستقیم از دفتر روزنامه
+# ==========================================
+@finance_bp.route('/reverse_entry/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def reverse_entry(id):
+    from app.models import JournalEntry
+    entry = JournalEntry.query.get_or_404(id)
+    if entry.reversed_entry_id:
+        flash('این سند قبلاً برگشت خورده است.', 'warning')
+        return redirect(url_for('finance.journal_entries'))
+    try:
+        AccountingEngine.record_reversal_entry(entry)
+        db.session.commit()
+        flash(f'سند {entry.entry_number} با موفقیت برگشت خورد.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'خطا در برگشت سند: {str(e)}', 'danger')
+    return redirect(url_for('finance.journal_entries'))
+
+
+# ==========================================
+# مدیریت پیش‌پرداخت و پیش‌دریافت
+# ==========================================
+@finance_bp.route('/prepayments')
+@login_required
+@permission_required('can_view_finance')
+def prepayments():
+    from app.models import Account, JournalEntryLine
+    from sqlalchemy import func
+
+    # حساب 1060 = سپرده بانکی / پیش‌پرداخت
+    prepay_acc = Account.query.filter_by(code='1060').first()
+    prepayments_data = []
+    if prepay_acc:
+        lines = JournalEntryLine.query.filter_by(account_id=prepay_acc.id).all()
+        for line in lines:
+            remaining = line.debit - line.credit
+            if abs(remaining) > Decimal('0.01'):
+                contact_name = line.contact.name if line.contact else 'نامشخص'
+                prepayments_data.append({
+                    'contact_name': contact_name,
+                    'description': line.description or '-',
+                    'amount': remaining,
+                    'entry_number': line.journal_entry.entry_number if line.journal_entry else '-',
+                    'date': line.journal_entry.date if line.journal_entry else None
+                })
+
+    return render_template('finance/prepayments.html', prepayments=prepayments_data)

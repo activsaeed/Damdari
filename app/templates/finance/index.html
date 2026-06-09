@@ -103,6 +103,28 @@
             <input type="hidden" name="date_to" class="gregorian-hidden-field" value="{{ current_to or '' }}">
         </div>
 
+        <div class="mb-3">
+            <label class="form-label fw-bold">روش پرداخت</label>
+            <select name="payment_method" class="form-select">
+                <option value="">همه روش‌ها</option>
+                <option value="نقدی" {% if current_payment == 'نقدی' %}selected{% endif %}>نقدی</option>
+                <option value="نسیه" {% if current_payment == 'نسیه' %}selected{% endif %}>نسیه</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">مرکز هزینه</label>
+            <input type="text" name="cost_center" class="form-control" placeholder="مثلاً: پرواری، داشتی" value="{{ current_cost_center or '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">طرف حساب</label>
+            <select name="contact_id" class="form-select select2">
+                <option value="">همه اشخاص</option>
+                {% for c in all_contacts %}
+                <option value="{{ c.id }}" {% if current_contact_id|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
         <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="fa-solid fa-check"></i> اعمال فیلتر</button>
         <a href="{{ url_for('finance.index') }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
     </form>

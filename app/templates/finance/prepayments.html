@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2><i class="fa-solid fa-hand-holding-heart text-primary"></i> پیش‌پرداخت و پیش‌دریافت</h2>
+<p class="text-muted">پیگیری وجوهی که قبل از انجام معامله پرداخت یا دریافت شده‌اند</p>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white fw-bold"><i class="fa-solid fa-list"></i> فهرست پیش‌پرداخت/پیش‌دریافت</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>طرف حساب</th><th>شرح</th><th>مبلغ باقی‌مانده</th><th>شماره سند</th><th>تاریخ</th></tr></thead>
+            <tbody>
+                {% for p in prepayments %}
+                <tr>
+                    <td class="fw-bold">{{ p.contact_name }}</td>
+                    <td>{{ p.description }}</td>
+                    <td class="fw-bold text-danger">{{ p.amount|currency }}</td>
+                    <td><small>{{ p.entry_number }}</small></td>
+                    <td>{{ p.date|jalali if p.date else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="py-5 text-muted">هیچ پیش‌پرداخت یا پیش‌دریافتی ثبت نشده است.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="alert alert-info mt-3">
+    <i class="fa-solid fa-info-circle"></i> برای ثبت پیش‌پرداخت/پیش‌دریافت جدید، یک تراکنش با دسته‌بندی "پیش‌پرداخت" ثبت کنید تا در حساب ۱۰۶۰ (سپرده/پیش‌پرداخت) منعکس شود.
+</div>
+{% endblock %}

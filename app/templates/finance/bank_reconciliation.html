@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2><i class="fa-solid fa-building-columns text-primary"></i> تطبیق بانکی (Bank Reconciliation)</h2>
+<p class="text-muted">مقایسه مانده حساب بانکی در سیستم با صورت حساب بانک</p>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">مانده دفتر کل (۱۰۱۰)</h6>
+                <h3 class="fw-bold text-primary">{{ gl_balance|currency }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">مانده صورت حساب بانک</h6>
+                <form method="GET" class="d-flex gap-2">
+                    <input type="text" name="bank_balance" class="form-control" dir="ltr" placeholder="مانده بانک را وارد کنید" value="{{ bank_balance or '' }}">
+                    <button type="submit" class="btn btn-primary">تطبیق</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if reconciled is not none %}
+<div class="alert {% if reconciled %}alert-success{% else %}alert-danger{% endif %} fw-bold">
+    {% if reconciled %}
+    <i class="fa-solid fa-check-circle"></i> مانده‌ها منطبق هستند.
+    {% else %}
+    <i class="fa-solid fa-times-circle"></i> مغایرت: {{ difference|currency }}
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-header bg-white fw-bold"><i class="fa-solid fa-money-check"></i> چک‌های در جریان (پاس نشده)</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>شماره چک</th><th>بابت</th><th>مبلغ</th><th>سررسید</th></tr></thead>
+            <tbody>
+                {% for c in outstanding_cheques %}
+                <tr>
+                    <td>{{ c.cheque_number }}</td>
+                    <td>{{ c.reason }}</td>
+                    <td class="fw-bold text-danger">{{ c.amount|currency }}</td>
+                    <td>{{ c.due_date|jalali }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted py-3">هیچ چک در جریانی وجود ندارد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

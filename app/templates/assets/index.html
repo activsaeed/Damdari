@@ -70,7 +70,7 @@
                             {{ asset.book_value|currency }}
                             {% if asset.book_value <= asset.scrap_value %}
                                 <div class="badge bg-danger p-1 small mt-1" style="font-size: 0.7rem;">مستهلک شده</div>
-                            {% elif asset.book_value < (asset.purchase_price * 0.1) %}
+                            {% elif asset.book_value < (asset.purchase_price|float * 0.1) %}
                                 <div class="badge bg-warning text-dark p-1 small mt-1" style="font-size: 0.7rem;">نزدیک اسقاط</div>
                             {% endif %}
                         </td>

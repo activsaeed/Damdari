@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-sitemap text-primary"></i> کدینگ حسابداری (Chart of Accounts)</h2>
+    <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+        <i class="fa-solid fa-plus"></i> حساب جدید
+    </button>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>کد</th>
+                        <th>نام حساب</th>
+                        <th>نوع</th>
+                        <th>ماهیت</th>
+                        <th>زیرمجموعه</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acc in accounts %}
+                    <tr>
+                        <td><code>{{ acc.code }}</code></td>
+                        <td class="fw-bold text-start">{{ acc.name }}</td>
+                        <td><span class="badge bg-info">{{ acc.type.name if acc.type else '-' }}</span></td>
+                        <td>{{ acc.type.nature if acc.type else '-' }}</td>
+                        <td>{% if acc.parent %}{{ acc.parent.code }} - {{ acc.parent.name }}{% else %}-{% endif %}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ acc.id }}"><i class="fa-solid fa-pen"></i></button>
+                            <form action="{{ url_for('finance.delete_account', id=acc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف حساب {{ acc.name }}؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    <div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header"><h5 class="modal-title">ویرایش {{ acc.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                <form action="{{ url_for('finance.edit_account', id=acc.id) }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body text-start">
+                                        <div class="mb-3"><label class="form-label fw-bold">نام حساب</label><input type="text" name="name" class="form-control" value="{{ acc.name }}" required></div>
+                                        <div class="mb-3"><label class="form-label fw-bold">نوع حساب</label>
+                                            <select name="account_type_id" class="form-select">
+                                                {% for t in account_types %}<option value="{{ t.id }}" {% if acc.account_type_id == t.id %}selected{% endif %}>{{ t.name }} ({{ t.nature }})</option>{% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-3"><label class="form-label fw-bold">زیرمجموعه</label>
+                                            <select name="parent_id" class="form-select">
+                                                <option value="">بدون والد</option>
+                                                {% for p in accounts %}{% if p.id != acc.id %}<option value="{{ p.id }}" {% if acc.parent_id == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>{% endif %}{% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">بروزرسانی</button></div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <tr><td colspan="6" class="py-5 text-muted">هیچ حسابی ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addAccountModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-plus text-primary"></i> حساب جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.add_account') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body text-start">
+                    <div class="mb-3"><label class="form-label fw-bold">کد حساب</label><input type="text" name="code" class="form-control" dir="ltr" placeholder="مثلاً: 1040" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">نام حساب</label><input type="text" name="name" class="form-control" placeholder="مثلاً: اعتبار مالیاتی" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">نوع حساب</label>
+                        <select name="account_type_id" class="form-select" required>
+                            <option value="">انتخاب کنید</option>
+                            {% for t in account_types %}<option value="{{ t.id }}">{{ t.name }} ({{ t.nature }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">زیرمجموعه (اختیاری)</label>
+                        <select name="parent_id" class="form-select">
+                            <option value="">بدون والد (حساب کل)</option>
+                            {% for p in accounts %}<option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ایجاد حساب</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

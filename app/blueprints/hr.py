@@ -538,3 +538,20 @@ def pay_insurance():
         flash(f'خطا در ثبت سند واریز: {str(e)}', 'danger')
 
     return redirect(url_for('hr.insurance_report'))
+
+
+@hr_bp.route('/delete_document/<int:doc_id>', methods=['POST'])
+@login_required
+@permission_required('can_view_hr')
+def delete_document(doc_id):
+    from app.models import WorkerDocument
+    doc = WorkerDocument.query.get_or_404(doc_id)
+    worker_id = doc.worker_id
+    try:
+        os.remove(os.path.join('app', 'static', doc.file_path))
+    except:
+        pass
+    db.session.delete(doc)
+    db.session.commit()
+    flash(f'مدرک {doc.doc_title} حذف شد.', 'warning')
+    return redirect(url_for('hr.profile', id=worker_id))

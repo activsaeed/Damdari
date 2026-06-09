@@ -24,7 +24,7 @@
                             <tbody>
                                 {% for item in feed_items %}
                                 <tr>
-                                    <td class="fw-bold text-start">{{ item.name }} <br><small class="text-muted">موجودی: {{ item.quantity }} {{ item.unit }}</small></td>
+                                    <td class="fw-bold text-start">{{ item.name }} <br><small class="text-muted">موجودی: {{ item.quantity }} {{ item.unit.name }}</small></td>
                                     <td class="text-success price-cell" data-price="{{ item.unit_price }}">{{ "{:,.0f}".format(item.unit_price) }}</td>
                                     <td>
                                         <input type="number" class="form-control text-center percent-input" min="0" max="100" value="0" oninput="calculateRation()">
@@ -46,7 +46,7 @@
 
     <!-- بخش نتیجه و آنالیز -->
     <div class="col-lg-5">
-        <div class="card shadow-sm border-0 h-100 bg-dark text-white text-center">
+        <div class="card shadow-sm border-0 bg-dark text-white text-center position-sticky sticky-top" style="top:20px">
             <div class="card-body d-flex flex-column justify-content-center p-4">
                 <i class="fa-solid fa-sack-dollar fa-4x text-success mb-4"></i>
                 <h5 class="fw-bold mb-1 text-white-50">قیمت تمام‌شده این جیره:</h5>

@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-clock text-primary"></i> گزارش سررسید (Aging)</h2>
+    <div>
+        <a href="{{ url_for('finance.aging_report', type='دریافتنی') }}" class="btn {% if report_type == 'دریافتنی' %}btn-primary{% else %}btn-outline-primary{% endif %} fw-bold">مطالبات (دریافتنی)</a>
+        <a href="{{ url_for('finance.aging_report', type='پرداختنی') }}" class="btn {% if report_type == 'پرداختنی' %}btn-primary{% else %}btn-outline-primary{% endif %} fw-bold">بدهی‌ها (پرداختنی)</a>
+    </div>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="row g-2 mb-4">
+    <div class="col"><div class="card border-0 shadow-sm bg-success text-white text-center p-2"><small>سررسید نشده</small><h5 class="mb-0">{{ total_current|currency }}</h5></div></div>
+    <div class="col"><div class="card border-0 shadow-sm bg-warning text-dark text-center p-2"><small>&lt; ۳۰ روز</small><h5 class="mb-0">{{ total_30|currency }}</h5></div></div>
+    <div class="col"><div class="card border-0 shadow-sm bg-orange text-white text-center p-2" style="background:#e67e22;"><small>۳۰-۶۰ روز</small><h5 class="mb-0">{{ total_60|currency }}</h5></div></div>
+    <div class="col"><div class="card border-0 shadow-sm bg-danger text-white text-center p-2"><small>۶۰-۹۰ روز</small><h5 class="mb-0">{{ total_90|currency }}</h5></div></div>
+    <div class="col"><div class="card border-0 shadow-sm bg-dark text-white text-center p-2"><small>&gt; ۹۰ روز</small><h5 class="mb-0">{{ total_plus|currency }}</h5></div></div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr><th>نام شخص</th><th>مانده</th><th>تعداد روز گذشته</th><th>بازه</th><th>قدیمی‌ترین تراکنش</th></tr>
+            </thead>
+            <tbody>
+                {% for d in aging_data %}
+                <tr>
+                    <td class="fw-bold">{{ d.contact.name }}</td>
+                    <td class="fw-bold">{{ d.balance|currency }}</td>
+                    <td>{{ d.days_past }} روز</td>
+                    <td><span class="badge {% if d.period == 'بیش از ۹۰ روز' %}bg-dark{% elif d.period == '۶۰ تا ۹۰ روز' %}bg-danger{% elif d.period == '۳۰ تا ۶۰ روز' %}bg-warning text-dark{% elif d.period == 'کمتر از ۳۰ روز' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ d.period }}</span></td>
+                    <td>{{ d.oldest_date|jalali if d.oldest_date else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="py-5 text-muted">هیچ موردی یافت نشد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

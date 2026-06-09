@@ -94,18 +94,25 @@
                     {% endif %}
 
                     {% if current_user.can_view_finance %}
-                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint == 'finance' %}active-sidebar-link{% endif %}" {% if request.blueprint == 'finance' %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری</a>
-                    <div class="collapse ps-3 {% if request.blueprint == 'finance' %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
-                        <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book"></i> دفتر کل</a>
-                        <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar"></i> مدیریت چک‌ها</a>
-                        <a href="{{ url_for('finance.journal_entries') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.journal_entries') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-journal-whills"></i> دفتر روزنامه</a>
-                        <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> تنخواه‌گردان</a>
-                        <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book"></i> اشخاص (نسیه)</a>
-                        <a href="{{ url_for('finance.trial_balance') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('finance.trial_balance') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> تراز آزمایشی</a>
-                        <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced"></i> ترازنامه/سود و زیان</a>
-                        <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor"></i> دارایی و استهلاک</a>
-                        <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold small border-0 {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar"></i> مالیات/سامانه مودیان</a>
-                        <a href="{{ url_for('finance.period_closing') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold small border-0 {% if request.path == url_for('finance.period_closing') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-check"></i> عملیات پایان دوره</a>
+                    <a href="#financeSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle finance-menu-item {% if request.blueprint in ['finance', 'assets', 'audit'] %}active-sidebar-link{% endif %}" {% if request.blueprint in ['finance', 'assets', 'audit'] %}aria-expanded="true"{% endif %}><i class="fa-solid fa-wallet me-2"></i> حسابداری</a>
+                    <div class="collapse ps-3 {% if request.blueprint in ['finance', 'assets', 'audit'] %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
+                        <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book fa-fw"></i> دفتر کل</a>
+                        <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar fa-fw"></i> چک‌ها</a>
+                        <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book fa-fw"></i> اشخاص (نسیه)</a>
+                        <a href="{{ url_for('finance.journal_entries') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.journal_entries') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-journal-whills fa-fw"></i> دفتر روزنامه</a>
+                        <a href="{{ url_for('finance.trial_balance') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.trial_balance') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list fa-fw"></i> تراز آزمایشی</a>
+                        <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced fa-fw"></i> ترازنامه/سود و زیان</a>
+                        <a href="{{ url_for('finance.cash_flow') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.cash_flow') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-water fa-fw"></i> صورت جریان نقد</a>
+                        <a href="{{ url_for('finance.aging_report') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.aging_report') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-clock fa-fw"></i> گزارش سررسید</a>
+                        <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar fa-fw"></i> تنخواه‌گردان</a>
+                        <hr class="my-1 border-secondary opacity-25">
+                        <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor fa-fw"></i> دارایی و استهلاک</a>
+                        <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar fa-fw"></i> مالیات/مودیان</a>
+                        <a href="{{ url_for('finance.accounts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.accounts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-sitemap fa-fw"></i> کدینگ حسابداری</a>
+                        <a href="{{ url_for('finance.bank_reconciliation') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.bank_reconciliation') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-building-columns fa-fw"></i> تطبیق بانکی</a>
+                        <a href="{{ url_for('finance.prepayments') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.prepayments') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-heart fa-fw"></i> پیش‌پرداخت/دریافت</a>
+                        <a href="{{ url_for('finance.period_closing') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.period_closing') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-check fa-fw"></i> پایان دوره</a>
+                        <a href="{{ url_for('audit.index') }}" class="list-group-item list-group-item-action bg-transparent text-info fw-bold border-0 py-1 px-2 small {% if request.blueprint == 'audit' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-shield-halved fa-fw"></i> حسابرسی</a>
                     </div>
                     {% endif %}
 
@@ -227,6 +234,26 @@
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+    </script>
+    <script>
+    // حفظ موقعیت اسکرroll سایدبار هنگام ناوبری
+    (function() {
+        var sidebar = document.querySelector('.sidebar-scroll');
+        if (sidebar) {
+            // بازیابی موقعیت اسکرroll ذخیره شده
+            var savedScroll = sessionStorage.getItem('sidebarScrollTop');
+            if (savedScroll) {
+                sidebar.scrollTop = parseInt(savedScroll, 10);
+            }
+            // ذخیره موقعیت اسکرroll هنگام کلیک روی لینک‌ها
+            sidebar.addEventListener('click', function(e) {
+                var link = e.target.closest('a');
+                if (link && link.getAttribute('href') && !link.getAttribute('data-bs-toggle')) {
+                    sessionStorage.setItem('sidebarScrollTop', sidebar.scrollTop);
+                }
+            });
+        }
+    })();
     </script>
     <script>
     // مدیریت وضعیت فعال منوهای اصلی در سایدبار

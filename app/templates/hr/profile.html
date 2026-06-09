@@ -139,6 +139,10 @@
                                     <img src="{{ url_for('static', filename=doc.file_path) }}" class="img-thumbnail shadow-sm mb-2" style="height: 150px; object-fit: cover;">
                                 </a>
                                 <span class="d-block small fw-bold text-muted">{{ doc.doc_title }}</span>
+                                <form action="{{ url_for('hr.delete_document', doc_id=doc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ doc.doc_title }}؟')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger mt-1"><i class="fa-solid fa-trash"></i></button>
+                                </form>
                             </div>
                             {% endfor %}
                             

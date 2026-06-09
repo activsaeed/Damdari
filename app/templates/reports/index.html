@@ -5,11 +5,16 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2><i class="fa-solid fa-chart-pie text-info"></i> داشبورد هوش تجاری (BI) و آمار مدیر</h2>
-    {% if current_filter and current_filter != '30' %}
-    <a href="{{ url_for('reports.index') }}" class="btn btn-sm btn-outline-danger shadow-sm fw-bold">
-        <i class="fa-solid fa-filter-circle-xmark"></i> پاکسازی تمام فیلترها
-    </a>
-    {% endif %}
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('reports.index', starred='1', date_filter=current_filter) }}" class="btn btn-sm {% if starred_filter == '1' %}btn-warning{% else %}btn-outline-warning{% endif %} shadow-sm fw-bold">
+            <i class="fa-solid fa-star"></i> فقط ستاره‌دار
+        </a>
+        {% if current_filter and current_filter != '30' or starred_filter %}
+        <a href="{{ url_for('reports.index') }}" class="btn btn-sm btn-outline-danger shadow-sm fw-bold">
+            <i class="fa-solid fa-filter-circle-xmark"></i> پاکسازی تمام فیلترها
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 <!-- ردیف اول: تحلیل های ویژه ریالی -->

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold text-primary"><i class="fa-solid fa-shield-halved me-2"></i> موتور حسابرسی خودکار</h4>
+    <button id="runFullAudit" class="btn btn-primary shadow-sm"><i class="fa-solid fa-play me-1"></i> اجرای حسابرسی کامل</button>
+</div>
+
+<div class="alert alert-info">
+    <i class="fa-solid fa-circle-info me-1"></i> این ابزار به‌صورت خودکار تمام بخش‌های مالی و عملیاتی سیستم را بررسی می‌کند و هرگونه مغایرت یا ناهنجاری را گزارش می‌دهد.
+</div>
+
+<div id="loadingSpinner" class="text-center my-5 d-none">
+    <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
+        <span class="visually-hidden">در حال حسابرسی...</span>
+    </div>
+    <p class="mt-2 text-muted fw-bold">در حال اجرای آزمون‌های حسابرسی...</p>
+</div>
+
+<div id="resultsContainer"></div>
+
+<div class="row g-3 mt-1" id="quickChecks">
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-book fa-2x text-primary mb-2"></i><h6>دفتر روزنامه</h6><button class="btn btn-sm btn-outline-primary run-check" data-check="double_entry">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-scale-balanced fa-2x text-success mb-2"></i><h6>تراز آزمایشی</h6><button class="btn btn-sm btn-outline-success run-check" data-check="trial_balance">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-sheet-plastic fa-2x text-info mb-2"></i><h6>ترازنامه</h6><button class="btn btn-sm btn-outline-info run-check" data-check="balance_sheet">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-chart-line fa-2x text-warning mb-2"></i><h6>صورت سود و زیان</h6><button class="btn btn-sm btn-outline-warning run-check" data-check="income_statement">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-file-invoice fa-2x text-danger mb-2"></i><h6>مالیات بر ارزش افزوده</h6><button class="btn btn-sm btn-outline-danger run-check" data-check="vat">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-percent fa-2x text-secondary mb-2"></i><h6>تخفیفات</h6><button class="btn btn-sm btn-outline-secondary run-check" data-check="discount">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-address-book fa-2x text-primary mb-2"></i><h6>اشخاص</h6><button class="btn btn-sm btn-outline-primary run-check" data-check="contacts">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-boxes-stacked fa-2x text-success mb-2"></i><h6>انبار</h6><button class="btn btn-sm btn-outline-success run-check" data-check="inventory">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-horse-head fa-2x text-info mb-2"></i><h6>ارزش دام</h6><button class="btn btn-sm btn-outline-info run-check" data-check="livestock">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-tractor fa-2x text-warning mb-2"></i><h6>استهلاک</h6><button class="btn btn-sm btn-outline-warning run-check" data-check="depreciation">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-triangle-exclamation fa-2x text-danger mb-2"></i><h6>ناهنجاری‌ها</h6><button class="btn btn-sm btn-outline-danger run-check" data-check="anomalies">بررسی</button></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-shield-halved fa-2x text-dark mb-2"></i><h6>معادله حسابداری</h6><button class="btn btn-sm btn-outline-dark run-check" data-check="balance_sheet_equation">بررسی</button></div></div></div>
+</div>
+
+<script>
+function renderResult(title, data, isFull) {
+    const c = $('#resultsContainer');
+    if (isFull) {
+        let health = data.health || {};
+        let summary = data.summary || {};
+        let html = `
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-${health.overall >= 70 ? 'success' : health.overall >= 40 ? 'warning' : 'danger'} text-white fw-bold d-flex justify-content-between">
+                <span><i class="fa-solid fa-file-circle-check me-1"></i> گزارش حسابرسی کامل</span>
+                <span>${data.timestamp ? new Date(data.timestamp).toLocaleString('fa-IR') : ''}</span>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-4">
+                    <div class="col-md-3">
+                        <div class="display-4 fw-bold text-${health.overall >= 70 ? 'success' : health.overall >= 40 ? 'warning' : 'danger'}">${health.overall || 0}%</div>
+                        <div class="text-muted small">امتیاز کلی سلامت</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-6 text-${health.accounting_integrity >= 70 ? 'success' : 'danger'}">${health.accounting_integrity || 0}%</div>
+                        <div class="text-muted small">یکپارچگی حسابداری</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-6 text-${health.data_consistency >= 70 ? 'success' : 'danger'}">${health.data_consistency || 0}%</div>
+                        <div class="text-muted small">سازگاری داده‌ها</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-6 text-${health.business_logic >= 70 ? 'success' : 'danger'}">${health.business_logic || 0}%</div>
+                        <div class="text-muted small">منطق تجاری</div>
+                    </div>
+                </div>
+                <table class="table table-bordered table-sm">
+                    <tr><th>آیتم</th><th>مقدار</th></tr>
+                    <tr><td>اسناد حسابداری بررسی شده</td><td>${summary.entries_checked || 0}</td></tr>
+                    <tr><td>اسناد نامتوازن</td><td class="fw-bold ${summary.unbalanced_entries > 0 ? 'text-danger' : 'text-success'}">${summary.unbalanced_entries || 0}</td></tr>
+                    <tr><td>اشخاص دارای مغایرت</td><td class="fw-bold ${summary.contact_issues > 0 ? 'text-danger' : 'text-success'}">${summary.contact_issues || 0}</td></tr>
+                    <tr><td>خطاهای مالیات بر ارزش افزوده</td><td class="fw-bold ${summary.vat_errors > 0 ? 'text-danger' : 'text-success'}">${summary.vat_errors || 0}</td></tr>
+                    <tr><td>مسائل تخفیفات</td><td class="fw-bold ${summary.discount_issues > 0 ? 'text-danger' : 'text-success'}">${summary.discount_issues || 0}</td></tr>
+                    <tr><td>مغایرت انبار</td><td class="fw-bold ${summary.inventory_discrepancies > 0 ? 'text-danger' : 'text-success'}">${summary.inventory_discrepancies || 0}</td></tr>
+                    <tr><td>ناهنجاری‌های کشف شده</td><td class="fw-bold ${summary.anomalies_found > 0 ? 'text-danger' : 'text-success'}">${summary.anomalies_found || 0}</td></tr>
+                    <tr><td>مسائل بحرانی</td><td class="fw-bold ${summary.critical_issues > 0 ? 'text-danger' : 'text-success'}">${summary.critical_issues || 0}</td></tr>
+                </table>
+        `;
+        if (data.anomalies && data.anomalies.length > 0) {
+            html += `<h6 class="text-danger mt-3"><i class="fa-solid fa-bug me-1"></i> ناهنجاری‌ها</h6><div class="list-group">`;
+            data.anomalies.forEach(a => {
+                const sevClass = a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info';
+                html += `<div class="list-group-item list-group-item-${sevClass} d-flex justify-content-between align-items-center py-2">
+                    <span>${a.type || 'ناهنجاری'}: ${a.account || a.entry_number || ''} ${a.severity ? '('+a.severity+')' : ''}</span>
+                    <small>${a.message || ''}</small>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div></div>`;
+        c.html(html);
+        return;
+    }
+    // Single check result
+    const isPass = data.status === 'PASS';
+    const badgeClass = isPass ? 'bg-success' : 'bg-danger';
+    const icon = isPass ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger';
+    let html = `<div class="card shadow-sm border-0 mb-2"><div class="card-header d-flex justify-content-between align-items-center py-2"><span class="fw-bold"><i class="fa-solid ${icon} me-1"></i> ${title}</span><span class="badge ${badgeClass}">${isPass ? 'پایدار' : 'مغایرت'}</span></div><div class="card-body p-3"><pre class="mb-0" style="font-size:0.85rem; max-height:400px; overflow-y:auto;">${JSON.stringify(data, null, 2)}</pre></div></div>`;
+    c.html(html);
+}
+
+$(document).ready(function() {
+    function runCheck(check, title) {
+        $('#loadingSpinner').removeClass('d-none');
+        $('#quickChecks').hide();
+        $('#resultsContainer').empty();
+        $.get('/audit/run', {check: check})
+            .done(function(data) { renderResult(title, data, check === 'all'); })
+            .fail(function() { $('#resultsContainer').html('<div class="alert alert-danger">خطا در اجرای حسابرسی</div>'); })
+            .always(function() { $('#loadingSpinner').addClass('d-none'); });
+    }
+
+    $('#runFullAudit').click(function() { runCheck('all', 'حسابرسی کامل'); });
+    $('.run-check').click(function() {
+        const check = $(this).data('check');
+        const names = {
+            double_entry: 'دفتر روزنامه', trial_balance: 'تراز آزمایشی',
+            balance_sheet: 'ترازنامه', income_statement: 'سود و زیان',
+            vat: 'مالیات', discount: 'تخفیفات', contacts: 'اشخاص',
+            inventory: 'انبار', livestock: 'دام زنده', depreciation: 'استهلاک',
+            anomalies: 'ناهنجاری‌ها', balance_sheet_equation: 'معادله حسابداری'
+        };
+        runCheck(check, names[check] || check);
+    });
+});
+</script>
+{% endblock %}
