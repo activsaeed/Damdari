@@ -36,6 +36,7 @@
                     <div class="modal fade" id="protocolModal{{ sheep.id }}" tabindex="-1">
                         <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger">اعمال پروتکل - پلاک {{ sheep.ear_tag }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                                 <form action="{{ url_for('livestock.apply_protocol', id=sheep.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="modal-body">
                                         <select name="template_id" class="form-select" required>
                                             <option value="">انتخاب پروتکل درمانی...</option>

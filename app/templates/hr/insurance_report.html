@@ -82,6 +82,7 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white"><h5 class="modal-title">ثبت فیش واریز بیمه</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.pay_insurance') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3"><label class="form-label fw-bold">مبلغ واریزی ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control form-control-lg text-center fw-bold" dir="ltr" onkeyup="formatCurrency(this, 'raw_pay_amt')" required><input type="hidden" name="amount" id="raw_pay_amt"></div>
                     <div class="mb-3"><label class="form-label fw-bold">تاریخ واریز (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="pay_date" class="gregorian-hidden-field"></div>

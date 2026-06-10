@@ -415,7 +415,7 @@ class AccountingEngine:
         try:
             with db.session.begin_nested():
                 description = f"سند حقوق و دستمزد {payslip.month_name} - پرسنل: {payslip.worker.name}"
-                
+
                 entry = JournalEntry(
                     entry_number=AccountingEngine.generate_entry_number(),
                     date=datetime.now(UTC).date(),
@@ -427,19 +427,34 @@ class AccountingEngine:
                 acc_expense = AccountingEngine.get_account('5010')
                 acc_payable = AccountingEngine.get_account('2010')
                 acc_receivable = AccountingEngine.get_account('1030')
+                acc_tax_payable = AccountingEngine.get_account('2015') or acc_payable
 
-                insurance_employer = (payslip.base_salary or Decimal('0')) * Decimal('0.23')
-                insurance_total = (payslip.base_salary or Decimal('0')) * Decimal('0.30')
+                gross = payslip.gross_pay or Decimal('0')
+                employer_insurance = gross * Decimal('0.23')
+                total_insurance = gross * Decimal('0.30')
+                fines = payslip.fines or Decimal('0')
+                tax = payslip.tax or Decimal('0')
+                loan = payslip.loan_deduction or Decimal('0')
+                net_pay = payslip.net_pay or Decimal('0')
+                insurance_worker = payslip.insurance or Decimal('0')
 
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=payslip.gross_pay, credit=0.0, description=f"هزینه حقوق و مزایای ناخالص - {payslip.worker.name}"))
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=insurance_employer, credit=0.0, description=f"بیمه سهم کارفرما (23%) - {payslip.worker.name}"))
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=0.0, credit=payslip.net_pay, description=f"خالص حقوق پرداختنی - {payslip.worker.name}"))
-                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=0.0, credit=insurance_total, description=f"بیمه پرداختنی سازمان (30%) - {payslip.worker.name}"))
+                # بدهکار: هزینه حقوق ناخالص
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=gross, credit=0.0, description=f"هزینه حقوق و مزایای ناخالص - {payslip.worker.name}"))
+                # بدهکار: بیمه سهم کارفرما
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=employer_insurance, credit=0.0, description=f"بیمه سهم کارفرما (23% ناخالص) - {payslip.worker.name}"))
 
-                if (payslip.loan_deduction or 0) > 0:
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_receivable.id, debit=0.0, credit=payslip.loan_deduction, description=f"وصول قسط وام - {payslip.worker.name}"))
-                if (payslip.fines or 0) > 0:
-                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=payslip.fines, credit=0.0, description=f"کسر جریمه - {payslip.worker.name}"))
+                # بستانکار: خالص حقوق پرداختنی به کارگر
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=0.0, credit=net_pay, description=f"خالص حقوق پرداختنی - {payslip.worker.name}"))
+                # بستانکار: بیمه پرداختنی سازمان
+                db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_payable.id, debit=0.0, credit=total_insurance, description=f"بیمه پرداختنی سازمان (30% ناخالص) - {payslip.worker.name}"))
+
+                if loan > 0:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_receivable.id, debit=0.0, credit=loan, description=f"وصول قسط وام - {payslip.worker.name}"))
+                if tax > 0:
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_tax_payable.id, debit=0.0, credit=tax, description=f"مالیات حقوق پرداختنی - {payslip.worker.name}"))
+                if fines > 0:
+                    # جریمه: کاهش expense (بستانکار expense) چون کارگر کمتر دریافت می‌کند
+                    db.session.add(JournalEntryLine(journal_entry_id=entry.id, account_id=acc_expense.id, debit=0.0, credit=fines, description=f"کسر جریمه - {payslip.worker.name}"))
         except Exception as e:
             db.session.rollback()
             raise Exception(f"خطا در ثبت سند حقوق: {str(e)}")

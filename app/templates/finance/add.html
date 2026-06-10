@@ -11,6 +11,7 @@
 <div class="card shadow-sm border-0 col-lg-8 mx-auto bg-white">
     <div class="card-body p-4">
         <form action="{{ url_for('finance.add_transaction') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="row g-3 mb-4 border-bottom pb-3">
                 <div class="col-md-4">

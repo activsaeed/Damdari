@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-robot text-danger"></i> هوش مصنوعی — تشخیص ناهنجاری مالی</h2>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('finance.ai_anomalies') }}" class="btn btn-danger shadow-sm"><i class="fa-solid fa-rotate"></i> اسکن مجدد</a>
+        <button class="btn btn-outline-info shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#helpAnomalies"><i class="fa-solid fa-circle-question"></i> راهنما</button>
+    </div>
+</div>
+<div class="collapse mb-4" id="helpAnomalies">
+    <div class="card card-body border-0 shadow-sm bg-info bg-opacity-10">
+        <div class="row g-4">
+
+<div class="col-md-4">
+<div class="fw-bold mb-2"><i class="fa-solid fa-magnifying-glass-chart text-danger"></i> ۱. شناسایی تراکنش‌های عجیب</div>
+<p class="small text-muted mb-2">فرض کن دامداری تو ماه معمولاً این تراکنش‌ها رو داره:<br>
+۵۰ میلیون — خرید خوراک<br>
+۳۰ میلیون — فروش بره<br>
+۲۰ میلیون — خرید واکسن<br>
+۴۰ میلیون — فروش میش<br>
+<strong class="text-danger">۶ میلیارد — یهو یه تراکنش درآمد ۶ میلیاردی!</strong></p>
+<p class="small text-muted mb-0">این ۶ میلیارد نسبت به بقیه خیلی بزرگه. ابزار بهت می‌گه: "آقا این تراکنش ۶ میلیاردی خیلی از بقیه بزرگتره، بیا ببین درسته یا اشتباه زدی؟"<br>
+<strong>روش:</strong> میانگین همه تراکنش‌ها رو حساب می‌کنه و می‌بینه هر کدوم چقدر از میانگین فاصله دارن. اگه فاصله خیلی زیاد باشه (<span dir="ltr">&gt; ۲.۵</span> برابر انحراف معیار)، هشدار میده.</p>
+</div>
+
+<div class="col-md-4">
+<div class="fw-bold mb-2"><i class="fa-solid fa-money-check text-warning"></i> ۲. شناسایی چک‌های معوق</div>
+<p class="small text-muted mb-2">چک‌ها توی دامداری حکم پول نقد رو دارن. یه چکی که ۳ ماه پیش سررسیدش بوده و هنوز وصول نشده، یعنی یه جای کار میلنگه.</p>
+<p class="small text-muted mb-0">این ابزار چک‌هایی که <strong>بیش از ۹۰ روز</strong> از سررسیدشون گذشته ولی هنوز "در جریان" هستن رو پیدا می‌کنه:<br>
+- چک شماره ۵۴۲۱ — ۲,۳۰۰,۰۰۰ تومان — ۱۴۵ روز گذشته<br>
+- چک شماره ۶۱۰۳ — ۵,۰۰۰,۰۰۰ تومان — ۲۱۰ روز گذشته<br>
+باید بری پیگیری کنی که چرا هنوز پولش واریز نشده.</p>
+</div>
+
+<div class="col-md-4">
+<div class="fw-bold mb-2"><i class="fa-solid fa-address-book text-secondary"></i> ۳. شناسایی اشخاص با بدهی بالا</div>
+<p class="small text-muted mb-2">بعضی از مشتری‌ها یا تأمین‌کننده‌ها ممکنه بدهی زیادی پیدا کنن. اگه یه نفر ۲۰۰ میلیون بهت بدهکار باشه و تو ندونی، ممکنه یهو ورشکست بشه و پولتو ندی.</p>
+<p class="small text-muted mb-0">این ابزار حساب همه اشخاص رو چک می‌کنه و اونایی که <strong>بیش از ۱۰۰ میلیون تومان</strong> بدهی دارن رو نشون میده.</p>
+</div>
+
+<div class="col-12">
+<hr>
+<div class="row g-3 align-items-center">
+<div class="col-md-6">
+<div class="fw-bold mb-2"><i class="fa-solid fa-table-list"></i> خروجی ابزار چه شکلیه؟</div>
+<table class="table table-sm table-bordered small mb-0 bg-white">
+<thead><tr><th>نوع</th><th>رنگ</th><th>معنی</th><th>باید چکار کنی؟</th></tr></thead>
+<tbody>
+<tr class="table-danger"><td>ناهنجاری جدی</td><td><span class="badge bg-danger">قرمز</span></td><td>حتماً یه جای کار مشکل داره</td><td>سریع بررسی کن</td></tr>
+<tr class="table-warning"><td>نیاز به بررسی</td><td><span class="badge bg-warning text-dark">زرد</span></td><td>احتمالاً مشکلی هست ولی مطمئن نیستیم</td><td>وقت بذار چک کن</td></tr>
+</tbody>
+</table>
+<p class="small text-muted mt-2 mb-0">به هر ناهنجاری یه <strong>"امتیاز"</strong> میده. هرچی امتیاز بالاتر باشه، موضوع جدی‌تره.</p>
+</div>
+
+<div class="col-md-6">
+<div class="fw-bold mb-2"><i class="fa-solid fa-person"></i> یه مثال واقعی</div>
+<div class="small p-2 bg-white rounded border">
+<strong>محمدجواد دامداره.</strong> میره تو این صفحه و می‌بینه:<br>
+<span class="text-danger">🟥 تراکنش غیرعادی — ۵۸۵,۰۰۰,۰۰۰ تومان — شرکت علوفه سبز</span><br>
+<span class="text-danger">🟥 چک معوق — چک ۱۲۳۴ — ۱۵۰ روز گذشته</span><br>
+<span class="text-warning">🟨 مطالبه بالا — رضایی — ۱۸۵,۰۰۰,۰۰۰ تومان</span><br><br>
+۱. میره تراکنش رو نگاه می‌کنه — می‌بینه اشتباهی یه صفر اضافه زده، درستش می‌کنه ✅<br>
+۲. میره چک رو پیگیری می‌کنه — با صاحب چک تماس می‌گیره ✅<br>
+۳. میره بدهی رضایی رو بررسی می‌کنه — قرارداد اقساطی می‌بنده ✅
+</div>
+</div>
+</div>
+</div>
+
+<div class="col-12">
+<div class="p-2 bg-white rounded border small">
+<strong><i class="fa-solid fa-star text-warning"></i> این ابزار چه فرقی با بقیه گزارش‌ها داره؟</strong><br>
+گزارش معمولی → <span class="text-muted">تو باید بری دنبال مشکل بگردی</span> | <strong>این ابزار</strong> → <span class="text-success">مشکل خودش میاد بهت می‌گه</span><br>
+گزارش معمولی → <span class="text-muted">همه تراکنش‌ها رو لیست می‌کنه</span> | <strong>این ابزار</strong> → <span class="text-success">فقط تراکنش‌های مشکوک رو نشون می‌ده</span><br>
+گزارش معمولی → <span class="text-muted">عدد و رقم خام میده</span> | <strong>این ابزار</strong> → <span class="text-success">امتیاز خطر (severity) میده</span><br>
+گزارش معمولی → <span class="text-muted">هیچ اولویت‌بندی نداره</span> | <strong>این ابزار</strong> → <span class="text-success">مرتب‌سازی شده از بحرانی به کم‌اهمیت</span>
+</div>
+</div>
+
+        </div>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-6"><div class="card border-0 shadow-sm bg-danger text-white h-100"><div class="card-body text-center"><h5 class="opacity-75">ناهنجاری جدی</h5><h2 class="fw-bold">{{ high_count }}</h2></div></div></div>
+    <div class="col-md-6"><div class="card border-0 shadow-sm bg-warning h-100"><div class="card-body text-center text-dark"><h5 class="opacity-75">نیاز به بررسی</h5><h2 class="fw-bold">{{ medium_count }}</h2></div></div></div>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr><th>نوع</th><th>عنوان</th><th>توضیحات</th><th>امتیاز</th><th>تاریخ</th><th>عملیات</th></tr>
+            </thead>
+            <tbody>
+                {% for a in anomalies %}
+                <tr class="{% if a.severity == 'high' %}table-danger{% else %}table-warning{% endif %}">
+                    <td>
+                        {% if a.type == 'transaction' %}<span class="badge bg-info">تراکنش</span>
+                        {% elif a.type == 'cheque' %}<span class="badge bg-dark">چک</span>
+                        {% else %}<span class="badge bg-secondary">شخص</span>{% endif %}
+                    </td>
+                    <td class="fw-bold">{{ a.title }}</td>
+                    <td class="small">{{ a.description }}</td>
+                    <td><span class="badge {% if a.severity == 'high' %}bg-danger{% else %}bg-warning text-dark{% endif %} fs-6">{{ a.z_score }}</span></td>
+                    <td>{{ a.date|jalali }}</td>
+                    <td><a href="{{ a.url }}" class="btn btn-sm btn-outline-dark"><i class="fa-solid fa-eye"></i></a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="py-5 text-muted"><i class="fa-solid fa-check-circle text-success fa-2x d-block mb-2"></i>ناهنجاری خاصی یافت نشد. همه چیز عادی است.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

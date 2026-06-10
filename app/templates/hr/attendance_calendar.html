@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="fa-solid fa-calendar-days text-primary"></i> تقویم حضور و غیاب</h2>
+    <form method="GET" class="d-flex gap-2 align-items-center flex-wrap">
+        <select name="year" class="form-select form-select-sm" style="width:90px" onchange="this.form.submit()">
+            {% for y in range(1400, 1410) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+        <select name="month" class="form-select form-select-sm" style="width:130px" onchange="this.form.submit()">
+            {% for m, name in month_names.items() %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+        <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-list"></i> نمای روزانه</a>
+    </form>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+
+<style>
+.att-grid { overflow-x: auto; font-size: 11px; }
+.att-grid table { border-collapse: collapse; min-width: 950px; }
+.att-grid th, .att-grid td { border: 1px solid #dee2e6; padding: 3px 4px; text-align: center; vertical-align: middle; white-space: nowrap; }
+.att-grid th { background: #2c3e50; color: white; font-weight: 700; position: sticky; top: 0; z-index: 2; font-size: 11px; }
+.att-grid th.day-col { min-width: 28px; font-weight: 400; }
+.att-grid th.weekend-col { background: #1a2632; }
+.att-grid td.name-col { min-width: 130px; text-align: right; font-weight: 700; position: sticky; right: 0; background: #f8f9fa; z-index: 1; }
+.att-grid td.sum-col { font-weight: 700; background: #fff3cd; min-width: 40px; }
+.att-grid td.stat-col { font-weight: 600; font-size: 10px; min-width: 30px; }
+.cell-present { background: #198754; color: white; cursor: pointer; }
+.cell-absent { background: #dc3545; color: white; cursor: pointer; }
+.cell-leave { background: #ffc107; color: #333; cursor: pointer; }
+.cell-mission { background: #0d6efd; color: white; cursor: pointer; }
+.cell-empty { background: #f8f9fa; cursor: pointer; }
+.cell-na { background: #e9ecef; color: #adb5bd; cursor: default; } /* قبل از استخدام */
+.cell-present:hover, .cell-absent:hover, .cell-leave:hover, .cell-mission:hover, .cell-empty:hover { opacity: 0.8; }
+.legend span { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+.worker-row:hover td.name-col { background: #e9ecef !important; }
+.worker-row.row-collapsed td:not(.name-col):not(.stat-col):not(.sum-col) { display: none; }
+</style>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-2">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="fw-bold small"><i class="fa-solid fa-calendar text-primary me-1"></i> {{ month_name }} {{ year }} — <span class="text-muted">{{ day_list|length }} روز</span></span>
+            <div class="d-flex gap-3 small flex-wrap">
+                <span><span class="legend"><span style="background:#198754"></span></span> حاضر</span>
+                <span><span class="legend"><span style="background:#dc3545"></span></span> غایب</span>
+                <span><span class="legend"><span style="background:#ffc107"></span></span> مرخصی</span>
+                <span><span class="legend"><span style="background:#0d6efd"></span></span> ماموریت</span>
+                <span><span class="legend"><span style="background:#e9ecef;border:1px solid #ccc"></span></span> قبل از استخدام</span>
+                <span><span class="legend"><span style="background:#f8f9fa;border:1px solid #ddd"></span></span> ثبت نشده</span>
+            </div>
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-success" id="bulkPresentBtn"><i class="fa-solid fa-check-double"></i> ثبت همه</button>
+                <button class="btn btn-sm btn-outline-secondary" id="toggleCollapseBtn"><i class="fa-solid fa-compress"></i> جمع‌شده</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-2 att-grid">
+        <table class="w-100" id="attTable">
+            <thead>
+                <tr>
+                    <th class="name-col">پرسنل</th>
+                    {% for gd, jday in day_list %}
+                    {% set dow = gd.weekday() %}
+                    <th class="day-col {% if dow == 4 or dow == 5 %}weekend-col{% endif %}" title="{{ gd.isoformat() }}">{{ jday }}</th>
+                    {% endfor %}
+                    <th class="sum-col" title="اضافه‌کاری">➕</th>
+                    <th class="sum-col" title="شب‌کاری">🌙</th>
+                    <th class="sum-col" title="جریمه">💰</th>
+                    <th class="stat-col" title="روزهای حضور">✅</th>
+                    <th class="stat-col" title="غیبت">❌</th>
+                    <th class="stat-col" title="مرخصی/ماموریت">📋</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in workers %}
+                {% set w_start = start_dates.get(w.id) %}
+                <tr class="worker-row" data-worker-id="{{ w.id }}">
+                    <td class="name-col" onclick="toggleRow({{ w.id }})" style="cursor:pointer">
+                        <i class="fa-solid fa-chevron-down small text-muted"></i> {{ w.name }}
+                        {% if w_start %}<br><small class="text-muted" style="font-weight:400;font-size:9px">از {{ w_start }}</small>{% endif %}
+                    </td>
+                    {% for gd, jday in day_list %}
+                    {% set day_key = gd.isoformat() %}
+                    {% set w_att = att_map.get(w.id, {}) %}
+                    {% set rec = w_att.get(day_key) %}
+                    {% if w_start and day_key < w_start %}
+                    <td class="cell-na" title="قبل از شروع به کار">—</td>
+                    {% elif rec %}
+                    <td class="cell-{{ 'present' if rec.status == 'حاضر' else 'absent' if rec.status == 'غایب' else 'leave' if rec.status == 'مرخصی' else 'mission' }}" 
+                        onclick="openDayModal({{ w.id }}, '{{ day_key }}', '{{ rec.status }}', {{ rec.overtime_hours }}, {{ rec.night_shift_hours }}, {{ rec.fine_amount }}, '{{ rec.notes or '' }}')" 
+                        title="{{ rec.status }}{% if rec.overtime_hours > 0 %} | اضافه:{{ rec.overtime_hours }}h{% endif %}{% if rec.night_shift_hours > 0 %} | شب:{{ rec.night_shift_hours }}h{% endif %}{% if rec.fine_amount > 0 %} | جریمه:{{ rec.fine_amount }}{% endif %}{% if rec.notes %} | {{ rec.notes }}{% endif %}">
+                        {{ rec.status[:1] }}
+                    </td>
+                    {% else %}
+                    <td class="cell-empty" onclick="openDayModal({{ w.id }}, '{{ day_key }}', 'حاضر', 0, 0, 0, '')" title="ثبت نشده">-</td>
+                    {% endif %}
+                    {% endfor %}
+                    <td class="sum-col">{{ att_sums[w.id]['overtime']|round(1) }}</td>
+                    <td class="sum-col">{{ att_sums[w.id]['night']|round(1) }}</td>
+                    <td class="sum-col">{{ att_sums[w.id]['fines']|int }}</td>
+                    <td class="stat-col text-success">{{ att_sums[w.id]['present'] }}</td>
+                    <td class="stat-col text-danger">{{ att_sums[w.id]['absent'] }}</td>
+                    <td class="stat-col text-info">{{ att_sums[w.id]['leave'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="dayModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title" id="dayModalTitle">ثبت حضور</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_attendance') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="worker_id" id="modalWorkerId">
+                <input type="hidden" name="date" id="modalDate">
+                <div class="modal-body small">
+                    <div class="mb-2"><label class="form-label fw-bold">وضعیت</label>
+                        <select name="status" id="modalStatus" class="form-select form-select-sm">
+                            <option value="حاضر">حاضر</option>
+                            <option value="غایب">غایب</option>
+                            <option value="مرخصی">مرخصی</option>
+                            <option value="ماموریت">ماموریت</option>
+                        </select>
+                    </div>
+                    <div class="mb-2"><label class="form-label fw-bold">اضافه‌کاری (ساعت)</label><input type="number" step="0.5" name="overtime_hours" id="modalOt" class="form-control form-control-sm" value="0"></div>
+                    <div class="mb-2"><label class="form-label fw-bold">شب‌کاری (ساعت)</label><input type="number" step="0.5" name="night_shift_hours" id="modalNight" class="form-control form-control-sm" value="0"></div>
+                    <div class="mb-2"><label class="form-label fw-bold">جریمه (تومان)</label><input type="text" class="form-control form-control-sm" dir="ltr" id="modalFineDisplay" onkeyup="formatCurrency(this, 'modalFineRaw')"><input type="hidden" name="fine_amount" id="modalFineRaw"></div>
+                    <div class="mb-2"><label class="form-label fw-bold">توضیحات</label><input type="text" name="notes" id="modalNotes" class="form-control form-control-sm" placeholder="علت غیبت/مرخصی/..."></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ذخیره</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+var collapsed = false;
+
+function formatCurrency(input, hiddenFieldId) {
+    let value = input.value.replace(/\D/g, "");
+    document.getElementById(hiddenFieldId).value = value;
+    if (value) input.value = Number(value).toLocaleString('en-US');
+    else input.value = "";
+}
+
+function openDayModal(workerId, dateStr, status, ot, night, fine, notes) {
+    document.getElementById('modalWorkerId').value = workerId;
+    document.getElementById('modalDate').value = dateStr;
+    document.getElementById('modalStatus').value = status;
+    document.getElementById('modalOt').value = ot;
+    document.getElementById('modalNight').value = night;
+    document.getElementById('modalNotes').value = notes;
+    var fineDisplay = document.getElementById('modalFineDisplay');
+    fineDisplay.value = fine > 0 ? Number(fine).toLocaleString('en-US') : '';
+    document.getElementById('modalFineRaw').value = fine;
+    document.getElementById('dayModalTitle').textContent = 'ثبت حضور - ' + dateStr;
+    new bootstrap.Modal(document.getElementById('dayModal')).show();
+}
+
+function toggleRow(workerId) {
+    var row = document.querySelector('.worker-row[data-worker-id="' + workerId + '"]');
+    if (row) {
+        row.classList.toggle('row-collapsed');
+        var icon = row.querySelector('.fa-chevron-down, .fa-chevron-up');
+        if (icon) {
+            icon.className = row.classList.contains('row-collapsed') ? 'fa-solid fa-chevron-up small text-muted' : 'fa-solid fa-chevron-down small text-muted';
+        }
+    }
+}
+
+document.getElementById('bulkPresentBtn').addEventListener('click', function() {
+    if (!confirm('همه کارگران برای امروز به‌عنوان "حاضر" ثبت شوند؟')) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("hr.attendance_calendar_bulk") }}';
+    var csrf = document.createElement('input');
+    csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}';
+    form.appendChild(csrf);
+    var dateInput = document.createElement('input');
+    dateInput.type = 'hidden'; dateInput.name = 'date'; dateInput.value = new Date().toISOString().split('T')[0];
+    form.appendChild(dateInput);
+    var yearInput = document.createElement('input');
+    yearInput.type = 'hidden'; yearInput.name = 'year'; yearInput.value = '{{ year }}';
+    form.appendChild(yearInput);
+    var monthInput = document.createElement('input');
+    monthInput.type = 'hidden'; monthInput.name = 'month'; monthInput.value = '{{ month }}';
+    form.appendChild(monthInput);
+    document.body.appendChild(form);
+    form.submit();
+});
+
+document.getElementById('toggleCollapseBtn').addEventListener('click', function() {
+    collapsed = !collapsed;
+    document.querySelectorAll('.worker-row').forEach(function(row) {
+        row.classList.toggle('row-collapsed', collapsed);
+        var icon = row.querySelector('.fa-chevron-down, .fa-chevron-up');
+        if (icon) icon.className = collapsed ? 'fa-solid fa-chevron-up small text-muted' : 'fa-solid fa-chevron-down small text-muted';
+    });
+    this.innerHTML = collapsed ? '<i class="fa-solid fa-expand"></i> بازشده' : '<i class="fa-solid fa-compress"></i> جمع‌شده';
+});
+</script>
+{% endblock %}

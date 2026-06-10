@@ -134,6 +134,7 @@
             {% endwith %}
 
             <form action="{{ url_for('auth.login') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-4">
                     <label class="form-label small fw-bold text-white-50">نام کاربری</label>
                     <div class="input-group">

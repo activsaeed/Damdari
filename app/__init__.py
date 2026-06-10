@@ -1,9 +1,29 @@
 from decimal import Decimal
-from flask import Flask, request, redirect, url_for
+from flask import Flask, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
+from functools import wraps
+from flask import session, jsonify
+import time
+
+# ---> محدودیت نرخ ساده برای AJAX <---
+def rate_limit(limit=10, per=60):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            key = f"rl_{f.__name__}_{request.remote_addr or 'local'}"
+            now = time.time()
+            hits = session.get(key, [])
+            hits = [t for t in hits if now - t < per]
+            if len(hits) >= limit:
+                return jsonify({'error': f'محدودیت نرخ: حداکثر {limit} درخواست در {per} ثانیه'}), 429
+            hits.append(now)
+            session[key] = hits
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 from werkzeug.security import generate_password_hash
 import jdatetime
 from apscheduler.schedulers.background import BackgroundScheduler

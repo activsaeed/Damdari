@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-book text-primary"></i> مدیریت دسته چک</h2>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('finance.cheques') }}" class="btn btn-outline-secondary shadow-sm btn-sm"><i class="fa-solid fa-money-check-dollar me-1"></i> چک‌ها</a>
+        <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addChequeBookModal">
+            <i class="fa-solid fa-plus"></i> دسته چک جدید
+        </button>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card bg-primary text-white border-0 shadow-sm"><div class="card-body text-center"><h6 class="opacity-75">دسته چک فعال</h6><h3>{{ books|selectattr('status', 'eq', 'فعال')|list|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-success text-white border-0 shadow-sm"><div class="card-body text-center"><h6 class="opacity-75">کل چک‌های ثبت شده</h6><h3>{{ total_cheques }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-info text-white border-0 shadow-sm"><div class="card-body text-center"><h6 class="opacity-75">دسته‌های مصرف شده</h6><h3>{{ books|selectattr('status', 'eq', 'مصرف شده')|list|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-warning border-0 shadow-sm"><div class="card-body text-center"><h6 class="opacity-75">مجموع دسته‌ها</h6><h3>{{ books|length }}</h3></div></div></div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white fw-bold py-2"><i class="fa-solid fa-list me-1 text-primary"></i> لیست دسته چک‌ها</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark">
+                    <tr><th>نام دسته</th><th>بانک</th><th>شماره سریال</th><th>تعداد</th><th>مصرف شده</th><th>باقی مانده</th><th>تاریخ دریافت</th><th>وضعیت</th><th>عملیات</th></tr>
+                </thead>
+                <tbody>
+                    {% for b in books %}
+                    <tr>
+                        <td class="fw-bold">{{ b.name }}</td>
+                        <td>{{ b.bank_name }}</td>
+                        <td dir="ltr"><code>{{ b.start_number }}</code> → <code>{{ b.end_number }}</code></td>
+                        <td>{{ b.total_count }}</td>
+                        <td>{{ b.used_count }}</td>
+                        <td><span class="badge {% if b.remaining_count > 0 %}bg-success{% else %}bg-secondary{% endif %}">{{ b.remaining_count }}</span></td>
+                        <td>{{ b.received_date|jalali }}</td>
+                        <td><span class="badge {% if b.status == 'فعال' %}bg-success{% else %}bg-secondary{% endif %}">{{ b.status }}</span></td>
+                        <td>
+                            {% if b.status == 'فعال' %}
+                            <form action="{{ url_for('finance.close_cheque_book', id=b.id) }}" method="POST" class="d-inline" onsubmit="return confirm('دسته چک {{ b.name }} بسته شود؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-warning py-0 px-1" title="بستن دسته"><i class="fa-solid fa-lock fa-xs"></i></button>
+                            </form>
+                            {% endif %}
+                            <form action="{{ url_for('finance.delete_cheque_book', id=b.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ b.name }}؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" title="حذف"><i class="fa-solid fa-trash fa-xs"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="py-5 text-muted">هیچ دسته چکی ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addChequeBookModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-plus text-primary"></i> دسته چک جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.add_cheque_book') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body text-start">
+                    <div class="mb-3"><label class="form-label fw-bold">نام دسته چک</label><input type="text" name="name" class="form-control" placeholder="مثلاً: دسته چک بانک ملی ۱۴۰۳" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">نام بانک</label><input type="text" name="bank_name" class="form-control" placeholder="بانک ملی" required></div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label class="form-label fw-bold">اولین شماره</label><input type="text" name="start_number" class="form-control" dir="ltr" placeholder="مثلاً: 1001" required></div>
+                        <div class="col-6"><label class="form-label fw-bold">آخرین شماره</label><input type="text" name="end_number" class="form-control" dir="ltr" placeholder="مثلاً: 1100" required></div>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">توضیحات</label><textarea name="notes" class="form-control" rows="2" placeholder="اختیاری"></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ثبت دسته چک</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

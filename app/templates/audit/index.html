@@ -1,12 +1,89 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<style>
+.btn-check-audit { border: none; color: #fff; font-weight: bold; transition: transform 0.2s, box-shadow 0.2s; }
+.btn-check-audit:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.2) !important; color: #fff; }
+.btn-check-audit i { font-size: 1.5rem; }
+.btn-check-red { background: linear-gradient(135deg, #dc3545, #e4606d); }
+.btn-check-red:hover { background: linear-gradient(135deg, #c82333, #dc3545); }
+.btn-check-pink { background: linear-gradient(135deg, #e83e8c, #f06292); }
+.btn-check-pink:hover { background: linear-gradient(135deg, #d63384, #e83e8c); }
+.btn-check-orange { background: linear-gradient(135deg, #fd7e14, #ffa94d); }
+.btn-check-orange:hover { background: linear-gradient(135deg, #e06b00, #fd7e14); }
+.btn-check-yellow { background: linear-gradient(135deg, #ffc107, #ffd54f); color: #333 !important; }
+.btn-check-yellow:hover { background: linear-gradient(135deg, #e0a800, #ffc107); color: #333 !important; }
+.btn-check-green { background: linear-gradient(135deg, #28a745, #5dd879); }
+.btn-check-green:hover { background: linear-gradient(135deg, #1e7e34, #28a745); }
+.btn-check-teal { background: linear-gradient(135deg, #20c997, #4ddbb8); }
+.btn-check-teal:hover { background: linear-gradient(135deg, #17a67b, #20c997); }
+.btn-check-cyan { background: linear-gradient(135deg, #17a2b8, #4dd0e1); }
+.btn-check-cyan:hover { background: linear-gradient(135deg, #138496, #17a2b8); }
+.btn-check-blue { background: linear-gradient(135deg, #007bff, #4da3ff); }
+.btn-check-blue:hover { background: linear-gradient(135deg, #0069d9, #007bff); }
+.btn-check-indigo { background: linear-gradient(135deg, #6610f2, #8c4ffa); }
+.btn-check-indigo:hover { background: linear-gradient(135deg, #520dc2, #6610f2); }
+.btn-check-purple { background: linear-gradient(135deg, #6f42c1, #9573d3); }
+.btn-check-purple:hover { background: linear-gradient(135deg, #5a32a3, #6f42c1); }
+.btn-check-gray { background: linear-gradient(135deg, #6c757d, #929ba3); }
+.btn-check-gray:hover { background: linear-gradient(135deg, #5a6268, #6c757d); }
+.btn-check-dark { background: linear-gradient(135deg, #343a40, #4b555c); }
+.btn-check-dark:hover { background: linear-gradient(135deg, #23272b, #343a40); }
+.section-label { font-size: 0.85rem; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+.section-label hr { flex: 1; }
+</style>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h4 class="fw-bold text-primary"><i class="fa-solid fa-shield-halved me-2"></i> موتور حسابرسی خودکار</h4>
-    <button id="runFullAudit" class="btn btn-primary shadow-sm"><i class="fa-solid fa-play me-1"></i> اجرای حسابرسی کامل</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-info shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#helpAudit"><i class="fa-solid fa-circle-question"></i> راهنما</button>
+        <button id="runFullAudit" class="btn btn-primary shadow-sm"><i class="fa-solid fa-play me-1"></i> حسابرسی کامل</button>
+    </div>
 </div>
 
-<div class="alert alert-info">
-    <i class="fa-solid fa-circle-info me-1"></i> این ابزار به‌صورت خودکار تمام بخش‌های مالی و عملیاتی سیستم را بررسی می‌کند و هرگونه مغایرت یا ناهنجاری را گزارش می‌دهد.
+<div class="collapse mb-4" id="helpAudit">
+    <div class="card card-body border-0 shadow-sm bg-info bg-opacity-10">
+        <div class="row g-4">
+            <div class="col-12">
+                <h6 class="fw-bold"><i class="fa-solid fa-shield-halved text-primary"></i> راهنمای کامل هر دکمه</h6>
+                <p class="small text-muted">هر دکمه یه تست خاص رو اجرا می‌کنه. خروجی هر تست رو می‌تونی ببینی و اگه خطایی باشه، با دکمه «گزارش خطاها» همه رو یکجا می‌بینی و می‌تونی کپی کنی.</p>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm table-bordered small bg-white mb-0">
+                    <thead><tr><th>دکمه</th><th>چک می‌کنه</th><th>اگه خطا داد</th></tr></thead>
+                    <tbody>
+                        <tr><td>دفتر روزنامه</td><td>آیا بدهکار هر سند = بستانکارش؟</td><td>سند نامتوازن رو پیدا کن و درستش کن</td></tr>
+                        <tr><td>تراز آزمایشی</td><td>آیا جمع بدهکارها = جمع بستانکارها؟</td><td>یک جای سیستم عدم توازن داره</td></tr>
+                        <tr><td>ترازنامه</td><td>آیا دارایی = بدهی + حقوق؟</td><td>صورت‌های مالی مشکل دارن</td></tr>
+                        <tr><td>سود و زیان</td><td>آیا سود با انباشته هماهنگه؟</td><td>باید سند بستن بزنی</td></tr>
+                        <tr><td>مالیات</td><td>مالیات فاکتورها درست حسابه؟</td><td>مالیات بعضی فاکتورها اشتباهه</td></tr>
+                        <tr><td>تخفیفات</td><td>تخفیف حسابداری = فاکتور؟</td><td>مغایرت تخفیف رو بررسی کن</td></tr>
+                        <tr><td>اشخاص</td><td>مانده اشخاص درسته؟</td><td>بررسی و اصلاح مانده اشخاص</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm table-bordered small bg-white mb-0">
+                    <thead><tr><th>دکمه</th><th>چک می‌کنه</th><th>اگه خطا داد</th></tr></thead>
+                    <tbody>
+                        <tr><td>انبار</td><td>ارزش انبار در حسابداری = محاسبه شده؟</td><td>موجودی فیزیکی با سیستم یکی نیست</td></tr>
+                        <tr><td>ارزش دام</td><td>ارزش دام‌ها به‌روزه؟</td><td>قیمت بازار رو بروز کن</td></tr>
+                        <tr><td>استهلاک</td><td>استهلاک تجهیزات درسته؟</td><td>استهلاک رو اصلاح کن</td></tr>
+                        <tr><td>ناهنجاری‌ها</td><td>۴ نوع ناهنجاری خاص</td><td>مهم‌ترین: فاکتور بدون سند!</td></tr>
+                        <tr><td>پلاک تکراری</td><td>آیا دو دام پلاک یکسان دارن؟</td><td>پلاک‌ها رو یکتا کن</td></tr>
+                        <tr><td>بدون وزن</td><td>دام‌هایی که وزن‌کشی نشدن</td><td>براشون وزن ثبت کن</td></tr>
+                        <tr><td>بدون تراکنش</td><td>سندهایی که فاکتور ندارن</td><td>سندهای یتیم رو پاک یا متصل کن</td></tr>
+                        <tr><td>تاریخ آینده</td><td>تراکنش‌های با تاریخ اشتباه</td><td>تاریخ رو تصحیح کن</td></tr>
+                        <tr><td>وظایف عقب‌افتاده</td><td>کارهای انجام نشده</td><td>وظایف رو پیگیری کن</td></tr>
+                        <tr><td>بدون بهاربند</td><td>دام‌های بی‌بهاربند</td><td>بهاربند اختصاص بده</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-12">
+                <div class="p-2 bg-white rounded border small">
+                    <strong><i class="fa-solid fa-star text-warning"></i> نکته مهم:</strong> بعد از اجرای هر تست، دکمه‌های <b>«گزارش خطاها»</b> و <b>«کپی گزارش»</b> ظاهر می‌شن. با <b>«بازگشت به پنل»</b> برمی‌گردی به دکمه‌ها. اگه خواستی گزارش رو برای پشتیبان بفرستی، از دکمه کپی استفاده کن.
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="loadingSpinner" class="text-center my-5 d-none">
@@ -18,92 +95,264 @@
 
 <div id="resultsContainer"></div>
 
-<div class="row g-3 mt-1" id="quickChecks">
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-book fa-2x text-primary mb-2"></i><h6>دفتر روزنامه</h6><button class="btn btn-sm btn-outline-primary run-check" data-check="double_entry">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-scale-balanced fa-2x text-success mb-2"></i><h6>تراز آزمایشی</h6><button class="btn btn-sm btn-outline-success run-check" data-check="trial_balance">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-sheet-plastic fa-2x text-info mb-2"></i><h6>ترازنامه</h6><button class="btn btn-sm btn-outline-info run-check" data-check="balance_sheet">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-chart-line fa-2x text-warning mb-2"></i><h6>صورت سود و زیان</h6><button class="btn btn-sm btn-outline-warning run-check" data-check="income_statement">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-file-invoice fa-2x text-danger mb-2"></i><h6>مالیات بر ارزش افزوده</h6><button class="btn btn-sm btn-outline-danger run-check" data-check="vat">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-percent fa-2x text-secondary mb-2"></i><h6>تخفیفات</h6><button class="btn btn-sm btn-outline-secondary run-check" data-check="discount">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-address-book fa-2x text-primary mb-2"></i><h6>اشخاص</h6><button class="btn btn-sm btn-outline-primary run-check" data-check="contacts">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-boxes-stacked fa-2x text-success mb-2"></i><h6>انبار</h6><button class="btn btn-sm btn-outline-success run-check" data-check="inventory">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-horse-head fa-2x text-info mb-2"></i><h6>ارزش دام</h6><button class="btn btn-sm btn-outline-info run-check" data-check="livestock">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-tractor fa-2x text-warning mb-2"></i><h6>استهلاک</h6><button class="btn btn-sm btn-outline-warning run-check" data-check="depreciation">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-triangle-exclamation fa-2x text-danger mb-2"></i><h6>ناهنجاری‌ها</h6><button class="btn btn-sm btn-outline-danger run-check" data-check="anomalies">بررسی</button></div></div></div>
-    <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body text-center"><i class="fa-solid fa-shield-halved fa-2x text-dark mb-2"></i><h6>معادله حسابداری</h6><button class="btn btn-sm btn-outline-dark run-check" data-check="balance_sheet_equation">بررسی</button></div></div></div>
+<div class="card shadow-sm border-0" id="checksPanel">
+    <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-list-check text-primary me-1"></i> پنل تست‌های حسابرسی</span>
+        <div class="d-flex gap-2">
+            <button id="showErrorsBtn" class="btn btn-danger shadow-sm btn-sm"><i class="fa-solid fa-bug me-1"></i> گزارش خطاها</button>
+            <button id="copyReportBtn" class="btn btn-outline-secondary shadow-sm btn-sm d-none"><i class="fa-solid fa-copy me-1"></i> کپی گزارش</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12"><small class="text-muted fw-bold section-label">حسابداری <hr></small></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-blue btn-check-audit w-100 run-check py-3 shadow-sm" data-check="double_entry"><i class="fa-solid fa-book d-block mb-1"></i><small>دفتر روزنامه</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-green btn-check-audit w-100 run-check py-3 shadow-sm" data-check="trial_balance"><i class="fa-solid fa-scale-balanced d-block mb-1"></i><small>تراز آزمایشی</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-cyan btn-check-audit w-100 run-check py-3 shadow-sm" data-check="balance_sheet"><i class="fa-solid fa-sheet-plastic d-block mb-1"></i><small>ترازنامه</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-dark btn-check-audit w-100 run-check py-3 shadow-sm" data-check="balance_sheet_equation"><i class="fa-solid fa-shield-halved d-block mb-1"></i><small>معادله حسابداری</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-orange btn-check-audit w-100 run-check py-3 shadow-sm" data-check="income_statement"><i class="fa-solid fa-chart-line d-block mb-1"></i><small>سود و زیان</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-red btn-check-audit w-100 run-check py-3 shadow-sm" data-check="vat"><i class="fa-solid fa-file-invoice d-block mb-1"></i><small>مالیات</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-gray btn-check-audit w-100 run-check py-3 shadow-sm" data-check="discount"><i class="fa-solid fa-percent d-block mb-1"></i><small>تخفیفات</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-indigo btn-check-audit w-100 run-check py-3 shadow-sm" data-check="contacts"><i class="fa-solid fa-address-book d-block mb-1"></i><small>اشخاص</small></button></div>
+
+            <div class="col-12 mt-2"><small class="text-muted fw-bold section-label">انبار / دارایی <hr></small></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-green btn-check-audit w-100 run-check py-3 shadow-sm" data-check="inventory"><i class="fa-solid fa-boxes-stacked d-block mb-1"></i><small>انبار</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-teal btn-check-audit w-100 run-check py-3 shadow-sm" data-check="livestock"><i class="fa-solid fa-horse-head d-block mb-1"></i><small>ارزش دام</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-yellow btn-check-audit w-100 run-check py-3 shadow-sm" data-check="depreciation"><i class="fa-solid fa-tractor d-block mb-1"></i><small>استهلاک</small></button></div>
+
+            <div class="col-12 mt-2"><small class="text-muted fw-bold section-label">ناهنجاری و عیب‌یابی <hr></small></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-red btn-check-audit w-100 run-check py-3 shadow-sm" data-check="anomalies"><i class="fa-solid fa-triangle-exclamation d-block mb-1"></i><small>ناهنجاری‌ها</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-pink btn-check-audit w-100 run-check py-3 shadow-sm" data-check="duplicate_ear_tags"><i class="fa-solid fa-tag d-block mb-1"></i><small>پلاک تکراری</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-orange btn-check-audit w-100 run-check py-3 shadow-sm" data-check="weightless_sheep"><i class="fa-solid fa-weight-scale d-block mb-1"></i><small>بدون وزن</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-orange btn-check-audit w-100 run-check py-3 shadow-sm" data-check="orphaned_entries"><i class="fa-solid fa-link-slash d-block mb-1"></i><small>بدون تراکنش</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-cyan btn-check-audit w-100 run-check py-3 shadow-sm" data-check="future_transactions"><i class="fa-solid fa-calendar d-block mb-1"></i><small>تاریخ آینده</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-gray btn-check-audit w-100 run-check py-3 shadow-sm" data-check="overdue_tasks"><i class="fa-solid fa-clock d-block mb-1"></i><small>وظایف عقب‌افتاده</small></button></div>
+            <div class="col-md-3 col-6"><button class="btn btn-check-purple btn-check-audit w-100 run-check py-3 shadow-sm" data-check="unpenned_sheep"><i class="fa-solid fa-house d-block mb-1"></i><small>بدون بهاربند</small></button></div>
+        </div>
+    </div>
 </div>
+
+<textarea id="copyBuffer" class="d-none"></textarea>
 
 <script>
 function renderResult(title, data, isFull) {
-    const c = $('#resultsContainer');
+    var c = $('#resultsContainer');
+    $('#checksPanel').hide();
     if (isFull) {
-        let health = data.health || {};
-        let summary = data.summary || {};
-        let html = `
-        <div class="card shadow-sm border-0 mb-3">
-            <div class="card-header bg-${health.overall >= 70 ? 'success' : health.overall >= 40 ? 'warning' : 'danger'} text-white fw-bold d-flex justify-content-between">
-                <span><i class="fa-solid fa-file-circle-check me-1"></i> گزارش حسابرسی کامل</span>
-                <span>${data.timestamp ? new Date(data.timestamp).toLocaleString('fa-IR') : ''}</span>
-            </div>
-            <div class="card-body">
-                <div class="row text-center mb-4">
-                    <div class="col-md-3">
-                        <div class="display-4 fw-bold text-${health.overall >= 70 ? 'success' : health.overall >= 40 ? 'warning' : 'danger'}">${health.overall || 0}%</div>
-                        <div class="text-muted small">امتیاز کلی سلامت</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="display-6 text-${health.accounting_integrity >= 70 ? 'success' : 'danger'}">${health.accounting_integrity || 0}%</div>
-                        <div class="text-muted small">یکپارچگی حسابداری</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="display-6 text-${health.data_consistency >= 70 ? 'success' : 'danger'}">${health.data_consistency || 0}%</div>
-                        <div class="text-muted small">سازگاری داده‌ها</div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="display-6 text-${health.business_logic >= 70 ? 'success' : 'danger'}">${health.business_logic || 0}%</div>
-                        <div class="text-muted small">منطق تجاری</div>
-                    </div>
-                </div>
-                <table class="table table-bordered table-sm">
-                    <tr><th>آیتم</th><th>مقدار</th></tr>
-                    <tr><td>اسناد حسابداری بررسی شده</td><td>${summary.entries_checked || 0}</td></tr>
-                    <tr><td>اسناد نامتوازن</td><td class="fw-bold ${summary.unbalanced_entries > 0 ? 'text-danger' : 'text-success'}">${summary.unbalanced_entries || 0}</td></tr>
-                    <tr><td>اشخاص دارای مغایرت</td><td class="fw-bold ${summary.contact_issues > 0 ? 'text-danger' : 'text-success'}">${summary.contact_issues || 0}</td></tr>
-                    <tr><td>خطاهای مالیات بر ارزش افزوده</td><td class="fw-bold ${summary.vat_errors > 0 ? 'text-danger' : 'text-success'}">${summary.vat_errors || 0}</td></tr>
-                    <tr><td>مسائل تخفیفات</td><td class="fw-bold ${summary.discount_issues > 0 ? 'text-danger' : 'text-success'}">${summary.discount_issues || 0}</td></tr>
-                    <tr><td>مغایرت انبار</td><td class="fw-bold ${summary.inventory_discrepancies > 0 ? 'text-danger' : 'text-success'}">${summary.inventory_discrepancies || 0}</td></tr>
-                    <tr><td>ناهنجاری‌های کشف شده</td><td class="fw-bold ${summary.anomalies_found > 0 ? 'text-danger' : 'text-success'}">${summary.anomalies_found || 0}</td></tr>
-                    <tr><td>مسائل بحرانی</td><td class="fw-bold ${summary.critical_issues > 0 ? 'text-danger' : 'text-success'}">${summary.critical_issues || 0}</td></tr>
-                </table>
-        `;
-        if (data.anomalies && data.anomalies.length > 0) {
-            html += `<h6 class="text-danger mt-3"><i class="fa-solid fa-bug me-1"></i> ناهنجاری‌ها</h6><div class="list-group">`;
-            data.anomalies.forEach(a => {
-                const sevClass = a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info';
-                html += `<div class="list-group-item list-group-item-${sevClass} d-flex justify-content-between align-items-center py-2">
-                    <span>${a.type || 'ناهنجاری'}: ${a.account || a.entry_number || ''} ${a.severity ? '('+a.severity+')' : ''}</span>
-                    <small>${a.message || ''}</small>
-                </div>`;
-            });
-            html += `</div>`;
+        var health = data.health || {};
+        var summary = data.summary || {};
+        var hClass = health.overall >= 70 ? 'success' : health.overall >= 40 ? 'warning' : 'danger';
+        var html = '';
+        html += '<div class="card shadow-sm border-0 mb-3">';
+        html += '<div class="card-header bg-' + hClass + ' text-white fw-bold d-flex justify-content-between"><span><i class="fa-solid fa-file-circle-check me-1"></i> گزارش حسابرسی کامل</span><span>' + (data.timestamp ? new Date(data.timestamp).toLocaleString('fa-IR') : '') + '</span></div>';
+        html += '<div class="card-body">';
+        html += '<div class="row text-center mb-4">';
+        html += '<div class="col-md-3"><div class="display-4 fw-bold text-' + hClass + '">' + (health.overall || 0) + '%</div><div class="text-muted small">امتیاز کلی</div></div>';
+        html += '<div class="col-md-3"><div class="display-6 text-' + (health.accounting_integrity >= 70 ? 'success' : 'danger') + '">' + (health.accounting_integrity || 0) + '%</div><div class="text-muted small">یکپارچگی حسابداری</div></div>';
+        html += '<div class="col-md-3"><div class="display-6 text-' + (health.data_consistency >= 70 ? 'success' : 'danger') + '">' + (health.data_consistency || 0) + '%</div><div class="text-muted small">سازگاری داده‌ها</div></div>';
+        html += '<div class="col-md-3"><div class="display-6 text-' + (health.business_logic >= 70 ? 'success' : 'danger') + '">' + (health.business_logic || 0) + '%</div><div class="text-muted small">منطق تجاری</div></div>';
+        html += '</div>';
+        html += '<div class="row g-2 mb-3">';
+        var items = [
+            {label: 'اسناد بررسی شده', val: summary.entries_checked || 0, cls: 'primary'},
+            {label: 'اسناد نامتوازن', val: summary.unbalanced_entries || 0, cls: summary.unbalanced_entries > 0 ? 'danger' : 'success'},
+            {label: 'مغایرت اشخاص', val: summary.contact_issues || 0, cls: summary.contact_issues > 0 ? 'danger' : 'success'},
+            {label: 'خطاهای مالیات', val: summary.vat_errors || 0, cls: summary.vat_errors > 0 ? 'danger' : 'success'},
+            {label: 'مسائل تخفیف', val: summary.discount_issues || 0, cls: summary.discount_issues > 0 ? 'danger' : 'success'},
+            {label: 'مغایرت انبار', val: summary.inventory_discrepancies || 0, cls: summary.inventory_discrepancies > 0 ? 'danger' : 'success'},
+            {label: 'ناهنجاری‌ها', val: summary.anomalies_found || 0, cls: summary.anomalies_found > 0 ? 'danger' : 'success'},
+            {label: 'مشکلات بحرانی', val: summary.critical_issues || 0, cls: summary.critical_issues > 0 ? 'danger' : 'success'},
+        ];
+        items.forEach(function(it) {
+            html += '<div class="col-md-3 col-6"><div class="p-2 bg-' + it.cls + ' rounded text-center text-white fw-bold"><small class="text-white-50 d-block">' + it.label + '</small><span class="fs-5">' + it.val + '</span></div></div>';
+        });
+        html += '</div>';
+        // Error list
+        var errorCount = summary.unbalanced_entries + summary.contact_issues + summary.vat_errors + summary.discount_issues + summary.inventory_discrepancies + summary.anomalies_found + summary.critical_issues + (summary.duplicate_ear_tags || 0) + (summary.weightless_sheep || 0) + (summary.orphaned_entries || 0) + (summary.future_transactions || 0) + (summary.overdue_tasks || 0) + (summary.unpenned_sheep || 0);
+        if (errorCount > 0) {
+            html += '<div class="alert alert-danger d-flex justify-content-between align-items-center py-2 mb-0"><span><i class="fa-solid fa-bug me-1"></i> ' + errorCount + ' خطا / مغایرت یافت شد</span><button class="btn btn-sm btn-outline-danger" onclick="showErrorReport()"><i class="fa-solid fa-eye me-1"></i> مشاهده جزئیات</button></div>';
+        } else {
+            html += '<div class="alert alert-success py-2 mb-0"><i class="fa-solid fa-check-circle me-1"></i> هیچ خطایی یافت نشد. همه چیز عالی است!</div>';
         }
-        html += `</div></div>`;
-        c.html(html);
-        return;
+        if (data.anomalies && data.anomalies.length > 0) {
+            html += '<h6 class="text-danger mt-3"><i class="fa-solid fa-bug me-1"></i> ناهنجاری‌ها</h6><div class="list-group">';
+            data.anomalies.forEach(function(a) {
+                var sc = a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info';
+                html += '<div class="list-group-item list-group-item-' + sc + ' d-flex justify-content-between align-items-center py-2"><span>' + (a.type || '') + ': ' + (a.account || a.entry_number || '') + ' <span class="badge bg-' + sc + '">' + (a.severity || '') + '</span></span><small>' + (a.message || '') + '</small></div>';
+            });
+            html += '</div>';
+        }
+    html += '</div><div class="card-footer bg-white border-0 d-flex gap-2">';
+    html += '<button class="btn btn-outline-primary" onclick="backToPanel()"><i class="fa-solid fa-arrow-right me-1"></i> بازگشت به پنل</button>';
+    html += '<button class="btn btn-outline-secondary" onclick="copyReport()"><i class="fa-solid fa-copy me-1"></i> کپی گزارش</button>';
+    html += '</div></div>';
+    c.html(html);
+    return;
     }
     // Single check result
-    const isPass = data.status === 'PASS';
-    const badgeClass = isPass ? 'bg-success' : 'bg-danger';
-    const icon = isPass ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger';
-    let html = `<div class="card shadow-sm border-0 mb-2"><div class="card-header d-flex justify-content-between align-items-center py-2"><span class="fw-bold"><i class="fa-solid ${icon} me-1"></i> ${title}</span><span class="badge ${badgeClass}">${isPass ? 'پایدار' : 'مغایرت'}</span></div><div class="card-body p-3"><pre class="mb-0" style="font-size:0.85rem; max-height:400px; overflow-y:auto;">${JSON.stringify(data, null, 2)}</pre></div></div>`;
+    var isPass = data.status === 'PASS';
+    var badgeClass = isPass ? 'bg-success' : 'bg-danger';
+    var badgeText = isPass ? '✅ پایدار' : '❌ مغایرت';
+    var icon = isPass ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger';
+    var html = '';
+    html += '<div class="card shadow-sm border-0 mb-3">';
+    html += '<div class="card-header d-flex justify-content-between align-items-center py-2 ' + (isPass ? 'bg-success' : 'bg-danger') + ' text-white fw-bold">';
+    html += '<span><i class="fa-solid ' + icon + ' me-1"></i> ' + title + '</span>';
+    html += '<span class="badge bg-white text-' + (isPass ? 'success' : 'danger') + ' fs-6">' + badgeText + '</span>';
+    html += '</div>';
+    html += '<div class="card-body p-0">';
+    // Render errors cleanly if any
+    var errors = findErrors(data);
+    if (errors.length > 0) {
+        html += '<div class="list-group list-group-flush">';
+        errors.forEach(function(e) {
+            html += '<div class="list-group-item py-2 d-flex justify-content-between align-items-center"><span class="text-danger fw-bold small"><i class="fa-solid fa-circle-exclamation me-1"></i> ' + e.label + '</span><small class="text-dark">' + e.value + '</small></div>';
+        });
+        html += '</div>';
+    } else if (isPass) {
+        html += '<div class="p-4 text-center"><i class="fa-solid fa-check-circle text-success fa-3x mb-2 d-block"></i><span class="fw-bold text-success fs-5">این تست با موفقیت گذرانده شد.</span></div>';
+    }
+    // Show raw data collapsed
+    html += '<div class="border-top p-2 bg-light"><small><a href="#" class="text-primary fw-bold text-decoration-none" onclick="toggleRaw(this); return false;"><i class="fa-solid fa-code me-1"></i> نمایش خروجی خام</a></small></div>';
+    html += '<pre class="mb-0 p-3 d-none" style="font-size:0.8rem; max-height:300px; overflow-y:auto; direction:ltr; text-align:left;">' + JSON.stringify(data, null, 2) + '</pre>';
+    html += '</div>';
+    html += '<div class="card-footer bg-white border-0 d-flex gap-2">';
+    html += '<button class="btn btn-outline-primary" onclick="backToPanel()"><i class="fa-solid fa-arrow-right me-1"></i> بازگشت به پنل</button>';
+    if (!isPass) {
+        html += '<button class="btn btn-outline-secondary" onclick="copyReport()"><i class="fa-solid fa-copy me-1"></i> کپی گزارش</button>';
+    }
+    html += '</div></div>';
     c.html(html);
+}
+
+function toggleRaw(el) {
+    var pre = el.closest('.border-top').nextElementSibling;
+    if (!pre) return;
+    if (pre.classList.contains('d-none')) {
+        pre.classList.remove('d-none');
+        el.innerHTML = '<i class="fa-solid fa-code me-1"></i> مخفی کردن خروجی خام';
+    } else {
+        pre.classList.add('d-none');
+        el.innerHTML = '<i class="fa-solid fa-code me-1"></i> نمایش خروجی خام';
+    }
+}
+
+function findErrors(data) {
+    var errs = [];
+    if (data.details && Array.isArray(data.details)) {
+        data.details.forEach(function(d) {
+            if (d.status === 'FAIL') {
+                errs.push({label: d.name || d.item_name || ('#' + (d.entry_number || d.transaction_id || '')), value: 'مانده ثبت شده: ' + (d.stored_balance || 0) + ' | محاسبه شده: ' + (d.calculated_balance || 0) + ' | اختلاف: ' + (d.variance || 0)});
+            }
+        });
+    }
+    if (data.issues && Array.isArray(data.issues)) {
+        data.issues.forEach(function(d) {
+            errs.push({label: d.equipment || d.item_name || ('#' + (d.entry_number || d.transaction_id || d.invoice || '')), value: 'مقدار مورد انتظار: ' + (d.expected_annual || d.expected_vat || d.calculated_value || d.discount_in_tx || 0) + ' | ثبت شده: ' + (d.recorded || d.stored_vat || d.gl_value || d.discount_in_gl || 0) + ' | اختلاف: ' + (d.variance || 0)});
+        });
+    }
+    if (data.errors && Array.isArray(data.errors)) {
+        data.errors.forEach(function(d) {
+            errs.push({label: 'فاکتور ' + (d.invoice || d.transaction_id || ''), value: 'مالیات مورد انتظار: ' + (d.expected_vat || 0) + ' | ثبت شده: ' + (d.stored_vat || 0) + ' | اختلاف: ' + (d.variance || 0)});
+        });
+    }
+    if (data.unbalanced && Array.isArray(data.unbalanced)) {
+        data.unbalanced.forEach(function(d) {
+            errs.push({label: 'سند #' + (d.entry_number || d.entry_id || ''), value: 'بدهکار: ' + d.debit_sum + ' | بستانکار: ' + d.credit_sum + ' | اختلاف: ' + d.variance});
+        });
+    }
+    if (data.balanced === false || data.equation_balanced === false || data.match === false) {
+        errs.push({label: 'نتیجه تست', value: 'عدم توازن - به خطاهای بالا مراجعه کنید'});
+    }
+    return errs;
+}
+
+function backToPanel() {
+    $('#resultsContainer').empty();
+    $('#checksPanel').show();
+    $('#copyReportBtn').addClass('d-none');
+}
+
+function showErrorReport() {
+    $('#loadingSpinner').removeClass('d-none');
+    $('#resultsContainer').empty();
+    $('#checksPanel').hide();
+    $.get('/audit/run', {check: 'error_report'})
+        .done(function(data) {
+            var report = data.report || '';
+            var html = '<div class="card shadow-sm border-0 mb-3 border-danger border-3">';
+            html += '<div class="card-header bg-danger text-white fw-bold d-flex justify-content-between"><span><i class="fa-solid fa-bug me-1"></i> گزارش خطاها</span></div>';
+            html += '<div class="card-body p-0"><pre class="mb-0 p-3" style="font-size:0.9rem; max-height:500px; overflow-y:auto; direction:ltr; text-align:left; white-space:pre-wrap; font-family:Vazirmatn,monospace;">' + report + '</pre></div>';
+            html += '<div class="card-footer bg-white border-0 d-flex gap-2">';
+            html += '<button class="btn btn-outline-primary" onclick="backToPanel()"><i class="fa-solid fa-arrow-right me-1"></i> بازگشت به پنل</button>';
+            html += '<button class="btn btn-danger" onclick="copyErrorReport()"><i class="fa-solid fa-copy me-1"></i> کپی گزارش</button>';
+            html += '</div></div>';
+            $('#resultsContainer').html(html);
+        })
+        .fail(function() {
+            var html = '<div class="card shadow-sm border-0 mb-3 border-danger border-3">';
+            html += '<div class="card-header bg-danger text-white fw-bold"><i class="fa-solid fa-circle-exclamation me-1"></i> خطا در دریافت گزارش</div>';
+            html += '<div class="card-body text-center py-5">';
+            html += '<i class="fa-solid fa-bug text-danger fa-4x mb-3 d-block"></i>';
+            html += '<h5 class="text-danger">متأسفانه خطایی رخ داد!</h5>';
+            html += '<p class="text-muted mb-4">امکان دریافت گزارش خطاها وجود ندارد. لطفاً یک تست را به صورت جداگانه اجرا کنید یا با پشتیبان تماس بگیرید.</p>';
+            html += '<button class="btn btn-primary" onclick="backToPanel()"><i class="fa-solid fa-arrow-right me-1"></i> بازگشت به پنل</button>';
+            html += '</div></div>';
+            $('#resultsContainer').html(html);
+        })
+        .always(function() { $('#loadingSpinner').addClass('d-none'); });
+}
+
+function copyErrorReport() {
+    var text = $('#resultsContainer pre').text();
+    copyToClipboard(text);
+}
+
+function copyReport() {
+    // فقط متن خطاها رو کپی کن، نه همه متن صفحه
+    var text = '';
+    $('#resultsContainer .list-group-item').each(function() {
+        text += $(this).find('.text-danger').text() + ': ' + $(this).find('small').text() + '\n';
+    });
+    if (!text) { text = $('#resultsContainer').text(); }
+    copyToClipboard(text);
+}
+
+function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showToast('✅ گزارش با موفقیت کپی شد', 'success');
+        }).catch(function() {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast('✅ گزارش با موفقیت کپی شد', 'success');
+    } catch (e) {
+        showToast('❌ کپی انجام نشد. لطفاً متن را دستی انتخاب و کپی کنید.', 'danger');
+    }
+    document.body.removeChild(ta);
 }
 
 $(document).ready(function() {
     function runCheck(check, title) {
         $('#loadingSpinner').removeClass('d-none');
-        $('#quickChecks').hide();
         $('#resultsContainer').empty();
+        $('#checksPanel').hide();
         $.get('/audit/run', {check: check})
             .done(function(data) { renderResult(title, data, check === 'all'); })
             .fail(function() { $('#resultsContainer').html('<div class="alert alert-danger">خطا در اجرای حسابرسی</div>'); })
@@ -111,14 +360,19 @@ $(document).ready(function() {
     }
 
     $('#runFullAudit').click(function() { runCheck('all', 'حسابرسی کامل'); });
+    $('#showErrorsBtn').click(showErrorReport);
+
     $('.run-check').click(function() {
-        const check = $(this).data('check');
-        const names = {
+        var check = $(this).data('check');
+        var names = {
             double_entry: 'دفتر روزنامه', trial_balance: 'تراز آزمایشی',
             balance_sheet: 'ترازنامه', income_statement: 'سود و زیان',
             vat: 'مالیات', discount: 'تخفیفات', contacts: 'اشخاص',
             inventory: 'انبار', livestock: 'دام زنده', depreciation: 'استهلاک',
-            anomalies: 'ناهنجاری‌ها', balance_sheet_equation: 'معادله حسابداری'
+            anomalies: 'ناهنجاری‌ها', balance_sheet_equation: 'معادله حسابداری',
+            duplicate_ear_tags: 'پلاک تکراری', weightless_sheep: 'بدون وزن',
+            orphaned_entries: 'بدون تراکنش', future_transactions: 'تاریخ آینده',
+            overdue_tasks: 'وظایف عقب‌افتاده', unpenned_sheep: 'بدون بهاربند'
         };
         runCheck(check, names[check] || check);
     });

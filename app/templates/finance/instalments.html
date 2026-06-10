@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-hand-holding-dollar text-primary"></i> اسناد اقساطی</h2>
+    <button class="btn btn-primary shadow-sm btn-sm" data-bs-toggle="modal" data-bs-target="#addInstalmentModal"><i class="fa-solid fa-plus"></i> قرارداد جدید</button>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card bg-primary text-white border-0 shadow-sm"><div class="card-body text-center"><h6>فعال</h6><h3>{{ instalments|selectattr('status','eq','فعال')|list|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-success text-white border-0 shadow-sm"><div class="card-body text-center"><h6>تسویه شده</h6><h3>{{ instalments|selectattr('status','eq','تسویه شده')|list|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-warning border-0 shadow-sm"><div class="card-body text-center"><h6>قسط معوق</h6><h3>{{ instalments|sum(attribute='due_instalments') }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card bg-info text-white border-0 shadow-sm"><div class="card-body text-center"><h6>کل مطالبات</h6><h3>{{ instalments|sum(attribute='remaining')|currency }}</h3></div></div></div>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark"><tr><th>شخص</th><th>کل بدهی</th><th>پرداخت شده</th><th>باقی مانده</th><th>تعداد اقساط</th><th>مبلغ هر قسط</th><th>معوق</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+                <tbody>
+                    {% for i in instalments %}
+                    <tr class="{% if i.due_instalments > 0 %}table-danger{% elif i.status == 'تسویه شده' %}table-success{% endif %}">
+                        <td class="fw-bold">{{ i.contact.name }}</td>
+                        <td>{{ i.total_amount|currency }}</td>
+                        <td>{{ i.paid_amount|currency }}</td>
+                        <td class="fw-bold">{{ i.remaining|currency }}</td>
+                        <td>{{ i.instalment_count }}</td>
+                        <td>{{ i.amount_per_instalment|currency }}</td>
+                        <td><span class="badge bg-danger">{{ i.due_instalments }}</span></td>
+                        <td><span class="badge {% if i.status == 'فعال' %}bg-primary{% elif i.status == 'تسویه شده' %}bg-success{% else %}bg-danger{% endif %}">{{ i.status }}</span></td>
+                        <td>
+                            {% if i.status == 'فعال' %}
+                            <form action="{{ url_for('finance.pay_instalment', id=i.id) }}" method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-success py-0 px-2">پرداخت قسط</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="py-5 text-muted">هیچ قرارداد اقساطی ثبت نشده.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addInstalmentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-plus text-primary"></i> قرارداد اقساطی جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.add_instalment') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body text-start">
+                    <div class="mb-3"><label class="form-label fw-bold">شخص</label>
+                        <select name="contact_id" class="form-select" required>
+                            <option value="">انتخاب کنید</option>
+                            {% for c in contacts %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">مبلغ کل (تومان)</label><input type="text" name="total_amount" class="form-control" dir="ltr" required></div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label class="form-label fw-bold">تعداد اقساط</label><input type="number" name="instalment_count" class="form-control" required></div>
+                        <div class="col-6"><label class="form-label fw-bold">فاصله (روز)</label><input type="number" name="interval_days" class="form-control" value="30"></div>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">توضیحات</label><textarea name="description" class="form-control" rows="2"></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ثبت قرارداد</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

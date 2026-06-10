@@ -252,6 +252,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش پروفایل</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('livestock.edit_sheep', id=sheep.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-2"><label>پلاک</label><input type="text" name="ear_tag" class="form-control fw-bold" value="{{ sheep.ear_tag }}" required></div>
                     <div class="mb-2"><label>نژاد</label><select name="breed" class="form-select"><option value="">نامشخص</option>{% for b in breeds %}<option value="{{ b.name }}" {% if sheep.breed==b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
@@ -319,6 +320,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-syringe text-danger"></i> ثبت درمان و گالری عکس</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('livestock.add_medical', id=sheep.id) }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-2">
                         <label class="fw-bold">نوع اقدام</label>
@@ -360,6 +362,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-scale-unbalanced text-success"></i> ثبت وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('livestock.add_weight', id=sheep.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="fw-bold">تاریخ وزن‌کشی (شمسی)</label>
@@ -384,7 +387,8 @@
         </div>
     </div>
 </div>
-<div class="modal fade" id="birthModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-baby text-info"></i> ثبت زایش</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_birth', id=sheep.id) }}" method="POST"><div class="modal-body"><div class="mb-3"><label>تاریخ زایش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}"></div><div class="mb-3"><label>تعداد بره</label><input type="number" name="lambs_count" class="form-control text-center fw-bold" value="1"></div><div class="mb-3"><label>وضعیت</label><select name="status" class="form-select"><option value="موفق">موفق</option><option value="مرده‌زایی">مرده‌زایی</option></select></div><div class="mb-3"><label>توضیحات</label><input type="text" name="notes" class="form-control" placeholder="شرایط زایمان و..."></div></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark w-100 fw-bold">ثبت زایش</button></div></form></div></div></div>
+<div class="modal fade" id="birthModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-baby text-info"></i> ثبت زایش</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_birth', id=sheep.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-3"><label>تاریخ زایش (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="record_date" class="gregorian-hidden-field" value="{{ today_str }}"></div><div class="mb-3"><label>تعداد بره</label><input type="number" name="lambs_count" class="form-control text-center fw-bold" value="1"></div><div class="mb-3"><label>وضعیت</label><select name="status" class="form-select"><option value="موفق">موفق</option><option value="مرده‌زایی">مرده‌زایی</option></select></div><div class="mb-3"><label>توضیحات</label><input type="text" name="notes" class="form-control" placeholder="شرایط زایمان و..."></div></div><div class="modal-footer"><button type="submit" class="btn btn-info text-dark w-100 fw-bold">ثبت زایش</button></div></form></div></div></div>
 
 <script>
     // اعتبارسنجی هوشمند فرم (استفاده از سیستم استاندارد مرورگر بجای alert)

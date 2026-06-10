@@ -356,6 +356,7 @@
                 <span><i class="fa-solid fa-spell-check"></i> اصلاح مغایرت نام کالاها</span>
                 {% if ration_mismatches %}
                 <form action="{{ url_for('dashboard.fix_all_ration_names') }}" method="POST" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-sm btn-danger fw-bold shadow-sm" onclick="return confirm('آیا از اصلاح خودکار تمامی نام‌های مشابه در کل جیره‌ها اطمینان دارید؟')">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> اصلاح همگانی
                     </button>
@@ -371,6 +372,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div class="text-success"><i class="fa-solid fa-arrow-right-long small"></i> پیشنهاد: <b>{{ m.suggested }}</b></div>
                             <form action="{{ url_for('dashboard.fix_ration_names') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="wrong" value="{{ m.wrong }}">
                                 <input type="hidden" name="suggested" value="{{ m.suggested }}">
                                 <button type="submit" class="btn btn-sm btn-link text-primary p-0 fw-bold" style="text-decoration:none;"><i class="fa-solid fa-wand-magic-sparkles"></i> اصلاح خودکار</button>

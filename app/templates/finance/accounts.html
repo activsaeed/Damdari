@@ -1,100 +1,221 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+.tree-toggle { cursor: pointer; user-select: none; transition: transform 0.2s; }
+.tree-toggle:hover { transform: scale(1.2); }
+.tree-children { border-right: 2px dashed #ddd; margin-right: 20px; padding-right: 10px; }
+.tree-row:hover { background-color: rgba(0,123,255,0.05); }
+.depth-0 { font-weight: 800; font-size: 1.05rem; }
+.depth-1 { font-weight: 600; }
+.depth-2 { font-weight: 500; }
+.depth-3 { font-weight: 400; font-size: 0.95rem; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h2><i class="fa-solid fa-sitemap text-primary"></i> کدینگ حسابداری (Chart of Accounts)</h2>
-    <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addAccountModal">
-        <i class="fa-solid fa-plus"></i> حساب جدید
-    </button>
+    <h2><i class="fa-solid fa-sitemap text-primary"></i> کدینگ حسابداری</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-info shadow-sm btn-sm" data-bs-toggle="collapse" data-bs-target="#codingHelp"><i class="fa-solid fa-circle-question"></i> راهنما</button>
+        <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+            <i class="fa-solid fa-plus"></i> حساب جدید
+        </button>
+    </div>
 </div>
-<p class="text-muted">
-    <button class="btn btn-sm btn-outline-info py-0 px-1" data-bs-toggle="collapse" data-bs-target="#codingHelp"><i class="fa-solid fa-question-circle"></i> کدینگ یعنی چی؟</button>
-</p>
+
 <div class="collapse mb-3" id="codingHelp">
     <div class="card border-info border-1 bg-light">
         <div class="card-body py-3 small text-secondary">
-            <p class="mb-1"><strong>کدینگ حسابداری یعنی چی؟</strong></p>
-            <p class="mb-1">فرض کن کتابخونه‌ای داری با کلی کتاب. اگه همه کتاب‌ها رو بدون نظم بریزی توی یه جعبه، وقتی لازمشون داری باید کلی بگردی تا پیداشون کنی.</p>
-            <p class="mb-1">کدینگ حسابداری یعنی به هر «دسته» از پول‌های کسب‌وکارت یه کد و برچسب می‌دی:</p>
+            <p class="mb-1"><strong>کدینگ یعنی چی؟</strong></p>
+            <p class="mb-1">فرض کن کتابخونه‌ای داری با کلی کتاب. کدینگ یعنی به هر دسته از پول‌های کسب‌وکارت یه کد می‌دی:</p>
             <table class="table table-sm table-bordered small mb-2 w-auto mx-auto">
                 <tr><th>کد</th><th>اسم دسته</th><th>مثال</th></tr>
-                <tr><td>۱۰۱۰</td><td>بانک</td><td>پول نقد تو بانک</td></tr>
-                <tr><td>۱۰۲۰</td><td>صندوق</td><td>پول نقد تو کشو</td></tr>
-                <tr><td>۲۰۱۰</td><td>بدهی به تأمین‌کننده</td><td>چیزی که بدهکاری</td></tr>
-                <tr><td>۳۰۱۰</td><td>حقوق صاحب کسب‌وکار</td><td>سود تو</td></tr>
+                <tr><td>۱۰XX</td><td>دارایی‌ها</td><td>بانک، صندوق، طلب از دیگران</td></tr>
+                <tr><td>۲۰XX</td><td>بدهی‌ها</td><td>قرض، بدهی به تأمین‌کننده</td></tr>
+                <tr><td>۳۰XX</td><td>حقوق صاحبان</td><td>سرمایه، سود انباشته</td></tr>
+                <tr><td>۴۰XX</td><td>درآمدها</td><td>فروش دام، فروش شیر</td></tr>
+                <tr><td>۵۰XX</td><td>هزینه‌ها</td><td>خوراک، دارو، حقوق</td></tr>
             </table>
-            <p class="mb-1">فایده‌ش چیه؟</p>
-            <p class="mb-1">وقتی می‌خوای بدونی <strong>چقدر پول توی بانک داری</strong> → کد ۱۰۱۰ رو نگاه می‌کنی<br>
-            وقتی می‌خوای بدونی <strong>چقدر از دیگران طلب داری</strong> → کد ۱۰۳۰<br>
-            وقتی می‌خوای <strong>ترازنامه</strong> بگیری → سیستم همه کدها رو جمع می‌زنه</p>
-            <p class="mb-0"><strong>خلاصه:</strong> کدینگ یعنی به هر جا که پول می‌ره یا میاد، یه شماره منظم می‌دی تا بعداً راحت پیداش کنی و گزارش بگیری.</p>
+            <p class="mb-0"><strong>نمایش درختی:</strong> گروه‌های اصلی رو می‌تونی باز و بسته کنی تا سریع‌تر حساب‌ها رو پیدا کنی.</p>
         </div>
     </div>
 </div>
-{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">
+    {{ message }}
+    <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+{% endwith %}
 
 <div class="card shadow-sm border-0">
+    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="fa-solid fa-list-tree text-primary me-1"></i> ساختار درختی حساب‌ها</span>
+        <small class="text-muted">{{ accounts|length }} حساب</small>
+    </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover align-middle text-center mb-0">
+            <table class="table table-hover align-middle mb-0">
                 <thead class="table-dark">
-                    <tr>
-                        <th>کد</th>
-                        <th>نام حساب</th>
-                        <th>نوع</th>
-                        <th>ماهیت</th>
-                        <th>زیرمجموعه</th>
-                        <th>عملیات</th>
-                    </tr>
+                    <tr><th style="width:100px">کد</th><th>نام حساب</th><th style="width:80px">نوع</th><th style="width:60px">ماهیت</th><th style="width:100px">عملیات</th></tr>
                 </thead>
                 <tbody>
-                    {% for acc in accounts %}
-                    <tr>
-                        <td><code>{{ acc.code }}</code></td>
-                        <td class="fw-bold text-start">{{ acc.name }}</td>
-                        <td><span class="badge bg-info">{{ acc.type.name if acc.type else '-' }}</span></td>
-                        <td>{{ acc.type.nature if acc.type else '-' }}</td>
-                        <td>{% if acc.parent %}{{ acc.parent.code }} - {{ acc.parent.name }}{% else %}-{% endif %}</td>
+                    {% for node in tree %}
+                    <tr class="tree-row">
+                        <td class="depth-{{ node.depth }}" style="padding-right: {{ 20 + node.depth * 25 }}px">
+                            {% if node.has_children %}
+                            <span class="tree-toggle me-1 text-primary" onclick="toggleTree(this)">▼</span>
+                            {% else %}
+                            <span class="me-1 text-muted" style="visibility:hidden">▼</span>
+                            {% endif %}
+                            <span style="font-family:inherit;font-weight:400">{{ node.account.code }}</span>
+                        </td>
+                        <td class="depth-{{ node.depth }}">{{ node.account.name }}</td>
+                        <td><span class="badge bg-info" style="font-size:0.7rem">{{ node.account.type.name if node.account.type else '-' }}</span></td>
+                        <td><small>{{ node.account.type.nature if node.account.type else '-' }}</small></td>
                         <td>
-                            <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ acc.id }}"><i class="fa-solid fa-pen"></i></button>
-                            <form action="{{ url_for('finance.delete_account', id=acc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف حساب {{ acc.name }}؟')">
+                            <button class="btn btn-sm btn-outline-warning py-0 px-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ node.account.id }}"><i class="fa-solid fa-pen fa-xs"></i></button>
+                            <form action="{{ url_for('finance.delete_account', id=node.account.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ node.account.name }}؟')">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="fa-solid fa-trash fa-xs"></i></button>
                             </form>
                         </td>
                     </tr>
-                    <div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header"><h5 class="modal-title">ویرایش {{ acc.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                                <form action="{{ url_for('finance.edit_account', id=acc.id) }}" method="POST">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="modal-body text-start">
-                                        <div class="mb-3"><label class="form-label fw-bold">نام حساب</label><input type="text" name="name" class="form-control" value="{{ acc.name }}" required></div>
-                                        <div class="mb-3"><label class="form-label fw-bold">نوع حساب</label>
-                                            <select name="account_type_id" class="form-select">
-                                                {% for t in account_types %}<option value="{{ t.id }}" {% if acc.account_type_id == t.id %}selected{% endif %}>{{ t.name }} ({{ t.nature }})</option>{% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="mb-3"><label class="form-label fw-bold">زیرمجموعه</label>
-                                            <select name="parent_id" class="form-select">
-                                                <option value="">بدون والد</option>
-                                                {% for p in accounts %}{% if p.id != acc.id %}<option value="{{ p.id }}" {% if acc.parent_id == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>{% endif %}{% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">بروزرسانی</button></div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
+                    {% if node.children %}
+                    {% for child in node.children %}
+                    <tr class="tree-row tree-child depth-{{ child.depth }}" data-parent="{{ node.account.id }}">
+                        <td style="padding-right: {{ 20 + child.depth * 25 }}px">
+                            {% if child.has_children %}
+                            <span class="tree-toggle me-1 text-primary" onclick="toggleTree(this)">▼</span>
+                            {% else %}
+                            <span class="me-1 text-muted" style="visibility:hidden">▼</span>
+                            {% endif %}
+                            <span style="font-family:inherit;font-weight:400">{{ child.account.code }}</span>
+                        </td>
+                        <td class="depth-{{ child.depth }}">{{ child.account.name }}</td>
+                        <td><span class="badge bg-info" style="font-size:0.7rem">{{ child.account.type.name if child.account.type else '-' }}</span></td>
+                        <td><small>{{ child.account.type.nature if child.account.type else '-' }}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-warning py-0 px-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ child.account.id }}"><i class="fa-solid fa-pen fa-xs"></i></button>
+                            <form action="{{ url_for('finance.delete_account', id=child.account.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ child.account.name }}؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="fa-solid fa-trash fa-xs"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% if child.children %}
+                    {% for grandchild in child.children %}
+                    <tr class="tree-row tree-child depth-{{ grandchild.depth }}" data-parent="{{ child.account.id }}">
+                        <td style="padding-right: {{ 20 + grandchild.depth * 25 }}px">
+                            {% if grandchild.has_children %}
+                            <span class="tree-toggle me-1 text-primary" onclick="toggleTree(this)">▼</span>
+                            {% else %}
+                            <span class="me-1 text-muted" style="visibility:hidden">▼</span>
+                            {% endif %}
+                            <span style="font-family:inherit;font-weight:400">{{ grandchild.account.code }}</span>
+                        </td>
+                        <td class="depth-{{ grandchild.depth }}">{{ grandchild.account.name }}</td>
+                        <td><span class="badge bg-info" style="font-size:0.7rem">{{ grandchild.account.type.name if grandchild.account.type else '-' }}</span></td>
+                        <td><small>{{ grandchild.account.type.nature if grandchild.account.type else '-' }}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-warning py-0 px-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ grandchild.account.id }}"><i class="fa-solid fa-pen fa-xs"></i></button>
+                            <form action="{{ url_for('finance.delete_account', id=grandchild.account.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ grandchild.account.name }}؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="fa-solid fa-trash fa-xs"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
                     {% else %}
-                    <tr><td colspan="6" class="py-5 text-muted">هیچ حسابی ثبت نشده است.</td></tr>
+                    <tr><td colspan="5" class="py-5 text-muted text-center">هیچ حسابی ثبت نشده است.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<script>
+function toggleTree(el) {
+    var tr = el.closest('tr');
+    var parentId = tr.dataset.parent || 'root';
+    var children = parentId === 'root'
+        ? document.querySelectorAll('.tree-child[data-parent="' + tr.cells[0].textContent.trim() + '"]')
+        : document.querySelectorAll('.tree-child[data-parent="' + parentId + '"]');
+    // Actually use the account id from the row context
+    var allChildren = tr.parentElement.querySelectorAll('tr.tree-child');
+    var isExpanded = el.textContent.trim() === '▼';
+    var accountId = null;
+    // Find all direct children of this node
+    var next = tr.nextElementSibling;
+    while (next && next.classList.contains('tree-child')) {
+        var isDirect = true;
+        // Check if this child's depth is exactly one more than current
+        var currentDepth = parseInt(tr.cells[0].className.match(/depth-(\d+)/)[1]);
+        var childDepth = parseInt(next.cells[0].className.match(/depth-(\d+)/)[1]);
+        if (childDepth === currentDepth + 1) {
+            next.style.display = isExpanded ? 'none' : '';
+            if (!isExpanded) {
+                // Also show all nested children that were hidden
+                var n = next.nextElementSibling;
+                while (n && n.classList.contains('tree-child')) {
+                    var nd = parseInt(n.cells[0].className.match(/depth-(\d+)/)[1]);
+                    if (nd <= currentDepth) break;
+                    if (nd > childDepth && n.style.display === 'none') {
+                        n.style.display = '';
+                    }
+                    n = n.nextElementSibling;
+                }
+            } else {
+                // Hide all nested children
+                var n = next.nextElementSibling;
+                while (n && n.classList.contains('tree-child')) {
+                    var nd = parseInt(n.cells[0].className.match(/depth-(\d+)/)[1]);
+                    if (nd <= currentDepth) break;
+                    n.style.display = 'none';
+                    n = n.nextElementSibling;
+                }
+            }
+        }
+        next = next.nextElementSibling;
+    }
+    el.textContent = isExpanded ? '▶' : '▼';
+}
+</script>
+
+<!-- Edit Modals -->
+{% for acc in accounts %}
+<div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">ویرایش {{ acc.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.edit_account', id=acc.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body text-start">
+                    <div class="mb-3"><label class="form-label fw-bold">نام حساب</label><input type="text" name="name" class="form-control" value="{{ acc.name }}" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">نوع حساب</label>
+                        <select name="account_type_id" class="form-select">
+                            {% for t in account_types %}<option value="{{ t.id }}" {% if acc.account_type_id == t.id %}selected{% endif %}>{{ t.name }} ({{ t.nature }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">زیرمجموعه</label>
+                        <select name="parent_id" class="form-select">
+                            <option value="">بدون والد</option>
+                            {% for p in accounts %}{% if p.id != acc.id %}<option value="{{ p.id }}" {% if acc.parent_id == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>{% endif %}{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">بروزرسانی</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <div class="modal fade" id="addAccountModal" tabindex="-1">
     <div class="modal-dialog">

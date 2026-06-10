@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-brain text-info"></i> هوش مصنوعی سلامت دام
+        <button class="btn btn-sm btn-outline-info py-0 px-1" data-bs-toggle="collapse" data-bs-target="#aiHelp"><i class="fa-solid fa-question-circle"></i> چجوری کار می‌کنه؟</button>
+    </h2>
+    <a href="{{ url_for('livestock.ai_health') }}" class="btn btn-info text-dark fw-bold shadow-sm"><i class="fa-solid fa-rotate"></i> به‌روزرسانی</a>
+</div>
+<div class="collapse mb-3" id="aiHelp">
+    <div class="card border-info border-1 bg-light">
+        <div class="card-body py-2 small text-secondary">
+            <strong>این سیستم چجوری ریسک رو تشخیص می‌ده؟</strong><br>
+            الگوریتم هوش مصنوعی با بررسی ۶ فاکتور امتیاز ریسک هر دام رو محاسبه می‌کنه:
+            <ul class="mb-0 mt-1">
+                <li>کاهش وزن ناگهانی (تغییر میانگین وزن اخیر نسبت به گذشته)</li>
+                <li>BCS پایین (کمتر از ۲)</li>
+                <li>تعداد دفعات درمان در ۱۴ روز اخیر</li>
+                <li>عدم ثبت وزن در ۳۰ روز گذشته</li>
+                <li>سن پایین (زیر ۳ ماه) یا بالا (بالای ۸ سال)</li>
+                <li>وضعیت فعلی دام (بیمار / تحت درمان)</li>
+            </ul>
+            امتیاز بالای ۵۰ = بحرانی 🟥 | بالای ۲۵ = نیاز به بررسی 🟨 | زیر ۲۵ = سالم 🟩
+        </div>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="card border-0 shadow-sm bg-danger text-white h-100"><div class="card-body text-center"><h5 class="opacity-75">بحرانی</h5><h2 class="fw-bold">{{ critical_count }}</h2><small>دام با ریسک بالا</small></div></div></div>
+    <div class="col-md-4"><div class="card border-0 shadow-sm bg-warning h-100"><div class="card-body text-center text-dark"><h5 class="opacity-75">نیاز به بررسی</h5><h2 class="fw-bold">{{ warning_count }}</h2><small>دام با ریسک متوسط</small></div></div></div>
+    <div class="col-md-4"><div class="card border-0 shadow-sm bg-success text-white h-100"><div class="card-body text-center"><h5 class="opacity-75">سالم</h5><h2 class="fw-bold">{{ safe_count }}</h2><small>از {{ total }} رأس</small></div></div></div>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark" style="position: sticky; top: 0;">
+                    <tr>
+                        <th>پلاک</th><th>نژاد</th><th>وضعیت</th><th>امتیاز ریسک</th><th>آخرین وزن</th><th>آخرین درمان</th><th>عوامل مؤثر</th><th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in predictions %}
+                    <tr class="{% if p.level == 'critical' %}table-danger{% elif p.level == 'warning' %}table-warning{% endif %}">
+                        <td class="fw-bold">{{ p.sheep.ear_tag }}</td>
+                        <td><span class="badge bg-dark">{{ p.sheep.breed or '-' }}</span></td>
+                        <td><span class="badge {{ p.badge_class }}">{{ p.sheep.status }}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:8px;direction:ltr">
+                                    <div class="progress-bar {% if p.level == 'critical' %}bg-danger{% elif p.level == 'warning' %}bg-warning{% else %}bg-success{% endif %}" style="width:{{ p.risk_score }}%"></div>
+                                </div>
+                                <span class="fw-bold {% if p.level == 'critical' %}text-danger{% elif p.level == 'warning' %}text-warning{% endif %}">{{ p.risk_score }}</span>
+                            </div>
+                        </td>
+                        <td>{{ p.last_weight }} کیلو<br><small class="text-muted">{{ p.last_weight_date|jalali if p.last_weight_date != '-' else '-' }}</small></td>
+                        <td class="small">{{ p.last_med }}</td>
+                        <td class="text-start small">{% for f in p.factors %}<span class="badge bg-secondary me-1">{{ f }}</span>{% else %}<span class="text-muted">-</span>{% endfor %}</td>
+                        <td><a href="{{ url_for('livestock.profile', id=p.sheep.id) }}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-eye"></i></a></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="py-5 text-muted">دامی برای تحلیل وجود ندارد.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

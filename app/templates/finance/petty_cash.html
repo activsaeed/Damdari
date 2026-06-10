@@ -64,6 +64,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-wallet text-primary"></i> ثبت تراکنش تنخواه</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('finance.add_petty_cash') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-bold">انتخاب کارگر</label>

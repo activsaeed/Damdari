@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-chart-pie text-primary"></i> بودجه سالانه</h2>
+    <div class="d-flex gap-2 align-items-center">
+        <form class="d-flex gap-2 align-items-center" method="GET">
+            <select name="year" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                {% for y in range(1400, 1410) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+        </form>
+        <button class="btn btn-primary shadow-sm btn-sm" data-bs-toggle="modal" data-bs-target="#addBudgetModal"><i class="fa-solid fa-plus"></i> بودجه جدید</button>
+    </div>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-2 fw-bold"><i class="fa-solid fa-list text-primary me-1"></i> بودجه سال {{ year }}</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark"><tr><th>حساب</th><th>سقف بودجه</th><th>مصرف شده</th><th>باقی مانده</th><th>درصد مصرف</th></tr></thead>
+                <tbody>
+                    {% for item in budget_data %}
+                    {% set pct = item.pct %}
+                    <tr class="{% if pct > 100 %}table-danger{% elif pct > 80 %}table-warning{% endif %}">
+                        <td class="fw-bold text-start">{{ item.budget.account.code }} - {{ item.budget.account.name }}</td>
+                        <td>{{ item.budget.amount|currency }}</td>
+                        <td>{{ item.spent|currency }}</td>
+                        <td class="fw-bold {% if item.remaining <= 0 %}text-danger{% else %}text-success{% endif %}">{{ item.remaining|currency }}</td>
+                        <td>
+                            <div class="progress" style="height:20px">
+                                <div class="progress-bar {% if pct > 100 %}bg-danger{% elif pct > 80 %}bg-warning{% else %}bg-success{% endif %}" style="width:{{ pct|min(100) }}%">{{ pct|round }}%</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="py-5 text-muted">هیچ بودجه‌ای برای این سال ثبت نشده.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addBudgetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-plus text-primary"></i> بودجه جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('finance.add_budget') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body text-start">
+                    <div class="mb-3"><label class="form-label fw-bold">سال</label><input type="number" name="year" class="form-control" value="{{ year }}" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">حساب</label>
+                        <select name="account_id" class="form-select" required>
+                            <option value="">انتخاب کنید</option>
+                            {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">سقف بودجه (تومان)</label><input type="text" name="amount" class="form-control" dir="ltr" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">توضیحات</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ثبت بودجه</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

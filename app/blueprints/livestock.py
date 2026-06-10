@@ -1,7 +1,7 @@
 from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, current_app
 from werkzeug.utils import secure_filename
-from app import db
+from app import db, rate_limit
 from sqlalchemy import func, case
 from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog
 from datetime import datetime, timedelta, UTC
@@ -644,13 +644,126 @@ def medical_overview():
 @login_required
 @permission_required('can_view_livestock')
 def genetics():
-    from sqlalchemy import func
+    return redirect(url_for('livestock.breeding'))
+
+@livestock_bp.route('/ai-health')
+@login_required
+@permission_required('can_view_livestock')
+def ai_health():
+    """AI Health Risk Prediction - statistical anomaly detection for livestock"""
+    from statistics import mean, stdev
+    from datetime import timedelta
+
+    today = datetime.now(UTC).date()
+    sheep_list = Sheep.query.filter(Sheep.is_deleted == False, Sheep.status.in_(['زنده و سالم', 'بیمار', 'تحت درمان'])).all()
+    predictions = []
+
+    for sheep in sheep_list:
+        weights = WeightRecord.query.filter_by(sheep_id=sheep.id).order_by(WeightRecord.record_date.asc()).all()
+        meds = MedicalRecord.query.filter_by(sheep_id=sheep.id).order_by(MedicalRecord.record_date.desc()).all()
+
+        risk_score = 0.0
+        factors = []
+
+        # 1. Weight trend anomaly (sudden drop detection)
+        if len(weights) >= 3:
+            recent = [float(w.weight) for w in weights[-3:]]
+            older = [float(w.weight) for w in weights[:-3]]
+            if older:
+                older_avg = mean(older)
+                recent_avg = mean(recent)
+                drop_pct = ((recent_avg - older_avg) / older_avg) * 100
+                if drop_pct < -5:
+                    risk_score += 30
+                    factors.append(f"کاهش وزن شدید ({drop_pct:.1f}%)")
+                elif drop_pct < -2:
+                    risk_score += 15
+                    factors.append(f"کاهش وزن ({drop_pct:.1f}%)")
+
+        # 2. BCS anomaly (if BCS data exists)
+        bcs_values = [float(w.bcs) for w in weights if w.bcs]
+        if len(bcs_values) >= 2:
+            last_bcs = bcs_values[-1]
+            if last_bcs < 2:
+                risk_score += 20
+                factors.append("BCS پایین (کمتر از 2)")
+
+        # 3. Medical history recency
+        recent_meds = [m for m in meds if m.record_date and (today - m.record_date).days <= 14]
+        if recent_meds:
+            risk_score += 25
+            factors.append(f"{len(recent_meds)} مورد درمان در ۱۴ روز اخیر")
+
+        # 4. No weight record for > 30 days
+        if weights:
+            last_weight_date = weights[-1].record_date
+            if last_weight_date and (today - last_weight_date).days > 30:
+                risk_score += 10
+                factors.append("آخرین وزن‌کشی بیش از ۳۰ روز پیش")
+        else:
+            risk_score += 15
+            factors.append("هیچ رکورد وزنی ثبت نشده")
+
+        # 5. Age factor (very young or very old)
+        if sheep.birth_date:
+            age_months = (today.year - sheep.birth_date.year) * 12 + (today.month - sheep.birth_date.month)
+            if age_months < 3:
+                risk_score += 10
+                factors.append("سن کم (زیر ۳ ماه)")
+            elif age_months > 96:
+                risk_score += 15
+                factors.append("سن بالا (بالای ۸ سال)")
+
+        # 6. Current status
+        if sheep.status == 'بیمار':
+            risk_score += 35
+            factors.append("بیمار")
+        elif sheep.status == 'تحت درمان':
+            risk_score += 20
+            factors.append("تحت درمان")
+
+        level = "safe"
+        badge_class = "bg-success"
+        if risk_score >= 50:
+            level = "critical"
+            badge_class = "bg-danger"
+        elif risk_score >= 25:
+            level = "warning"
+            badge_class = "bg-warning text-dark"
+
+        predictions.append({
+            'sheep': sheep,
+            'risk_score': min(risk_score, 100),
+            'level': level,
+            'badge_class': badge_class,
+            'factors': factors[:3],
+            'last_weight': weights[-1].weight if weights else 0,
+            'last_weight_date': weights[-1].record_date if weights else '-',
+            'last_med': meds[0].medicine_name if meds else '-',
+        })
+
+    predictions.sort(key=lambda x: x['risk_score'], reverse=True)
+    critical_count = sum(1 for p in predictions if p['level'] == 'critical')
+    warning_count = sum(1 for p in predictions if p['level'] == 'warning')
+    safe_count = sum(1 for p in predictions if p['level'] == 'safe')
+
+    return render_template('livestock/ai_health.html',
+        predictions=predictions, critical_count=critical_count,
+        warning_count=warning_count, safe_count=safe_count, total=len(predictions))
+
+@livestock_bp.route('/breeding')
+@login_required
+@permission_required('can_view_livestock')
+def breeding():
+    """صفحه یکپارچه مدیریت تولیدمثل و اصلاح نژاد (ادغام هوش ژنتیک + پیشنهاد جفت‌گیری)"""
+    from sqlalchemy import func as sf
     today = datetime.now(UTC).date()
     today_str = str(today.year)
-    # 5 قوچ برتر با بیشترین تعداد فرزند و دوقلو
-    rams = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.is_deleted == False).all()
+
+    # ---- بخش ۱: هوش ژنتیک (رتبه‌بندی دام‌های برتر) ----
+    rams_all = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.is_deleted == False).all()
     top_rams = []
-    for ram in rams:
+    for ram in rams_all:
         offsprings = Sheep.query.filter(Sheep.father_id == ram.id).count()
         if offsprings == 0:
             continue
@@ -658,30 +771,36 @@ def genetics():
         top_rams.append({'ram': ram, 'offsprings': offsprings, 'twins': twins})
     top_rams.sort(key=lambda x: (x['twins'], x['offsprings']), reverse=True)
     top_rams = top_rams[:5]
-    # 5 میش برتر با بیشترین زایش موفق
-    ewes = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.is_deleted == False).all()
+
+    ewes_all = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.is_deleted == False).all()
     top_ewes = []
-    for ewe in ewes:
+    for ewe in ewes_all:
         successful_births = BirthRecord.query.filter(BirthRecord.mother_id == ewe.id).count()
         if successful_births == 0:
             continue
         top_ewes.append({'ewe': ewe, 'successful_births': successful_births})
     top_ewes.sort(key=lambda x: x['successful_births'], reverse=True)
     top_ewes = top_ewes[:5]
-    return render_template('livestock/genetics.html', top_rams=top_rams, top_ewes=top_ewes, today_str=today_str)
+
+    # ---- بخش ۲: پیشنهاد جفت‌گیری (وضعیت فعلی) ----
+    rams = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).all()
+    ewes = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).all()
+    total_rams = len(rams)
+    total_ewes = len(ewes)
+    avg_weight_rams = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).scalar() or 0
+    avg_weight_ewes = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).scalar() or 0
+
+    return render_template('livestock/breeding.html',
+        top_rams=top_rams, top_ewes=top_ewes, today_str=today_str,
+        rams=rams, ewes=ewes, total_rams=total_rams, total_ewes=total_ewes,
+        avg_weight_rams=round(float(avg_weight_rams), 1),
+        avg_weight_ewes=round(float(avg_weight_ewes), 1), today=today)
 
 @livestock_bp.route('/mating-suggestion')
 @login_required
 @permission_required('can_view_livestock')
 def mating_suggestion():
-    rams = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).all()
-    ewes = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).all()
-    from sqlalchemy import func as sf
-    total_rams = len(rams)
-    total_ewes = len(ewes)
-    avg_weight_rams = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.status.in_(['زنده و سالم', 'آبستن'])).scalar() or 0
-    avg_weight_ewes = db.session.query(sf.avg(Sheep.weight)).filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status.in_(['زنده و سالم'])).scalar() or 0
-    return render_template('livestock/mating_suggestion.html', rams=rams, ewes=ewes, total_rams=total_rams, total_ewes=total_ewes, avg_weight_rams=round(float(avg_weight_rams), 1), avg_weight_ewes=round(float(avg_weight_ewes), 1), today=datetime.now(UTC).date())
+    return redirect(url_for('livestock.breeding'))
 
 @livestock_bp.route('/mark_healthy/<int:id>')
 @login_required
@@ -714,6 +833,7 @@ def mark_newborn_checked(id):
     return redirect(request.referrer)
 
 @livestock_bp.route('/toggle_star/<int:id>', methods=['POST'])
+@rate_limit(limit=30, per=60)
 @login_required
 @permission_required('can_view_livestock')
 def toggle_star(id):

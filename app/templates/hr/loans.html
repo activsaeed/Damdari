@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="fa-solid fa-hand-holding-dollar text-warning"></i> مدیریت وام‌ها و مساعدات</h2>
+    <div>
+        <a href="{{ url_for('hr.payroll_dashboard') }}" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-chart-line"></i> داشبورد</a>
+        <a href="{{ url_for('hr.payslips') }}" class="btn btn-outline-success btn-sm"><i class="fa-solid fa-file-invoice"></i> فیش‌ها</a>
+    </div>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+<div class="row g-3 mb-4">
+    <div class="col-md-6"><div class="card border-0 shadow-sm bg-warning bg-opacity-10"><div class="card-body text-center py-3"><h6>مجموع وام‌های فعال</h6><h3 class="text-warning">{{ active_total|currency }}</h3></div></div></div>
+    <div class="col-md-6"><div class="card border-0 shadow-sm bg-success bg-opacity-10"><div class="card-body text-center py-3"><h6>مجموع وام‌های تسویه شده</h6><h3 class="text-success">{{ settled_total|currency }}</h3></div></div></div>
+</div>
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-bold small"><i class="fa-solid fa-list text-warning me-1"></i> لیست وام‌ها و مساعدات</span>
+        <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#addLoanGlobalModal"><i class="fa-solid fa-plus"></i> وام جدید</button>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0 small">
+                <thead class="table-dark"><tr><th>پرسنل</th><th>نوع</th><th>مبلغ کل</th><th>قسط ماهانه</th><th>تاریخ</th><th>وضعیت</th><th>پیشرفت</th><th>عملیات</th></tr></thead>
+                <tbody>
+                    {% for l in loans %}
+                    <tr>
+                        <td class="fw-bold">{{ l.worker.name }}</td>
+                        <td>{{ l.loan_type }}</td>
+                        <td dir="ltr">{{ l.amount|currency }}</td>
+                        <td dir="ltr">{{ l.installment_amount|currency if l.installment_amount else '-' }}</td>
+                        <td>{{ l.issue_date|jalali }}</td>
+                        <td><span class="badge {% if l.status == 'در حال پرداخت' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ l.status }}</span></td>
+                        <td style="min-width:120px">
+                            {% if l.amount > 0 and l.installment_amount %}
+                            {% set progress = (l.installment_amount / l.amount * 100)|round %}
+                            <div class="progress" style="height:8px">
+                                <div class="progress-bar {% if l.status == 'در حال پرداخت' %}bg-warning{% else %}bg-success{% endif %}" style="width:{{ progress }}%"></div>
+                            </div>
+                            <small class="text-muted">{{ progress }}%</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if l.document_image %}
+                            <a href="{{ url_for('static', filename=l.document_image) }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2" title="مدرک"><i class="fa-solid fa-paperclip"></i></a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="py-5 text-muted">هیچ وامی ثبت نشده است.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addLoanGlobalModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning"><h5 class="modal-title"><i class="fa-solid fa-hand-holding-dollar"></i> ثبت وام / مساعده جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_loan_global') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body small">
+                    <div class="mb-2"><label class="fw-bold">پرسنل</label>
+                        <select name="worker_id" class="form-select form-select-sm" required>
+                            {% for w in workers %}<option value="{{ w.id }}">{{ w.name }} ({{ w.worker_code }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2"><label class="fw-bold">نوع وام</label>
+                        <select name="loan_type" class="form-select form-select-sm">
+                            <option value="مساعده">مساعده</option>
+                            <option value="وام">وام</option>
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="fw-bold">مبلغ کل</label><input type="text" class="form-control form-control-sm" dir="ltr" onkeyup="formatCurrency(this, 'glAmt')"><input type="hidden" name="amount" id="glAmt"></div>
+                        <div class="col-6"><label class="fw-bold">قسط ماهانه</label><input type="text" class="form-control form-control-sm" dir="ltr" onkeyup="formatCurrency(this, 'glInst')"><input type="hidden" name="installment_amount" id="glInst"></div>
+                    </div>
+                    <div class="mb-2"><label class="fw-bold">توضیحات</label><input type="text" name="description" class="form-control form-control-sm"></div>
+                    <div class="mb-2"><label class="fw-bold">مدرک (سفته/چک)</label><input type="file" name="document" class="form-control form-control-sm"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-warning w-100 fw-bold">ثبت وام</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function formatCurrency(input, hiddenFieldId) {
+    let value = input.value.replace(/\D/g, "");
+    document.getElementById(hiddenFieldId).value = value;
+    if (value) input.value = Number(value).toLocaleString('en-US');
+    else input.value = "";
+}
+</script>
+{% endblock %}

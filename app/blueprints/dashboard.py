@@ -12,7 +12,7 @@ import jdatetime
 from app.models import InventoryLog, InventoryCategory, TelegramBot
 from app.accounting_engine import AccountingEngine
 from app import get_system_setting, set_system_setting
-from app.models import (Sheep, Transaction, InventoryItem, Task, WeightRecord, User, Pen, Medicine, BreedCategory, PurposeCategory, StatusCategory, FeedRation, FeedingSchedule, TreatmentTemplate, AuditLog, Cheque, MedicalRecord, SystemSetting, Unit, MedicineCategory, BuyerCategory, TransactionCategory, InventoryCategory, JournalEntry)
+from app.models import (Sheep, Transaction, InventoryItem, WeightRecord, User, Pen, Medicine, BreedCategory, PurposeCategory, StatusCategory, FeedRation, FeedingSchedule, TreatmentTemplate, AuditLog, Cheque, MedicalRecord, SystemSetting, Unit, MedicineCategory, BuyerCategory, TransactionCategory, InventoryCategory, JournalEntry)
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -235,6 +235,24 @@ def index():
 
     today_str = jdatetime.date.today().strftime('%Y/%m/%d')
 
+    # AI Insights for Dashboard
+    ai_insights = []
+    if days_until_empty is not None and days_until_empty < 30:
+        ai_insights.append({'icon': 'fa-wheat-awn', 'color': 'danger', 'title': 'هشدار ذخیره خوراک', 'text': f'تنها {days_until_empty} روز خوراک باقی مانده است. برای تامین نهاده اقدام کنید.'})
+    sick_count = gender_stats['میش']['بیمار'] + gender_stats['قوچ']['بیمار'] + gender_stats['بره']['بیمار']
+    if sick_count > 0:
+        ai_insights.append({'icon': 'fa-notes-medical', 'color': 'warning', 'title': 'دام‌های نیازمند درمان', 'text': f'{sick_count} رأس دام بیمار هستند. وضعیت سلامت گله را بررسی کنید.'})
+    overdue = Cheque.query.filter(Cheque.is_deleted == False, Cheque.status == 'در جریان', Cheque.due_date < datetime.now(UTC).date() - timedelta(days=90)).count()
+    if overdue > 0:
+        ai_insights.append({'icon': 'fa-money-check', 'color': 'danger', 'title': 'چک‌های معوق', 'text': f'{overdue} فقره چک بیش از ۹۰ روز معوق شده است.'})
+    low_stock_count = sum(1 for i in inventory_items if i.quantity <= i.min_threshold)
+    if low_stock_count > 0:
+        ai_insights.append({'icon': 'fa-warehouse', 'color': 'warning', 'title': 'کسری انبار', 'text': f'{low_stock_count} قلم از اقلام انبار به حداقل موجودی رسیده است.'})
+    if curr_month_profit is not None and curr_month_profit < 0:
+        ai_insights.append({'icon': 'fa-sack-dollar', 'color': 'danger', 'title': 'سود منفی ماه', 'text': 'سود خالص ماه جاری منفی است. هزینه‌ها را بررسی کنید.'})
+    if insurance_debt > 0:
+        ai_insights.append({'icon': 'fa-file-invoice-dollar', 'color': 'info', 'title': 'بدهی بیمه', 'text': f'مبلغ {float(insurance_debt):,.0f} تومان بدهی بیمه معوق است.'})
+
     return render_template('dashboard/index.html', 
                            total_sheep=total_sheep, total_live_weight=total_live_weight,
                            gender_stats=gender_stats, breed_stats=breed_stats, weight_ranges=weight_ranges, weight_above=weight_above,
@@ -248,13 +266,14 @@ def index():
                            financial_alert=financial_alert,
                            insurance_debt=insurance_debt,
                            feed_days_left=days_until_empty,
-                           today_str=today_str)
+                           today_str=today_str,
+                           ai_insights=ai_insights)
 
 
 @dashboard_bp.route('/warnings')
 @login_required
 def warnings():
-    from app.models import Sheep, WeightRecord, InventoryItem, Task
+    from app.models import Sheep, WeightRecord, InventoryItem
     # بهینه‌سازی: دریافت مستقیم فقط دام‌های بیمار (نه همه ۷۰۰۰ تا)
     sick_sheep = Sheep.query.filter_by(status='بیمار').all()
     
@@ -304,12 +323,11 @@ def warnings():
 
     # درخواست 2: اگر دامپزشک بود، فقط کاهش وزن و بیمار برایش ارسال میشود
     if current_user.role == 'دامپزشک':
-        return render_template('dashboard/warnings.html', sick_sheep=sick_sheep, weight_loss_sheep=weight_loss_sheep, low_stock_items=[], pending_tasks=[])
+        return render_template('dashboard/warnings.html', sick_sheep=sick_sheep, weight_loss_sheep=weight_loss_sheep, low_stock_items=[])
     
     # بهینه‌سازی کوئری انبار
     low_stock_items = InventoryItem.query.filter(InventoryItem.quantity <= InventoryItem.min_threshold).all()
-    pending_tasks = Task.query.filter_by(task_date=datetime.now(UTC).date(), is_done=False).all()
-    return render_template('dashboard/warnings.html', sick_sheep=sick_sheep, low_stock_items=low_stock_items, pending_tasks=pending_tasks, weight_loss_sheep=weight_loss_sheep)
+    return render_template('dashboard/warnings.html', sick_sheep=sick_sheep, low_stock_items=low_stock_items, weight_loss_sheep=weight_loss_sheep)
 
 # ... (کدهای ابتدای فایل dashboard.py شامل ایمپورت ها و توابع index و warnings دست نخورده باقی بماند) ...
 
@@ -1084,3 +1102,25 @@ def toggle_currency():
     
     flash(f'واحد پول سیستم به {new_unit} تغییر یافت.', 'info')
     return redirect(request.referrer or url_for('dashboard.index'))
+
+
+@dashboard_bp.route('/bug-report', methods=['POST'])
+@login_required
+def bug_report():
+    """ثبت گزارش مشکل از طرف کاربر"""
+    description = request.form.get('description', '').strip()
+    url = request.form.get('url', '')
+    if not description:
+        return jsonify({'error': 'متن گزارش خالی است'}), 400
+    from app import db
+    from app.models import AuditLog
+    from datetime import datetime, timezone
+    log = AuditLog(
+        action=f'گزارش مشکل: {description[:200]}',
+        user_name=current_user.name,
+        timestamp=datetime.now(timezone.utc),
+        ip_address=request.remote_addr
+    )
+    db.session.add(log)
+    db.session.commit()
+    return jsonify({'ok': True})

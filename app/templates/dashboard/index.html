@@ -111,6 +111,22 @@
     </div>
 </div>
 
+{% if ai_insights %}
+<div class="row g-2 mb-4">
+    <div class="col-12"><h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-brain text-purple me-1"></i> هوش مصنوعی — بینش‌های مدیریتی</h6></div>
+    {% for insight in ai_insights %}
+    <div class="col-md-4 col-lg-2">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 border-{{ insight.color }} bg-{{ insight.color }} bg-opacity-10">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center gap-2 mb-1"><i class="fa-solid {{ insight.icon }} text-{{ insight.color }} fa-lg"></i><small class="fw-bold text-{{ insight.color }}">{{ insight.title }}</small></div>
+                <p class="small mb-0 text-muted">{{ insight.text }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- جدول آمار تفکیکی وضعیت دام‌ها -->
 <div class="card border-0 shadow-sm mb-4 border-top border-4 border-primary">
     <div class="card-header bg-white fw-bold"><i class="fa-solid fa-table-list text-primary"></i> آمار تفکیکی وضعیت دام‌ها</div>
@@ -247,6 +263,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="{{ url_for('dashboard.run_valuation') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body p-4">
                     <div class="alert alert-light border small mb-4">
                         <i class="fa-solid fa-circle-info text-primary me-1"></i>

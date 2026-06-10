@@ -290,6 +290,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-truck-moving text-primary"></i> انتقال دام</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('livestock.bulk_action') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body text-center">
                     <input type="hidden" name="bulk_action_type" value="change_pen">
                     <input type="hidden" name="sheep_ids" id="singleTransferSheepId">
@@ -434,7 +435,8 @@
     }
 
     function toggleStar(el, id) {
-        fetch(`/livestock/toggle_star/${id}`)
+        showLoading(el);
+        fetch(`/livestock/toggle_star/${id}`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -446,7 +448,8 @@
                 }
             }
         })
-        .catch(err => console.error('Error toggling star:', err));
+        .catch(err => console.error('Error toggling star:', err))
+        .finally(function() { hideLoading(el); });
     }
 
     function showLoading() {

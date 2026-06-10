@@ -3,7 +3,7 @@ from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, make_response, current_app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
-from app import db
+from app import db, rate_limit
 from app.models import Transaction, TransactionCategory, TransactionDocument, Cheque, Contact, ContactDocument, SensorData, Sheep, WeightRecord, AuditLog, InventoryLog, InventoryItem
 from sqlalchemy import func, case
 from datetime import datetime, timedelta, UTC
@@ -345,6 +345,7 @@ def add_transaction():
     return render_template('finance/add.html', income_cats=income_cats, expense_cats=expense_cats, contacts=all_contacts, today_str=today_str)
 
 @finance_bp.route('/toggle_star_tx/<int:id>', methods=['POST'])
+@rate_limit(limit=30, per=60)
 @login_required
 def toggle_star_tx(id):
     tx = Transaction.query.get_or_404(id)
@@ -525,6 +526,145 @@ def print_cheques():
 # ==========================================
 # مدیریت چک ها
 # ==========================================
+@finance_bp.route('/ai-anomalies')
+@login_required
+@permission_required('can_view_finance')
+def ai_anomalies():
+    """AI-based financial anomaly detection using statistical methods"""
+    from statistics import mean, stdev
+    from datetime import timedelta
+
+    today = datetime.now(UTC).date()
+    anomalies = []
+
+    # 1. Detect unusually large transactions (z-score > 2.5)
+    all_tx = Transaction.query.filter(Transaction.is_deleted == False).all()
+    amounts = [float(t.amount) for t in all_tx]
+    if len(amounts) >= 5:
+        m = mean(amounts)
+        s = stdev(amounts) if stdev(amounts) > 0 else 1
+        for t in all_tx:
+            z = abs((float(t.amount) - m) / s)
+            if z > 2.5:
+                anomalies.append({
+                    'type': 'transaction',
+                    'severity': 'high' if z > 3.5 else 'medium',
+                    'title': 'تراکنش غیرعادی',
+                    'description': f"مبلغ {t.amount|currency} — {t.party_name} — {t.category}",
+                    'z_score': round(z, 1),
+                    'date': t.t_date,
+                    'id': t.id,
+                    'url': url_for('finance.tx_profile', id=t.id),
+                })
+
+    # 2. Detect overdue cheques (> 90 days)
+    overdue = Cheque.query.filter(
+        Cheque.is_deleted == False,
+        Cheque.status == 'در جریان',
+        Cheque.due_date < today - timedelta(days=90)
+    ).all()
+    for c in overdue:
+        days = (today - c.due_date).days
+        anomalies.append({
+            'type': 'cheque',
+            'severity': 'high',
+            'title': 'چک معوق (بیش از ۹۰ روز)',
+            'description': f"چک {c.cheque_number} — {c.amount|currency} — {days} روز گذشته",
+            'z_score': days,
+            'date': c.due_date,
+            'id': c.id,
+            'url': url_for('finance.cheque_profile', id=c.id),
+        })
+
+    # 3. Contacts with negative balance (overdue payables)
+    from app.models import Account, JournalEntryLine
+    pay_acc = Account.query.filter_by(code='2010').first()
+    recv_acc = Account.query.filter_by(code='1030').first()
+    contacts = Contact.query.all()
+    for c in contacts:
+        if recv_acc:
+            lines = JournalEntryLine.query.filter(
+                JournalEntryLine.contact_id == c.id,
+                JournalEntryLine.account_id == recv_acc.id
+            ).all()
+            bal = sum(l.debit for l in lines) - sum(l.credit for l in lines)
+            if bal > 100000000:  # بیش از ۱۰۰ میلیون
+                anomalies.append({
+                    'type': 'contact',
+                    'severity': 'medium',
+                    'title': 'مطالبه بالا از شخص',
+                    'description': f"{c.name} — {bal|currency}",
+                    'z_score': float(bal) / 1000000,
+                    'date': today,
+                    'id': c.id,
+                    'url': url_for('finance.contacts'),
+                })
+
+    anomalies.sort(key=lambda x: x['z_score'], reverse=True)
+
+    return render_template('finance/ai_anomalies.html',
+        anomalies=anomalies, high_count=sum(1 for a in anomalies if a['severity'] == 'high'),
+        medium_count=sum(1 for a in anomalies if a['severity'] == 'medium'))
+
+# ==========================================
+# مدیریت دسته چک
+# ==========================================
+@finance_bp.route('/cheque-books')
+@login_required
+@permission_required('can_view_finance')
+def cheque_books():
+    from app.models import ChequeBook
+    books = ChequeBook.query.order_by(ChequeBook.received_date.desc()).all()
+    total_cheques = Cheque.query.filter(Cheque.is_deleted == False).count()
+    return render_template('finance/cheque_books.html', books=books, total_cheques=total_cheques)
+
+@finance_bp.route('/cheque-books/add', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def add_cheque_book():
+    from app.models import ChequeBook
+    from datetime import date
+    name = request.form.get('name')
+    bank_name = request.form.get('bank_name')
+    start_number = request.form.get('start_number')
+    end_number = request.form.get('end_number')
+    notes = request.form.get('notes', '')
+    if not all([name, bank_name, start_number, end_number]):
+        flash('لطفاً همه فیلدهای ضروری را پر کنید.', 'danger')
+        return redirect(url_for('finance.cheque_books'))
+    book = ChequeBook(name=name, bank_name=bank_name, start_number=start_number,
+                      end_number=end_number, received_date=date.today(), notes=notes)
+    db.session.add(book)
+    db.session.commit()
+    flash(f'دسته چک "{name}" با موفقیت ثبت شد.', 'success')
+    return redirect(url_for('finance.cheque_books'))
+
+@finance_bp.route('/cheque-books/delete/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def delete_cheque_book(id):
+    from app.models import ChequeBook
+    book = ChequeBook.query.get_or_404(id)
+    if book.used_count > 0:
+        flash('این دسته چک مصرف شده و قابل حذف نیست.', 'danger')
+    else:
+        db.session.delete(book)
+        db.session.commit()
+        flash('دسته چک حذف شد.', 'success')
+    return redirect(url_for('finance.cheque_books'))
+
+@finance_bp.route('/cheque-books/close/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def close_cheque_book(id):
+    from app.models import ChequeBook
+    book = ChequeBook.query.get_or_404(id)
+    book.status = 'مصرف شده'
+    db.session.commit()
+    flash(f'دسته چک "{book.name}" بسته شد.', 'info')
+    return redirect(url_for('finance.cheque_books'))
+
+# ==========================================
 @finance_bp.route('/cheques')
 @login_required
 @permission_required('can_view_finance')
@@ -659,6 +799,7 @@ def add_cheque():
     return redirect(url_for('finance.cheques'))
 
 @finance_bp.route('/toggle_star_cheque/<int:id>', methods=['POST'])
+@rate_limit(limit=30, per=60)
 @login_required
 def toggle_star_cheque(id):
     c = Cheque.query.get_or_404(id)
@@ -667,6 +808,7 @@ def toggle_star_cheque(id):
     return jsonify({'success': True, 'is_starred': c.is_starred})
 
 @finance_bp.route('/update_cheque_status/<int:id>', methods=['POST'])
+@rate_limit(limit=20, per=60)
 @login_required
 def update_cheque_status(id):
     from app.models import JournalEntry, AuditLog
@@ -1972,6 +2114,7 @@ def update_followup(tx_id):
     return redirect(url_for('finance.contact_profile', id=tx.contact_id, _anchor='ledger'))
 
 @finance_bp.route('/api/sensors/update', methods=['POST'])
+@rate_limit(limit=60, per=60)
 @require_api_token
 def update_sensors():
     """دریافت داده‌های زنده از سخت‌افزار ESP32 و ذخیره در دیتابیس"""
@@ -2002,6 +2145,7 @@ def update_sensors():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @finance_bp.route('/api/iot/weight', methods=['POST'])
+@rate_limit(limit=60, per=60)
 @require_api_token
 def update_weight_iot():
     """دریافت وزن از باسکول هوشمند و بروزرسانی پرونده دام"""
@@ -2093,6 +2237,178 @@ def period_closing():
 
 
 # ==========================================
+# بودجه سالانه / ماهانه
+# ==========================================
+@finance_bp.route('/budgets')
+@login_required
+@permission_required('can_view_finance')
+def budgets():
+    from app.models import Budget, Account
+    year = request.args.get('year', type=int)
+    if not year:
+        import jdatetime
+        year = jdatetime.date.today().year
+    budgets_list = Budget.query.filter_by(year=year).order_by(Budget.account_id).all()
+    accounts = Account.query.order_by(Account.code).all()
+    # محاسبه مصرف برای هر بودجه
+    budget_data = []
+    for b in budgets_list:
+        budget_data.append({'budget': b, 'spent': b.spent, 'remaining': max(0, float(b.amount) - b.spent), 'pct': min(100, (b.spent / float(b.amount) * 100) if float(b.amount) > 0 else 0)})
+    return render_template('finance/budgets.html', budget_data=budget_data, accounts=accounts, year=year)
+
+@finance_bp.route('/budgets/add', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def add_budget():
+    from app.models import Budget
+    year = request.form.get('year', type=int)
+    account_id = request.form.get('account_id', type=int)
+    amount = request.form.get('amount', type=float)
+    notes = request.form.get('notes', '')
+    if not all([year, account_id, amount]):
+        flash('لطفاً همه فیلدها را پر کنید.', 'danger')
+        return redirect(url_for('finance.budgets'))
+    b = Budget(year=year, account_id=account_id, amount=amount, notes=notes)
+    db.session.add(b)
+    db.session.commit()
+    flash('بودجه ثبت شد.', 'success')
+    return redirect(url_for('finance.budgets', year=year))
+
+# ==========================================
+# اسناد اقساطی
+# ==========================================
+@finance_bp.route('/instalments')
+@login_required
+@permission_required('can_view_finance')
+def instalments():
+    from app.models import Instalment
+    insts = Instalment.query.order_by(Instalment.start_date.desc()).all()
+    contacts = Contact.query.order_by(Contact.name).all()
+    return render_template('finance/instalments.html', instalments=insts, contacts=contacts)
+
+@finance_bp.route('/instalments/add', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def add_instalment():
+    from app.models import Instalment
+    from datetime import date
+    contact_id = request.form.get('contact_id', type=int)
+    total_amount = request.form.get('total_amount', type=float)
+    instalment_count = request.form.get('instalment_count', type=int)
+    interval_days = request.form.get('interval_days', type=int, default=30)
+    description = request.form.get('description', '')
+    if not all([contact_id, total_amount, instalment_count]):
+        flash('لطفاً همه فیلدها را پر کنید.', 'danger')
+        return redirect(url_for('finance.instalments'))
+    amount_per = total_amount / instalment_count
+    inst = Instalment(contact_id=contact_id, total_amount=total_amount, instalment_count=instalment_count,
+                      amount_per_instalment=amount_per, start_date=date.today(), interval_days=interval_days,
+                      description=description)
+    db.session.add(inst)
+    db.session.commit()
+    flash('قرارداد اقساطی ثبت شد.', 'success')
+    return redirect(url_for('finance.instalments'))
+
+@finance_bp.route('/instalments/pay/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def pay_instalment(id):
+    from app.models import Instalment
+    inst = Instalment.query.get_or_404(id)
+    inst.paid_amount = min(Decimal(str(inst.paid_amount)) + inst.amount_per_instalment, inst.total_amount)
+    if inst.paid_amount >= inst.total_amount:
+        inst.status = 'تسویه شده'
+    db.session.commit()
+    flash('قسط پرداخت شد.', 'success')
+    return redirect(url_for('finance.instalments'))
+
+# حقوق و دستمزد در بخش پرسنل (hr) مدیریت می‌شود
+
+# ==========================================
+# بهای تمام شده دام
+# ==========================================
+@finance_bp.route('/livestock-costs')
+@login_required
+@permission_required('can_view_finance')
+def livestock_costs():
+    from app.models import LivestockCost, Sheep
+    sheep_id = request.args.get('sheep_id', type=int)
+    if sheep_id:
+        costs = LivestockCost.query.filter_by(sheep_id=sheep_id).order_by(LivestockCost.record_date.desc()).all()
+        sheep = Sheep.query.get(sheep_id)
+    else:
+        costs = LivestockCost.query.order_by(LivestockCost.record_date.desc()).limit(100).all()
+        sheep = None
+    sheep_list = Sheep.query.filter(Sheep.is_deleted == False).order_by(Sheep.ear_tag).all()
+    total_cost = sum(c.amount for c in costs) if costs else 0
+    return render_template('finance/livestock_costs.html', costs=costs, sheep=sheep, sheep_list=sheep_list, total_cost=total_cost)
+
+@finance_bp.route('/livestock-costs/add', methods=['POST'])
+@login_required
+@permission_required('can_view_finance')
+def add_livestock_cost():
+    from app.models import LivestockCost
+    from datetime import date
+    sheep_id = request.form.get('sheep_id', type=int)
+    cost_type = request.form.get('cost_type')
+    amount = request.form.get('amount', type=float)
+    description = request.form.get('description', '')
+    if not all([sheep_id, cost_type, amount]):
+        flash('لطفاً همه فیلدها را پر کنید.', 'danger')
+        return redirect(url_for('finance.livestock_costs'))
+    c = LivestockCost(sheep_id=sheep_id, cost_type=cost_type, amount=amount, record_date=date.today(), description=description)
+    db.session.add(c)
+    db.session.commit()
+    flash('هزینه ثبت شد.', 'success')
+    return redirect(url_for('finance.livestock_costs', sheep_id=sheep_id))
+
+@finance_bp.route('/livestock-costs/summary')
+@login_required
+@permission_required('can_view_finance')
+def livestock_costs_summary():
+    """گزارش خلاصه بهای تمام شده برای همه دام‌ها"""
+    from app.models import LivestockCost, Sheep
+    from sqlalchemy import func
+    summary = db.session.query(LivestockCost.sheep_id, LivestockCost.cost_type, func.sum(LivestockCost.amount)).group_by(LivestockCost.sheep_id, LivestockCost.cost_type).all()
+    sheep_costs = {}
+    for s_id, c_type, amt in summary:
+        if s_id not in sheep_costs: sheep_costs[s_id] = {'total': 0, 'details': {}}
+        sheep_costs[s_id]['details'][c_type] = float(amt)
+        sheep_costs[s_id]['total'] += float(amt)
+    sheep_map = {s.id: s for s in Sheep.query.all()}
+    return render_template('finance/livestock_costs_summary.html', sheep_costs=sheep_costs, sheep_map=sheep_map)
+
+# ==========================================
+# صورت حساب دوره‌ای مشتری
+# ==========================================
+@finance_bp.route('/contact-statement/<int:contact_id>')
+@login_required
+@permission_required('can_view_finance')
+def contact_statement_period(contact_id):
+    from datetime import date
+    from app.models import Transaction, JournalEntry
+    contact = Contact.query.get_or_404(contact_id)
+    date_from = request.args.get('from', '')
+    date_to = request.args.get('to', '')
+    today = date.today()
+    # پیش‌فرض: ۳ ماه اخیر
+    if not date_from:
+        from datetime import timedelta
+        date_from_obj = today - timedelta(days=90)
+    else:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    if not date_to:
+        date_to_obj = today
+    else:
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    txs = Transaction.query.filter(
+        Transaction.contact_id == contact_id, Transaction.is_deleted == False,
+        Transaction.t_date >= date_from_obj, Transaction.t_date <= date_to_obj
+    ).order_by(Transaction.t_date).all()
+    return render_template('finance/contact_statement.html', contact=contact, txs=txs,
+                          date_from=date_from_obj, date_to=date_to_obj)
+
+# ==========================================
 # مدیریت کدینگ حسابداری (Chart of Accounts)
 # ==========================================
 @finance_bp.route('/accounts')
@@ -2105,7 +2421,16 @@ def accounts():
     from app.models import Account, AccountType
     account_types = AccountType.query.all()
     accounts_list = Account.query.order_by(Account.code).all()
-    return render_template('finance/accounts.html', account_types=account_types, accounts=accounts_list)
+    # ساختمان درختی: حساب‌های کل (بدون والد) با فرزندان
+    def build_tree(parent_id=None, depth=0):
+        result = []
+        for acc in accounts_list:
+            if acc.parent_id == parent_id:
+                children = build_tree(acc.id, depth + 1)
+                result.append({'account': acc, 'children': children, 'depth': depth, 'has_children': len(children) > 0})
+        return result
+    tree = build_tree()
+    return render_template('finance/accounts.html', account_types=account_types, accounts=accounts_list, tree=tree)
 
 @finance_bp.route('/accounts/add', methods=['POST'])
 @login_required

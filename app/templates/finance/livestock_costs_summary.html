@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fa-solid fa-chart-bar text-primary"></i> خلاصه بهای تمام شده دام‌ها</h2>
+    <a href="{{ url_for('finance.livestock_costs') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-list"></i> لیست هزینه‌ها</a>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark"><tr><th>دام</th><th>خوراک</th><th>دارو</th><th>خرید</th><th>سایر</th><th>مجموع</th></tr></thead>
+                <tbody>
+                    {% for s_id, data in sheep_costs.items() %}
+                    {% set s = sheep_map.get(s_id) %}
+                    <tr>
+                        <td class="fw-bold">{{ s.ear_tag if s else 'نامشخص' }}</td>
+                        <td>{{ data.details.get('خوراک', 0)|currency }}</td>
+                        <td>{{ data.details.get('دارو', 0)|currency }}</td>
+                        <td>{{ data.details.get('خرید', 0)|currency }}</td>
+                        <td>{{ data.details.get('سایر', 0)|currency }}</td>
+                        <td class="fw-bold">{{ data.total|currency }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="py-5 text-muted">هیچ داده‌ای موجود نیست.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

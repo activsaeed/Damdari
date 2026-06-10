@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>فیش حقوقی {{ p.worker.name }} - {{ p.month_name }}</title>
+<style>
+@page { size: A5 landscape; margin: 4mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Tahoma, 'Vazirmatn', sans-serif; font-size: 7.5pt; color: #111; line-height: 1.3; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; }
+@media screen {
+    .print-frame { transform: scale(1.2); transform-origin: top center; margin-bottom: 30px; }
+    .no-print { margin-top: 130px; }
+}
+@media print {
+    .no-print { display: none !important; }
+    .print-frame { transform: none; border: 1.5px solid #222; }
+}
+.print-frame {
+    width: 202mm; height: 140mm;
+    border: 1.5px solid #222; border-radius: 3px;
+    padding: 3mm 4mm;
+    display: flex; flex-direction: column;
+}
+.header {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1.5px solid #222;
+    padding-bottom: 2mm; margin-bottom: 2mm;
+}
+.header-logo img { height: 28px; width: auto; }
+.header-center { text-align: center; }
+.header-center h2 { font-size: 11pt; font-weight: 900; margin: 0; letter-spacing: 2px; }
+.header-center small { font-size: 6.5pt; color: #555; display: block; }
+.header-left { text-align: left; font-size: 6.5pt; color: #333; line-height: 1.6; }
+.info-bar {
+    display: flex; justify-content: space-between;
+    background: #f0f2f5; padding: 1mm 2mm; border-radius: 2px;
+    margin-bottom: 1.5mm; font-size: 7pt;
+}
+.att-bar {
+    display: flex; justify-content: space-between;
+    background: #e8f0fe; padding: 0.8mm 2mm; border-radius: 2px;
+    margin-bottom: 2mm; font-size: 6.5pt; direction: ltr;
+}
+.att-bar span { white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; font-size: 7pt; }
+thead th {
+    background: #222; color: #fff; padding: 2px 4px; text-align: center;
+    font-weight: 700; font-size: 7pt; border: 1px solid #222;
+}
+tbody td { padding: 1.5px 4px; text-align: center; border: 1px solid #ccc; vertical-align: middle; }
+td.num { direction: ltr; text-align: right; font-family: 'Courier New', monospace; font-weight: 600; font-size: 6.5pt; }
+td.desc { text-align: right; padding-right: 5px; }
+.summary-wrap { display: flex; gap: 3mm; margin-top: auto; }
+.summary-box { flex: 1; border: 1px solid #222; border-radius: 2px; padding: 1.5mm 2mm; }
+.summary-box h4 { font-size: 7.5pt; font-weight: 900; margin-bottom: 1mm; text-align: center; }
+.summary-box table { font-size: 6.5pt; }
+.summary-box table td { padding: 1px 4px; border: none; }
+.summary-box table td:first-child { text-align: right; font-weight: 600; }
+.summary-box table td:last-child { direction: ltr; text-align: right; font-family: 'Courier New', monospace; }
+.box-income { background: #f0fdf4; }
+.box-ded { background: #fef2f2; }
+.box-net { background: #1a1a2e; color: #fff; text-align: center; }
+.box-net td { color: #fff; }
+.box-net table td { border: none; }
+.signature {
+    display: flex; justify-content: space-between; margin-top: 2mm; padding-top: 1mm;
+    border-top: 1px dashed #999;
+}
+.signature div { text-align: center; width: 45%; }
+.signature .line { border-top: 1px solid #333; margin-top: 14px; padding-top: 2px; font-size: 6pt; color: #666; }
+</style>
+</head>
+<body>
+<div class="print-frame">
+    <div class="header">
+        <div class="header-logo">
+            {% if system_settings.get('farm_logo_path') %}
+            <img src="{{ url_for('static', filename=system_settings.get('farm_logo_path')) }}" alt="لوگو">
+            {% endif %}
+        </div>
+        <div class="header-center">
+            <h2>فیش حقوق و دستمزد</h2>
+            <small>{{ system_settings.get('farm_name', 'شرکت') }} &mdash; ماه: {{ p.month_name }}</small>
+        </div>
+        <div class="header-left">
+            <div>تاریخ: {{ p.issue_date|jalali }}</div>
+            <div>شماره: {{ p.id }}</div>
+        </div>
+    </div>
+
+    <div class="info-bar">
+        <span><b>نام:</b> {{ p.worker.name }}</span>
+        <span><b>کد:</b> {{ p.worker.worker_code }}</span>
+        <span><b>سمت:</b> {{ p.worker.role or '-' }}</span>
+        <span><b>حساب:</b> {{ p.worker.bank_account or '-' }}</span>
+        <span><b>بیمه:</b> {{ p.worker.insurance_status or '-' }}</span>
+    </div>
+
+    <div class="att-bar">
+        <span><b>✅ حاضر:</b> {{ att.present }}</span>
+        <span><b>❌ غایب:</b> {{ att.absent }}</span>
+        <span><b>📋 مرخصی:</b> {{ att.leave }}</span>
+        <span><b>🚗 ماموریت:</b> {{ att.mission }}</span>
+        <span><b>⏱ اضافه‌کار:</b> {{ '%.1f'|format(att.overtime) }}h</span>
+        <span><b>🌙 شب‌کاری:</b> {{ '%.1f'|format(att.night) }}h</span>
+    </div>
+
+    {% set unit = system_settings.get('currency_unit', 'تومان') %}
+    {% set factor = 10 if unit == 'ریال' else 1 %}
+
+    <table>
+        <thead>
+            <tr><th style="width:6%">ردیف</th><th style="width:54%">شرح</th><th style="width:24%">مبلغ ({{ unit }})</th><th style="width:16%">وضعیت</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>۱</td><td class="desc">حقوق پایه (ماهانه)</td><td class="num">{{ ((p.base_salary or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۲</td><td class="desc">حق مسکن</td><td class="num">{{ ((p.housing_allowance or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۳</td><td class="desc">حق بن و خواربار</td><td class="num">{{ ((p.food_allowance or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۴</td><td class="desc">حق عائله‌مندی (اولاد)</td><td class="num">{{ ((p.family_allowance or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۵</td><td class="desc">اضافه‌کاری</td><td class="num">{{ ((p.overtime_pay or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۶</td><td class="desc">شب‌کاری</td><td class="num">{{ ((p.night_shift_pay or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۷</td><td class="desc">ایاب و ذهاب</td><td class="num">{{ ((p.transportation_pay or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۸</td><td class="desc">حق ماموریت</td><td class="num">{{ ((p.mission_pay or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۹</td><td class="desc">پاداش (KPI)</td><td class="num">{{ ((p.kpi_bonus or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+            <tr><td>۱۰</td><td class="desc">عیدی / پاداش نقدی</td><td class="num">{{ ((p.eydi_sanavat or 0)|float * factor)|currency }}</td><td>دریافتی</td></tr>
+        </tbody>
+    </table>
+
+    <div class="summary-wrap">
+        <div class="summary-box box-income">
+            <h4>جمع دریافتی‌ها</h4>
+            <table><tr><td>ناخالص:</td><td>{{ ((p.gross_pay or 0)|float * factor)|currency }}</td></tr></table>
+        </div>
+        <div class="summary-box box-ded">
+            <h4>جمع کسورات</h4>
+            <table>
+                {% set total_ded = ((p.loan_deduction or 0)|float) + ((p.fines or 0)|float) + ((p.insurance or 0)|float) + ((p.tax or 0)|float) %}
+                {% set other_fines = ((p.fines or 0)|float) - att.absence_fine - att.excess_leave_fine %}
+                <tr><td>بیمه (۷٪):</td><td>{{ ((p.insurance or 0)|float * factor)|currency }}</td></tr>
+                <tr><td>مالیات:</td><td>{{ ((p.tax or 0)|float * factor)|currency }}</td></tr>
+                <tr><td>قسط وام:</td><td>{{ ((p.loan_deduction or 0)|float * factor)|currency }}</td></tr>
+                {% if att.absence_fine > 0 %}<tr><td>‌جریمه غیبت ({{ att.absent }} روز):</td><td>{{ (att.absence_fine * factor)|currency }}</td></tr>{% endif %}
+                {% if att.excess_leave_fine > 0 %}<tr><td>مرخصی بیش از سقف:</td><td>{{ (att.excess_leave_fine * factor)|currency }}</td></tr>{% endif %}
+                {% if other_fines > 0 %}<tr><td>سایر کسورات:</td><td>{{ (other_fines * factor)|currency }}</td></tr>{% endif %}
+                <tr style="font-weight:700;border-top:1px solid #999"><td>جمع:</td><td>({{ (total_ded * factor)|currency }})</td></tr>
+            </table>
+        </div>
+        <div class="summary-box box-net">
+            <h4 style="color:#fff">خالص پرداختی</h4>
+            <table><tr><td style="font-size:11pt;font-weight:900;text-align:center" colspan="2">{{ ((p.net_pay or 0)|float * factor)|currency }}</td></tr></table>
+        </div>
+    </div>
+
+    <div class="signature">
+        <div><div class="line">امضای کارگر</div></div>
+        <div><div class="line">امضا و مهر شرکت</div></div>
+    </div>
+</div>
+<div class="no-print" style="text-align:center">
+    <button class="btn-print" onclick="window.print()" style="display:inline-block;padding:6px 20px;margin:0 4px;font-family:Tahoma,sans-serif;font-size:10pt;border:none;border-radius:4px;cursor:pointer;background:#0d6efd;color:#fff">🖨 چاپ / PDF</button>
+    <a class="btn-back" href="{{ url_for('hr.payslips') }}" style="display:inline-block;padding:6px 20px;margin:0 4px;font-family:Tahoma,sans-serif;font-size:10pt;border:none;border-radius:4px;cursor:pointer;text-decoration:none;background:#6c757d;color:#fff">بازگشت</a>
+</div>
+</body>
+</html>

@@ -92,6 +92,7 @@
                 </div>
                 <form action="{{ url_for('dashboard.run_valuation') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از صدور سند حسابداری ارزیابی ارزش منصفانه گله اطمینان دارید؟');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <label class="form-label small fw-bold">قیمت جدید هر کیلوگرم (تومان):</label>
                     <div class="input-group">
                         <input type="text" name="market_price" class="form-control fw-bold"
@@ -118,6 +119,7 @@
                 </div>
                 <form action="{{ url_for('dashboard.sync_inventory') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از تطبیق انبار و صدور سند تعدیل اطمینان دارید؟')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-secondary w-100 fw-bold py-2">شروع تطبیق و صدور سند</button>
                 </form>
             </div>
@@ -196,6 +198,7 @@
                 </div>
                 <form action="{{ url_for('dashboard.issue_opening_entry') }}" method="POST" class="mt-auto"
                       onsubmit="return confirm('آیا از صدور سند افتتاحیه سال جدید اطمینان دارید؟')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-success w-100 fw-bold py-2">صدور سند افتتاحیه سال جدید</button>
                 </form>
             </div>

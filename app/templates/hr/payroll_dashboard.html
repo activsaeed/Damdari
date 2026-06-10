@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="fa-solid fa-chart-line text-info"></i> داشبورد حقوق و دستمزد</h2>
+    <div>
+        <a href="{{ url_for('hr.payslips') }}" class="btn btn-outline-success btn-sm"><i class="fa-solid fa-file-invoice"></i> فیش‌ها</a>
+        <a href="{{ url_for('hr.loans') }}" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-hand-holding-dollar"></i> وام‌ها</a>
+    </div>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card border-0 shadow-sm text-white bg-primary"><div class="card-body text-center py-3"><h6>کل ناخالص</h6><h3>{{ total_gross|currency }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm text-white bg-success"><div class="card-body text-center py-3"><h6>کل خالص</h6><h3>{{ total_net|currency }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm text-white bg-warning"><div class="card-body text-center py-3"><h6>کل بیمه (کارگر)</h6><h3>{{ total_insurance|currency }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm text-white bg-danger"><div class="card-body text-center py-3"><h6>کل مالیات</h6><h3>{{ total_tax|currency }}</h3></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center py-2"><h6 class="text-muted">تعداد کارگران</h6><h3>{{ worker_count }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center py-2"><h6 class="text-muted">فیش‌های پرداخت شده</h6><h3 class="text-success">{{ paid_count }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center py-2"><h6 class="text-muted">فیش‌های پرداخت نشده</h6><h3 class="text-warning">{{ unpaid_count }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center py-2"><h6 class="text-muted">مجموع پرداختی</h6><h3 class="text-info">{{ total_paid_amount|currency }}</h3></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2"><span class="fw-bold small"><i class="fa-solid fa-chart-line text-primary"></i> روند ۶ ماه اخیر (ناخالص / خالص)</span></div>
+            <div class="card-body"><canvas id="trendChart" height="220"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2"><span class="fw-bold small"><i class="fa-solid fa-chart-pie text-success"></i> توزیع مزایا (میانگین)</span></div>
+            <div class="card-body"><canvas id="benefitsChart" height="220"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2"><span class="fw-bold small"><i class="fa-solid fa-hand-holding-dollar text-warning"></i> وام‌های فعال</span></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 small">
+                        <thead><tr><th>کارگر</th><th>مبلغ</th><th>قسط</th><th>پیشرفت</th></tr></thead>
+                        <tbody>
+                            {% for l in active_loans %}
+                            <tr>
+                                <td>{{ l.worker.name }}</td>
+                                <td dir="ltr">{{ l.amount|currency }}</td>
+                                <td dir="ltr">{{ l.installment_amount|currency }}</td>
+                                <td style="min-width:100px">
+                                    {% set pct = (l.installment_amount / l.amount * 100)|round if l.amount > 0 else 0 %}
+                                    <div class="progress" style="height:6px">
+                                        {% set pct_val = (l.installment_amount / l.amount * 100)|round if l.amount > 0 else 0 %}
+                                        <div class="progress-bar bg-warning" style="width:{{ pct_val }}%"></div>
+                                    </div>
+                                    <small class="text-muted">{{ pct_val }}%</small>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-muted text-center py-3">هیچ وام فعالی وجود ندارد</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2"><span class="fw-bold small"><i class="fa-solid fa-calculator text-danger"></i> خلاصه وضعیت</span></div>
+            <div class="card-body">
+                <div class="row g-2 small">
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">میانگین پایه حقوق:</span><br><strong>{{ avg_base|currency }}</strong></div></div>
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">میانگین حق مسکن:</span><br><strong>{{ avg_housing|currency }}</strong></div></div>
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">میانگین بن و خواربار:</span><br><strong>{{ avg_food|currency }}</strong></div></div>
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">میانگین حق اولاد:</span><br><strong>{{ avg_family|currency }}</strong></div></div>
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">میانگین اضافه‌کاری:</span><br><strong>{{ avg_overtime|currency }}</strong></div></div>
+                    <div class="col-6"><div class="border rounded p-2"><span class="text-muted">جمع اقساط وام فعال:</span><br><strong class="text-warning">{{ total_loan_debt|currency }}</strong></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var monthlyTrend = {{ monthly_trend_json|safe }};
+new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+        labels: monthlyTrend.map(function(t) { return t.label; }),
+        datasets: [
+            { label: 'ناخالص', data: monthlyTrend.map(function(t) { return t.gross; }), borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.3, fill: true },
+            { label: 'خالص', data: monthlyTrend.map(function(t) { return t.net; }), borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', tension: 0.3, fill: true }
+        ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return v.toLocaleString('en-US'); } } } } }
+});
+new Chart(document.getElementById('benefitsChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['پایه', 'مسکن', 'بن', 'اولاد', 'اضافه‌کاری'],
+        datasets: [{
+            data: [{{ avg_base }}, {{ avg_housing }}, {{ avg_food }}, {{ avg_family }}, {{ avg_overtime }}],
+            backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1']
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } }
+});
+</script>
+{% endblock %}

@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fa-solid fa-users text-primary"></i> پنل پرسنل و وظایف</h2>
+    <h2><i class="fa-solid fa-users text-primary"></i> وظایف و مدیریت پرسنل</h2>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
@@ -54,100 +54,63 @@
     </div>
     {% endif %}
 
-    <!-- ستون موبایلی: وظایف امروز + گزارش سریع خطر (برای همه نمایش داده میشود) -->
+    <!-- ستون اطلاعات و آمار سریع -->
     <div class="{% if current_user.role == 'مدیر' %}col-lg-5{% else %}col-lg-8 mx-auto{% endif %}">
         
-        <div class="card border-0 shadow-sm mb-4 bg-danger bg-opacity-10 border border-danger">
-            <div class="card-body">
-                <h6 class="fw-bold text-danger mb-3"><i class="fa-solid fa-triangle-exclamation"></i> گزارش سریع مشکل دام (به دامپزشک)</h6>
-                <form id="quickReportForm" action="{{ url_for('hr.quick_report') }}" method="POST">
-                    
-                    <button class="btn btn-success w-100 mb-4 fw-bold btn-lg shadow-sm" data-bs-toggle="modal" data-bs-target="#quickWeightModal"><i class="fa-solid fa-scale-balanced"></i> ثبت سریع وزن دام</button>
-
-                    <div class="row g-2 text-center mb-3">
-                        <div class="col-4">
-                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue1" value="لنگش شدید" autocomplete="off" required>
-                            <label class="btn btn-outline-danger w-100 py-3" for="issue1"><i class="fa-solid fa-crutch fa-2x mb-1 d-block"></i> لنگش</label>
-                        </div>
-                        <div class="col-4">
-                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue2" value="غذا نخوردن/بی‌حالی" autocomplete="off">
-                            <label class="btn btn-outline-danger w-100 py-3" for="issue2"><i class="fa-solid fa-bed fa-2x mb-1 d-block"></i> بی‌حالی</label>
-                        </div>
-                        <div class="col-4">
-                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue3" value="سقط / خونریزی" autocomplete="off">
-                            <label class="btn btn-outline-danger w-100 py-3" for="issue3"><i class="fa-solid fa-droplet fa-2x mb-1 d-block"></i> خونریزی</label>
-                        </div>
-                        <!-- دو دکمه جدید (درخواست 10) -->
-                        <div class="col-6 mt-2">
-                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue4" value="کمبود انبار" autocomplete="off">
-                            <label class="btn btn-outline-warning w-100 py-3 text-dark" for="issue4"><i class="fa-solid fa-box-open fa-2x mb-1 d-block"></i> کمبود انبار</label>
-                        </div>
-                        <div class="col-6 mt-2">
-                            <input type="radio" class="btn-check issue-radio" name="issue_type" id="issue5" value="سایر موارد" autocomplete="off">
-                            <label class="btn btn-outline-secondary w-100 py-3" for="issue5"><i class="fa-solid fa-comment-dots fa-2x mb-1 d-block"></i> سایر موارد</label>
-                        </div>
-
+        <div class="row g-3 mb-3">
+            <div class="col-6">
+                <div class="card border-0 shadow-sm bg-primary text-white">
+                    <div class="card-body text-center py-3">
+                        <i class="fa-solid fa-users fa-2x mb-1"></i>
+                        <h5 class="mb-0">{{ workers|length }}</h5>
+                        <small>کل پرسنل</small>
                     </div>
-
-                    <!-- بخش پلاک (فقط برای بیماری نشان داده میشود) همراه با اسکنر -->
-                    <div id="sheepTagSection">
-                        <label class="fw-bold mb-1 small text-muted">شماره پلاک دام:</label>
-                        <div class="input-group mb-3">
-                            <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-qrcode"></i> اسکن</button>
-                            <input type="text" id="earTagInput" name="ear_tag" class="form-control form-control-lg" placeholder="اسکن یا تایپ پلاک...">
-                        </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card border-0 shadow-sm bg-success text-white">
+                    <div class="card-body text-center py-3">
+                        <i class="fa-solid fa-user-check fa-2x mb-1"></i>
+                        <h5 class="mb-0">{{ workers|selectattr('status', 'equalto', 'فعال')|list|length }}</h5>
+                        <small>فعال</small>
                     </div>
-
-                    <!-- کادر کمبود انبار -->
-                    <div id="inventorySection" class="mb-3 p-3 bg-light rounded border" style="display: none;">
-                        <label class="fw-bold mb-1 small">چه چیزی تمام شده؟</label>
-                        <select name="inventory_item" class="form-select mb-2">
-                            <option value="">انتخاب از لیست موجود...</option>
-                            <option value="یونجه">یونجه</option>
-                            <option value="جو">جو</option>
-                            <option value="کنسانتره">کنسانتره</option>
-                        </select>
-                        <input type="text" name="custom_inventory" class="form-control" placeholder="یا نام آن را تایپ کنید...">
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card border-0 shadow-sm bg-warning text-dark">
+                    <div class="card-body text-center py-3">
+                        <i class="fa-solid fa-user-clock fa-2x mb-1"></i>
+                        <h5 class="mb-0">{{ workers|selectattr('status', 'equalto', 'مرخصی')|list|length }}</h5>
+                        <small>مرخصی</small>
                     </div>
-
-                    <!-- کادر سایر موارد -->
-                    <div id="otherSection" class="mb-3" style="display: none;">
-                        <label class="fw-bold mb-1 small">توضیح مشکل:</label>
-                        <textarea name="custom_desc" class="form-control" rows="2" placeholder="مشکل را اینجا بنویسید..."></textarea>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card border-0 shadow-sm bg-info text-white">
+                    <div class="card-body text-center py-3">
+                        <i class="fa-solid fa-calendar-plus fa-2x mb-1"></i>
+                        <h5 class="mb-0">{{ today_str|jalali }}</h5>
+                        <small>تاریخ امروز</small>
                     </div>
-
-                    <button type="submit" class="btn btn-danger w-100 fw-bold btn-lg shadow-sm">ارسال گزارش</button>
-                </form>
+                </div>
             </div>
         </div>
 
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                <span class="fw-bold fs-5"><i class="fa-solid fa-list-check text-success"></i> چک‌لیست وظایف امروز</span>
-                {% if current_user.role == 'مدیر' %}
-                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#newTaskModal"><i class="fa-solid fa-plus"></i> تسک جدید</button>
-                {% endif %}
+                <span class="fw-bold fs-5"><i class="fa-solid fa-bolt text-warning"></i> دسترسی سریع</span>
             </div>
-            <div class="card-body p-0">
-                <ul class="list-group list-group-flush">
-                    {% for task in tasks %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-3 {% if task.is_done %}bg-light opacity-50{% endif %}">
-                        <div>
-                            <div class="fw-bold fs-5 mb-1 {% if task.is_done %}text-decoration-line-through text-muted{% endif %}">{{ task.description }}</div>
-                            <small class="text-primary fw-bold"><i class="fa-solid fa-user me-1"></i> مسئول: {{ task.worker.name }}</small>
-                        </div>
-                        <form method="POST" action="{{ url_for('hr.toggle_task', task_id=task.id) }}" style="display:inline">
-                            <button type="submit" class="btn btn-lg {% if task.is_done %}btn-success{% else %}btn-outline-secondary{% endif %} rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
-                                <i class="fa-solid fa-check fs-4"></i>
-                            </button>
-                        </form>
-                    </li>
-                    {% else %}
-                    <li class="list-group-item text-center py-5 text-muted">وظیفه‌ای برای امروز یافت نشد.</li>
-                    {% endfor %}
-                </ul>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-primary text-start fw-bold"><i class="fa-solid fa-clipboard-user me-2"></i> ثبت حضور و غیاب روزانه</a>
+                    <a href="{{ url_for('hr.attendance_calendar') }}" class="btn btn-outline-info text-start fw-bold"><i class="fa-solid fa-calendar-days me-2"></i> تقویم حضور و غیاب</a>
+                    <a href="{{ url_for('hr.payslips') }}" class="btn btn-outline-success text-start fw-bold"><i class="fa-solid fa-file-invoice-dollar me-2"></i> مدیریت حقوق و دستمزد</a>
+                    <a href="{{ url_for('hr.loans') }}" class="btn btn-outline-warning text-start fw-bold"><i class="fa-solid fa-hand-holding-dollar me-2"></i> گزارش وام‌ها و مساعده‌ها</a>
+                    <a href="{{ url_for('hr.insurance_report') }}" class="btn btn-outline-secondary text-start fw-bold"><i class="fa-solid fa-shield me-2"></i> گزارش بیمه پرسنل</a>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
 
@@ -159,6 +122,7 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white"><h5 class="modal-title"><i class="fa-solid fa-user-plus"></i> تشکیل پرونده پرسنلی</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.add_worker') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     
                     <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">۱. اطلاعات هویتی و تماس</h6>
@@ -201,77 +165,7 @@
         </div>
     </div>
 </div>
-
-
-<div class="modal fade" id="newTaskModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">وظیفه جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <form action="{{ url_for('hr.add_task') }}" method="POST">
-                <div class="modal-body">
-                    <select name="worker_id" class="form-select mb-3">{% for w in workers %}<option value="{{ w.id }}">{{ w.name }} ({{ w.role }})</option>{% endfor %}</select>
-                    <textarea name="description" class="form-control" rows="3" placeholder="شرح وظیفه..." required></textarea>
-                </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-success w-100">ثبت</button></div>
-            </form>
-        </div>
-    </div>
-</div>
 {% endif %}
-
-<script>
-    const reportForm = document.getElementById('quickReportForm');
-    if(reportForm) {
-        reportForm.addEventListener('submit', function(e) {
-            if (!navigator.onLine) {
-                e.preventDefault(); 
-                const formData = new FormData(reportForm);
-                const report = { ear_tag: formData.get('ear_tag'), issue_type: formData.get('issue_type'), timestamp: new Date().getTime() };
-                let offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
-                offlineReports.push(report);
-                localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
-                alert("شما آفلاین هستید! گزارش در گوشی ذخیره شد و به محض اتصال به اینترنت ارسال می‌شود.");
-                reportForm.reset();
-            }
-        });
-    }
-
-    window.addEventListener('online', function() {
-        let offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
-        if(offlineReports.length > 0) {
-            alert("اینترنت وصل شد! گزارش‌های آفلاین در پس‌زمینه ارسال خواهند شد.");
-            localStorage.removeItem('offlineReports');
-        }
-    });
-</script>
-
-<script src="https://unpkg.com/html5-qrcode"></script>
-<script>
-    // کنترل نمایش فرم ها بر اساس نوع گزارش
-    document.querySelectorAll('.issue-radio').forEach(radio => {
-        radio.addEventListener('change', function() {
-            document.getElementById('sheepTagSection').style.display = (this.value === 'کمبود انبار' || this.value === 'سایر موارد') ? 'none' : 'block';
-            document.getElementById('inventorySection').style.display = (this.value === 'کمبود انبار') ? 'block' : 'none';
-            document.getElementById('otherSection').style.display = (this.value === 'سایر موارد') ? 'block' : 'none';
-            
-            document.getElementById('earTagInput').required = (this.value !== 'کمبود انبار' && this.value !== 'سایر موارد');
-        });
-    });
-
-    // اسکنر دوربین برای موبایل کارگر
-    document.getElementById('qrScannerModal').addEventListener('shown.bs.modal', function () {
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-        html5QrcodeScanner.render(function(decodedText) {
-            let match = decodedText.match(/پلاک:\s*([^\n]+)/);
-            if(match) {
-                document.getElementById('earTagInput').value = match[1];
-                html5QrcodeScanner.clear();
-                bootstrap.Modal.getInstance(document.getElementById('qrScannerModal')).hide();
-            }
-        });
-    });
-</script>
-
 
 <script>
     function formatCurrency(input, hiddenFieldId) { 
@@ -281,11 +175,5 @@
         else input.value = ""; 
     }
 </script>
-
-
-<!-- به یاد داشته باشید مودال qrScannerModal را هم در انتهای فایل بگذارید -->
-<div class="modal fade" id="qrScannerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">اسکن پلاک با دوربین گوشی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><div id="reader"></div></div></div></div></div>
-
-<div class="modal fade" id="quickWeightModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-bolt text-warning"></i> ثبت سریع وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.quick_weight') }}" method="POST"><div class="modal-body"><div class="input-group mb-3"><button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-camera"></i></button><input type="text" name="ear_tag" class="form-control form-control-lg text-center fw-bold" placeholder="اسکن یا تایپ پلاک" required></div><div class="mb-3"><label>وزن جدید (کیلوگرم)</label><input type="number" step="0.1" name="weight" class="form-control form-control-lg text-center text-success fw-bold" required></div></div><div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ثبت</button></div></form></div></div></div>
 
 {% endblock %}

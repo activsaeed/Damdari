@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="fa-solid fa-clipboard-user text-primary"></i> حضور و غیاب روزانه</h2>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="{{ url_for('hr.attendance_calendar') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-calendar-days"></i> تقویم ماهانه</a>
+        <form method="GET" class="d-flex gap-2 align-items-center">
+            <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date }}" onchange="this.form.submit()">
+        </form>
+    </div>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-bold small">گزارش روز: <span class="text-primary">{{ selected_date }}</span></span>
+        <span class="small text-muted">برای ثبت حضور، روی دکمه سبز هر ردیف کلیک کنید</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0 small">
+                <thead class="table-dark">
+                    <tr><th>پرسنل</th><th>وضعیت</th><th>اضافه‌کاری (ساعت)</th><th>شب‌کاری (ساعت)</th><th>جریمه (تومان)</th><th>عملیات</th></tr>
+                </thead>
+                <tbody>
+                    {% for w in workers %}
+                    {% set rec = records|selectattr('worker_id','eq',w.id)|first %}
+                    <tr>
+                        <td class="fw-bold">{{ w.name }}</td>
+                        <td>
+                            {% if rec %}
+                            <span class="badge {% if rec.status == 'حاضر' %}bg-success{% elif rec.status == 'غایب' %}bg-danger{% elif rec.status == 'مرخصی' %}bg-warning text-dark{% else %}bg-info{% endif %}">{{ rec.status }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">ثبت نشده</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ rec.overtime_hours if rec else '-' }}</td>
+                        <td>{{ rec.night_shift_hours if rec else '-' }}</td>
+                        <td>{{ (rec.fine_amount|currency) if rec and rec.fine_amount > 0 else '-' }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success py-0 px-2" data-bs-toggle="modal" data-bs-target="#attModal{{ w.id }}">{{ 'ویرایش' if rec else 'ثبت' }}</button>
+                        </td>
+                    </tr>
+                    <div class="modal fade" id="attModal{{ w.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-sm">
+                            <div class="modal-content">
+                                <div class="modal-header"><h6 class="modal-title">{{ w.name }} - {{ selected_date }}</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                <form class="attendance-form" data-worker="{{ w.id }}" data-name="{{ w.name }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="worker_id" value="{{ w.id }}">
+                                    <input type="hidden" name="date" value="{{ selected_date }}">
+                                    <div class="modal-body small">
+                                        <div class="mb-2"><label class="form-label fw-bold">وضعیت</label>
+                                            <select name="status" class="form-select form-select-sm">
+                                                <option value="حاضر" {% if rec and rec.status == 'حاضر' %}selected{% endif %}>حاضر</option>
+                                                <option value="غایب" {% if rec and rec.status == 'غایب' %}selected{% endif %}>غایب</option>
+                                                <option value="مرخصی" {% if rec and rec.status == 'مرخصی' %}selected{% endif %}>مرخصی</option>
+                                                <option value="ماموریت" {% if rec and rec.status == 'ماموریت' %}selected{% endif %}>ماموریت</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-2"><label class="form-label fw-bold">اضافه‌کاری (ساعت)</label><input type="number" step="0.5" name="overtime_hours" class="form-control form-control-sm" value="{{ rec.overtime_hours if rec else 0 }}"></div>
+                                        <div class="mb-2"><label class="form-label fw-bold">شب‌کاری (ساعت)</label><input type="number" step="0.5" name="night_shift_hours" class="form-control form-control-sm" value="{{ rec.night_shift_hours if rec else 0 }}"></div>
+                                        <div class="mb-2"><label class="form-label fw-bold">جریمه (تومان)</label><input type="text" class="form-control form-control-sm" dir="ltr" onkeyup="formatCurrency(this, 'raw_f{{ w.id }}')"><input type="hidden" name="fine_amount" id="raw_f{{ w.id }}" value="{{ rec.fine_amount if rec else 0 }}"></div>
+                                        <div class="mb-2"><label class="form-label fw-bold">توضیحات</label><input type="text" name="notes" class="form-control form-control-sm" value="{{ rec.notes if rec else '' }}"></div>
+                                    </div>
+                                    <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ذخیره</button></div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+function formatCurrency(input, hiddenFieldId) {
+    let value = input.value.replace(/\D/g, "");
+    document.getElementById(hiddenFieldId).value = value;
+    if (value) input.value = Number(value).toLocaleString('en-US');
+    else input.value = "";
+}
+sessionStorage.setItem('attScrollY', window.scrollY);
+document.querySelectorAll('.attendance-form').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var btn = this.querySelector('button[type="submit"]');
+        btn.disabled = true; btn.textContent = 'در حال ذخیره...';
+        var formData = new FormData(this);
+        fetch('{{ url_for("hr.add_attendance") }}', { method:'POST', body:formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var modalEl = form.closest('.modal');
+                var modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+                sessionStorage.setItem('attScrollY', window.scrollY);
+                location.reload();
+            } else {
+                alert('خطا: ' + (data.error || 'نامشخص'));
+                btn.disabled = false; btn.textContent = 'ذخیره';
+            }
+        })
+        .catch(function() {
+            alert('خطا در ارتباط با سرور');
+            btn.disabled = false; btn.textContent = 'ذخیره';
+        });
+    });
+});
+var savedY = sessionStorage.getItem('attScrollY');
+if (savedY) { sessionStorage.removeItem('attScrollY'); setTimeout(function() { window.scrollTo(0, parseInt(savedY)); }, 100); }
+</script>
+{% endblock %}

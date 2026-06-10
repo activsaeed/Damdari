@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-dna text-danger"></i> مدیریت تولیدمثل و اصلاح نژاد</h2>
+    <div>
+        <span class="badge bg-primary fs-6 me-1">{{ total_rams }} قوچ آماده</span>
+        <span class="badge bg-success fs-6">{{ total_ewes }} میش آماده</span>
+        <a href="{{ url_for('livestock.index') }}" class="btn btn-outline-secondary shadow-sm ms-2"><i class="fa-solid fa-arrow-right"></i></a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="alert alert-info border-0 shadow-sm mb-4 border-end border-info border-5 d-flex align-items-center">
+    <i class="fa-solid fa-robot fs-3 me-3"></i>
+    <div class="small">
+        <strong>تحلیل هوشمند:</strong> این صفحه دو بخش داره: <b>۱) رتبه‌بندی ژنتیکی</b> (بهترین پدرها و مادرهای گله بر اساس سابقه) و <b>۲) وضعیت فعلی</b> (دام‌های آماده جفت‌گیری الآن). نسبت پیشنهادی: ۱ قوچ به ازای هر ۲۰ میش. میانگین وزن قوچ‌ها: <b>{{ avg_weight_rams }} کیلو</b> — میانگین وزن میش‌ها: <b>{{ avg_weight_ewes }} کیلو</b>.
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- برترین قوچ ها -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-success border-4">
+            <div class="card-header bg-white fw-bold py-3 text-success"><i class="fa-solid fa-mars"></i> ۵ قوچ برتر گله (نرخ چندقلوزایی بالا)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for item in top_rams %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ item.ram.ear_tag }} <span class="badge bg-dark fs-6 ms-2">{{ item.ram.breed or 'نامشخص' }}</span></h5>
+                            <small class="text-muted"><i class="fa-solid fa-baby"></i> کل فرزندان: {{ item.offsprings }} سر</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-success rounded-pill px-3 py-2 mb-1">تولید دوقلو: {{ item.twins }} بار</span><br>
+                            <a href="{{ url_for('livestock.profile', id=item.ram.id) }}" class="btn btn-sm btn-outline-success w-100">بررسی ژنتیک</a>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted py-5">هنوز دیتای کافی ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <!-- برترین میش ها -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-top border-primary border-4">
+            <div class="card-header bg-white fw-bold py-3 text-primary"><i class="fa-solid fa-venus"></i> ۵ میش برتر گله (بالاترین زایش موفق)</div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for item in top_ewes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ item.ewe.ear_tag }} <span class="badge bg-dark fs-6 ms-2">{{ item.ewe.breed or 'نامشخص' }}</span></h5>
+                            <small class="text-muted"><i class="fa-solid fa-check-circle text-success"></i> زایش‌های موفق: {{ item.successful_births }} بار</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-info text-dark rounded-pill px-3 py-2 mb-1">سن: {{ (today_str[:4]|int - item.ewe.birth_date.year) if item.ewe.birth_date else 'نامشخص' }} سال</span><br>
+                            <a href="{{ url_for('livestock.profile', id=item.ewe.id) }}" class="btn btn-sm btn-outline-primary w-100">بررسی پرونده</a>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted py-5">هنوز دیتای کافی ثبت نشده است.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-primary border-3">
+            <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-mars"></i> قوچ‌های آماده جفت‌گیری</span>
+                <span class="badge bg-primary fs-6">{{ total_rams }}</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover mb-0 text-center align-middle">
+                    <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>وزن</th><th>سن</th><th>بهاربند</th></tr></thead>
+                    <tbody>{% for ram in rams %}<tr><td class="fw-bold"><a href="{{ url_for('livestock.profile', id=ram.id) }}" class="text-decoration-none">{{ ram.ear_tag }}</a></td><td>{{ ram.breed or '-' }}</td><td>{{ ram.weight|round|int }} kg</td><td>{{ ((today - ram.birth_date).days // 30) if ram.birth_date else '?' }} ماه</td><td>{{ ram.pen.name if ram.pen else '-' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted py-4">قوچی یافت نشد</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-top border-success border-3">
+            <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-venus"></i> میش‌های آماده جفت‌گیری</span>
+                <span class="badge bg-success fs-6">{{ total_ewes }}</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover mb-0 text-center align-middle">
+                    <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>وزن</th><th>سن</th><th>بهاربند</th></tr></thead>
+                    <tbody>{% for ewe in ewes %}<tr><td class="fw-bold"><a href="{{ url_for('livestock.profile', id=ewe.id) }}" class="text-decoration-none">{{ ewe.ear_tag }}</a></td><td>{{ ewe.breed or '-' }}</td><td>{{ ewe.weight|round|int }} kg</td><td>{{ ((today - ewe.birth_date).days // 30) if ewe.birth_date else '?' }} ماه</td><td>{{ ewe.pen.name if ewe.pen else '-' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted py-4">میشی یافت نشد</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

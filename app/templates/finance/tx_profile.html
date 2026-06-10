@@ -58,6 +58,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش فاکتور</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('finance.edit_tx', id=t.id) }}" method="POST" enctype="multipart/form-data" onsubmit="return confirm('آیا از ثبت تغییرات اطمینان دارید؟');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
                         <div class="col-md-6"><label class="form-label">نوع</label><select name="t_type" class="form-select"><option value="درآمد" {% if t.t_type=='درآمد' %}selected{% endif %}>درآمد</option><option value="هزینه" {% if t.t_type=='هزینه' %}selected{% endif %}>هزینه</option></select></div>

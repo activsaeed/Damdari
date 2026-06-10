@@ -67,7 +67,8 @@
             <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                 <ul class="nav nav-tabs" id="hrTab">
                     <li class="nav-item"><button class="nav-link active fw-bold text-dark" data-bs-toggle="tab" data-bs-target="#timeline"><i class="fa-solid fa-timeline text-primary me-1"></i> خط خدمت</button></li>
-                    <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#loans"><i class="fa-solid fa-hand-holding-dollar me-1"></i> وام و مساعده</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#contracts"><i class="fa-solid fa-file-signature me-1"></i> قراردادها</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold text-info" data-bs-toggle="tab" data-bs-target="#loans"><i class="fa-solid fa-hand-holding-dollar me-1"></i> وام و مساعده</button></li>
                     <li class="nav-item"><button class="nav-link fw-bold text-danger" data-bs-toggle="tab" data-bs-target="#documents"><i class="fa-solid fa-folder-open me-1"></i> بایگانی مدارک</button></li>
                 </ul>
             </div>
@@ -84,7 +85,7 @@
                             {% for e in events %}
                             <div class="mb-4 position-relative ps-4">
                                 {% set color = 'primary' %}
-                                {% if e.event_type == 'تشویق' %}{% set color = 'success' %}{% elif e.event_type == 'جریمه' or e.event_type == 'غیبت' %}{% set color = 'danger' %}{% elif e.event_type == 'مالی' %}{% set color = 'warning' %}{% endif %}
+                                {% if e.event_type == 'تشویق' %}{% set color = 'success' %}{% elif e.event_type == 'جریمه' or e.event_type == 'غیبت' %}{% set color = 'danger' %}{% elif e.event_type == 'مالی' %}{% set color = 'warning' %}{% elif e.event_type == 'قرارداد' or e.event_type == 'پایان کار' %}{% set color = 'info' %}{% endif %}
                                 <div class="position-absolute bg-{{ color }} text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 32px; height: 32px; left: -17px; top: 0;"><i class="fa-solid fa-check small"></i></div>
                                 <div class="bg-light p-3 rounded border">
                                     <div class="d-flex justify-content-between align-items-center mb-1"><h6 class="fw-bold mb-0 text-{{ color }}">{{ e.event_type }}</h6><small class="text-muted fw-bold">{{ e.event_date|jalali }}</small></div>
@@ -92,6 +93,36 @@
                                 </div>
                             </div>
                             {% else %}<p class="text-muted ms-4">رویدادی ثبت نشده است.</p>{% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- قراردادها -->
+                    <div class="tab-pane fade p-3" id="contracts">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="text-muted">قراردادهای کاری</h5>
+                            <button class="btn btn-sm btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addContractModal"><i class="fa-solid fa-plus"></i> قرارداد جدید</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center align-middle">
+                                <thead class="table-light"><tr><th>نوع</th><th>شروع</th><th>پایان</th><th>حقوق ماهانه</th><th>توضیحات</th><th>عملیات</th></tr></thead>
+                                <tbody>
+                                    {% for c in contracts %}
+                                    <tr>
+                                        <td><span class="badge {% if c.contract_type == 'دائم' %}bg-success{% elif c.contract_type == 'موقت' %}bg-warning text-dark{% elif c.contract_type == 'فصلی' %}bg-info text-dark{% else %}bg-secondary{% endif %}">{{ c.contract_type }}</span></td>
+                                        <td>{{ c.start_date|jalali }}</td>
+                                        <td>{{ c.end_date|jalali if c.end_date else '—' }}</td>
+                                        <td class="fw-bold">{{ "{:,.0f}".format(c.monthly_salary) if c.monthly_salary else '-' }} ت</td>
+                                        <td class="small">{{ c.description or '-' }}</td>
+                                        <td>
+                                            <form action="{{ url_for('hr.delete_contract', id=c.id) }}" method="POST" onsubmit="return confirm('حذف قرارداد {{ c.contract_type }}؟')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button class="btn btn-sm btn-outline-danger py-0 px-2"><i class="fa-solid fa-trash"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% else %}<tr><td colspan="6" class="text-center py-4 text-muted">قراردادی ثبت نشده است.</td></tr>{% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -103,16 +134,22 @@
                         </div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm text-center align-middle">
-                                <thead class="table-light"><tr><th>تاریخ</th><th>نوع</th><th>مبلغ کل</th><th>قسط ماهانه</th><th>توضیحات</th><th>سند</th></tr></thead>
+                                <thead class="table-light"><tr><th>تاریخ</th><th>نوع</th><th>مبلغ کل</th><th>قسط ماهانه</th><th>توضیحات</th><th>عملیات</th></tr></thead>
                                 <tbody>
                                     {% for l in loans %}
                                     <tr>
                                         <td class="fw-bold text-primary">{{ l.issue_date|jalali }}</td><td><span class="badge bg-success">{{ l.loan_type }}</span></td>
                                         <td class="fw-bold">{{ "{:,.0f}".format(l.amount) }} ت</td><td>{{ "{:,.0f}".format(l.installment_amount) if l.installment_amount else '-' }}</td>
                                         <td class="small">{{ l.description }}</td>
-                                        <td>{% if l.document_image %}<a href="{{ url_for('static', filename=l.document_image) }}" target="_blank" class="btn btn-sm btn-info text-white"><i class="fa-solid fa-image"></i></a>{% else %}-{% endif %}</td>
+                                        <td>
+                                            {% if l.document_image %}<a href="{{ url_for('static', filename=l.document_image) }}" target="_blank" class="btn btn-sm btn-info text-white"><i class="fa-solid fa-image"></i></a>{% endif %}
+                                            <form action="{{ url_for('hr.delete_loan', id=l.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف {{ l.loan_type }} {{ "{:,.0f}".format(l.amount) }} تومان؟')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button class="btn btn-sm btn-outline-danger py-0 px-2"><i class="fa-solid fa-trash"></i></button>
+                                            </form>
+                                        </td>
                                     </tr>
-                                    {% else %}<tr><td colspan="6" class="text-center py-4 text-muted">سابقه وامی وجود ندارد.</td></tr>{% endfor %}
+                                    {% else %}<tr><td colspan="7" class="text-center py-4 text-muted">سابقه وامی وجود ندارد.</td></tr>{% endfor %}
                                 </tbody>
                             </table>
                         </div>
@@ -166,6 +203,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش پرونده پرسنلی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.edit_worker', id=worker.id) }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">۱. اطلاعات هویتی و تماس</h6>
                     <div class="row g-3 mb-4">
@@ -204,12 +242,37 @@
     </div>
 </div>
 
+<!-- Modal ثبت قرارداد جدید -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title text-primary"><i class="fa-solid fa-file-signature"></i> قرارداد جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.add_contract', id=worker.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label>نوع قرارداد</label><select name="contract_type" class="form-select"><option value="دائم">دائم</option><option value="موقت">موقت</option><option value="فصلی">فصلی</option><option value="پروژه‌ای">پروژه‌ای</option></select></div>
+                        <div class="col-6"><label>حقوق ماهانه (تومان)</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_contract_salary')"><input type="hidden" name="monthly_salary" id="raw_contract_salary"></div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label>تاریخ شروع (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="start_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
+                        <div class="col-6"><label>تاریخ پایان (شمسی) — اختیاری</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="end_date" class="gregorian-hidden-field"></div>
+                    </div>
+                    <div class="mb-3"><label>توضیحات</label><input type="text" name="description" class="form-control" placeholder="شرایط خاص قرارداد..."></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary w-100 fw-bold">ثبت قرارداد</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Modal ثبت رویداد خط خدمت -->
 <div class="modal fade" id="addEventModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">ثبت رویداد جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.add_event', id=worker.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3"><label>تاریخ (شمسی)</label><input type="text" class="form-control jalali-datepicker" required><input type="hidden" name="event_date" class="gregorian-hidden-field" value="{{ today_str }}"></div>
                     <div class="mb-3"><label>نوع رویداد</label><select name="event_type" class="form-select"><option value="عادی">گزارش کار عادی</option><option value="تشویق">تشویق / پاداش</option><option value="جریمه">جریمه / توبیخ</option><option value="غیبت">غیبت غیرموجه</option></select></div>
@@ -227,6 +290,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title text-success"><i class="fa-solid fa-money-bill-wave"></i> پرداخت وام / مساعده</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('hr.add_loan', id=worker.id) }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="alert alert-warning small">مبلغ این وام به صورت اتوماتیک در دفتر کل (هزینه‌ها) ثبت شده و اقساط آن در زمان صدور فیش حقوقی کسر خواهد شد.</div>
                     <div class="row g-2 mb-3">

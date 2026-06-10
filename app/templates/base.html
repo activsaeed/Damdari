@@ -17,6 +17,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         /* استایل برای منوی فعال */
         .active-sidebar-link {
@@ -38,6 +39,36 @@
         .sidebar-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         /* رفع مشکل نمایش Select2 درون مودال Bootstrap */
         .select2-container { z-index: 99999; }
+        /* حالت تاریک (Dark Mode) */
+        body.dark-mode { background-color: #1a1d23; color: #e0e0e0; }
+        body.dark-mode #sidebar-wrapper { background-color: #111318; }
+        body.dark-mode .card { background-color: #22252a; color: #e0e0e0; border-color: #333; }
+        body.dark-mode .card-header { background-color: #2a2d33 !important; color: #e0e0e0 !important; border-color: #444; }
+        body.dark-mode .table { color: #e0e0e0; }
+        body.dark-mode .table-light { background-color: #2a2d33 !important; color: #e0e0e0 !important; }
+        body.dark-mode .table-secondary { background-color: #333 !important; }
+        body.dark-mode .bg-light { background-color: #22252a !important; }
+        body.dark-mode .text-muted { color: #999 !important; }
+        body.dark-mode .modal-content { background-color: #22252a; color: #e0e0e0; border-color: #444; }
+        body.dark-mode .modal-header { background-color: #2a2d33; border-color: #444; }
+        body.dark-mode .btn-close { filter: invert(1); }
+        body.dark-mode .list-group-item { background-color: #22252a; color: #e0e0e0; border-color: #333; }
+        body.dark-mode .offcanvas { background-color: #22252a; color: #e0e0e0; }
+        body.dark-mode .offcanvas-header { background-color: #2a2d33; }
+        body.dark-mode .form-control, body.dark-mode .form-select { background-color: #33363b; color: #e0e0e0; border-color: #555; }
+        body.dark-mode .input-group-text { background-color: #33363b; color: #e0e0e0; border-color: #555; }
+        body.dark-mode .navbar { background-color: #1a1d23 !important; border-color: #333; }
+        body.dark-mode .btn-outline-dark { color: #e0e0e0; border-color: #666; }
+        body.dark-mode .btn-outline-dark:hover { background-color: #444; }
+        body.dark-mode .dropdown-menu { background-color: #22252a; color: #e0e0e0; border-color: #444; }
+        body.dark-mode .dropdown-item { color: #e0e0e0; }
+        body.dark-mode .dropdown-item:hover { background-color: #333; }
+        body.dark-mode .alert { background-color: #2a2d33; color: #e0e0e0; border-color: #444; }
+        body.dark-mode .table-hover tbody tr:hover { color: #fff; background-color: rgba(255,255,255,0.05); }
+        /* نوار اعلان (Toast) */
+        .toast-container { position: fixed; bottom: 20px; left: 20px; z-index: 99999; }
+        .toast-custom { min-width: 280px; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); margin-top: 8px; animation: slideIn 0.3s ease; font-family: 'Vazirmatn', sans-serif; }
+        @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -45,7 +76,12 @@
         <div class="sidebar-bg d-flex flex-column" id="sidebar-wrapper">
             <div class="d-lg-none text-start p-2"><button class="btn btn-sm btn-outline-light border-0" id="close-sidebar"><i class="fa-solid fa-xmark fs-4"></i></button></div>
             
-            <div class="sidebar-heading text-center pt-3 pb-2 text-white">
+            <div class="text-start px-3 pt-2">
+                <span id="darkModeToggle" style="cursor:pointer;font-size:1rem;color:#fff;opacity:1" title="تغییر حالت شب/روز">
+                    <i class="fa-solid fa-moon" id="darkModeIcon"></i>
+                </span>
+            </div>
+            <div class="sidebar-heading text-center pt-0 pb-2 text-white">
                 {% if system_settings.get('farm_logo_path') %}
                     <img src="{{ url_for('static', filename=system_settings.get('farm_logo_path')) }}" class="mb-2 rounded-circle border border-2 border-light" style="height: 60px; width: 60px; object-fit: cover;">
                 {% else %}
@@ -65,6 +101,7 @@
                 </a>
             </div>
 
+
             <div class="text-center text-white-50 mb-3 pb-3 border-bottom border-secondary mx-3">
                 <small><i class="fa-solid fa-circle-user"></i> {% if current_user.is_authenticated %}{{ current_user.name.split(' (')[0] if '(' in current_user.name else current_user.name }}{% endif %}</small>
             </div>
@@ -81,15 +118,16 @@
                     <div class="collapse ps-3 {% if request.blueprint == 'livestock' %}show{% endif %}" id="livestockSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list"></i> مشاهده گله</a>
                         <a href="{{ url_for('livestock.pen_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.pen_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-house-signal"></i> بهاربندها</a>
-                        <a href="{{ url_for('livestock.genetics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.genetics') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-dna"></i> هوش ژنتیک</a>
+                        <a href="{{ url_for('livestock.genetics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.breeding') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-dna"></i> تولیدمثل و اصلاح نژاد</a>
+                        <a href="{{ url_for('livestock.ai_health') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.ai_health') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-brain"></i> سلامت هوشمند</a>
                     </div>
                     
                     {% if current_user.role in ['مدیر', 'دامپزشک'] %}
                     <a href="#vetSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle"><i class="fa-solid fa-stethoscope me-2"></i> دامپزشکی</a>
-                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.mating_suggestion'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
+                    <div class="collapse ps-3 {% if request.endpoint in ['livestock.vet_queue', 'livestock.medical_overview', 'livestock.ai_health'] %}show{% endif %}" id="vetSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('livestock.vet_queue') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.vet_queue') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> صف معاینه</a>
                         <a href="{{ url_for('livestock.medical_overview') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.medical_overview') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم دارویی</a>
-                        <a href="{{ url_for('livestock.mating_suggestion') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.mating_suggestion') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-heart"></i> پیشنهاد جفت‌گیری</a>
+                        <a href="{{ url_for('livestock.ai_health') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('livestock.ai_health') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-brain"></i> سلامت هوشمند</a>
                     </div>
                     {% endif %}
                     {% endif %}
@@ -99,12 +137,14 @@
                     <div class="collapse ps-3 {% if request.blueprint in ['finance', 'assets', 'audit'] %}show{% endif %}" id="financeSubmenu" data-bs-parent="#sidebar-accordion">
                         <a href="{{ url_for('finance.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book fa-fw"></i> دفتر کل</a>
                         <a href="{{ url_for('finance.cheques') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.cheques') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-money-check-dollar fa-fw"></i> چک‌ها</a>
+                        <a href="{{ url_for('finance.cheque_books') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.cheque_books') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-book fa-fw"></i> دسته چک</a>
                         <a href="{{ url_for('finance.contacts') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.contacts') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-address-book fa-fw"></i> اشخاص (نسیه)</a>
                         <a href="{{ url_for('finance.journal_entries') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.journal_entries') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-journal-whills fa-fw"></i> دفتر روزنامه</a>
                         <a href="{{ url_for('finance.trial_balance') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.trial_balance') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list fa-fw"></i> تراز آزمایشی</a>
                         <a href="{{ url_for('finance.statements') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.statements') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-scale-balanced fa-fw"></i> ترازنامه/سود و زیان</a>
                         <a href="{{ url_for('finance.cash_flow') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.cash_flow') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-water fa-fw"></i> صورت جریان نقد</a>
                         <a href="{{ url_for('finance.petty_cash') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.petty_cash') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar fa-fw"></i> تنخواه‌گردان</a>
+                        <a href="{{ url_for('finance.ai_anomalies') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.ai_anomalies') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-robot fa-fw"></i> ناهنجاری مالی</a>
                         <hr class="my-1 border-secondary opacity-25">
                         <a href="{{ url_for('assets.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.blueprint == 'assets' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-truck-tractor fa-fw"></i> دارایی و استهلاک</a>
                         <a href="{{ url_for('finance.tax_management') }}" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.tax_management') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice-dollar fa-fw"></i> مالیات/مودیان</a>
@@ -112,6 +152,10 @@
                         <a href="{{ url_for('finance.bank_reconciliation') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.bank_reconciliation') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-building-columns fa-fw"></i> تطبیق بانکی</a>
                         <a href="{{ url_for('finance.prepayments') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.prepayments') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-heart fa-fw"></i> پیش‌پرداخت/دریافت</a>
                         <a href="{{ url_for('finance.period_closing') }}" class="list-group-item list-group-item-action bg-transparent text-warning fw-bold border-0 py-1 px-2 small {% if request.path == url_for('finance.period_closing') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-check fa-fw"></i> پایان دوره</a>
+                        <hr class="my-1 border-secondary opacity-25">
+                        <a href="{{ url_for('finance.budgets') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.budgets') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-pie fa-fw"></i> بودجه</a>
+                        <a href="{{ url_for('finance.instalments') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.instalments') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar fa-fw"></i> اقساط</a>
+                        <a href="{{ url_for('finance.livestock_costs') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 border-0 py-1 px-2 small {% if request.path == url_for('finance.livestock_costs') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-coins fa-fw"></i> هزینه دام</a>
                         <a href="{{ url_for('audit.index') }}" class="list-group-item list-group-item-action bg-transparent text-info fw-bold border-0 py-1 px-2 small {% if request.blueprint == 'audit' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-shield-halved fa-fw"></i> حسابرسی</a>
                     </div>
                     {% endif %}
@@ -130,7 +174,10 @@
                     <a href="#hrSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action bg-transparent text-white dropdown-toggle {% if request.blueprint == 'hr' %}active-sidebar-link{% endif %}"><i class="fa-solid fa-users me-2"></i> پرسنل</a>
                     <div class="collapse ps-3 {% if request.blueprint == 'hr' %}show{% endif %}" id="hrSubmenu" data-bs-parent="#sidebar-accordion">
                     <a href="{{ url_for('hr.index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.index') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-list-check"></i> وظایف و پروفایل</a>
+                    <a href="{{ url_for('hr.payroll_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.payroll_dashboard') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-chart-line"></i> داشبورد حقوق</a>
                     <a href="{{ url_for('hr.payslips') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.payslips') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-file-invoice"></i> فیش حقوقی</a>
+                    <a href="{{ url_for('hr.attendance_calendar') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.attendance_calendar') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-calendar-days"></i> تقویم حضور و غیاب</a>
+                    <a href="{{ url_for('hr.loans') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 small border-0 {% if request.path == url_for('hr.loans') %}active-sidebar-link{% endif %}"><i class="fa-solid fa-hand-holding-dollar"></i> وام‌ها</a>
                     </div>
                     {% endif %}
                     
@@ -270,5 +317,196 @@
 
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>$(document).ready(function() { $('.select2').select2({language: 'fa', dropdownAutoWidth: true}); });</script>
+
+    <!-- حالت تاریک (Dark Mode) -->
+    <!-- دکمه گزارش سریع دام (FAB) -->
+    <button id="quickReportFab" class="btn btn-danger position-fixed shadow-lg d-flex align-items-center justify-content-center gap-1" style="bottom:80px;left:20px;z-index:9999;border-radius:50px;padding:0 18px;height:46px;opacity:0.85;transition:all 0.3s;font-size:14px;" title="گزارش سریع" onclick="showQuickReport()" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+        <i class="fa-solid fa-triangle-exclamation"></i> <span class="d-none d-sm-inline">گزارش فوری</span>
+    </button>
+    <!-- دکمه گزارش مشکل -->
+    <button id="bugReportBtn" class="btn btn-danger position-fixed shadow-lg" style="bottom:20px;left:20px;z-index:9999;border-radius:50%;width:50px;height:50px;padding:0;opacity:0.15;transition:opacity 0.3s;" title="گزارش مشکل" onclick="showBugReport()" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.15'">
+        <i class="fa-solid fa-bug"></i>
+    </button>
+    <div class="toast-container" id="toastContainer"></div>
+    <div class="modal fade" id="bugReportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white"><h5 class="modal-title"><i class="fa-solid fa-bug me-1"></i> گزارش مشکل</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <p class="small text-muted">مشکلی که باهاش مواجه شدی رو توضیح بده. این گزارش به مدیر سیستم ارسال میشه.</p>
+                    <textarea id="bugReportText" class="form-control" rows="4" placeholder="مثلاً: دکمه ذخیره در صفحه ثبت تراکنش کار نمی‌کند..."></textarea>
+                    <small class="text-muted d-block mt-1"><span id="bugReportUrlLabel">صفحه فعلی:</span> <span id="bugReportCurrentUrl" class="fw-bold"></span></small>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger w-100 fw-bold" onclick="submitBugReport()"><i class="fa-solid fa-paper-plane me-1"></i> ارسال گزارش</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- مودال گزارش سریع دام -->
+    <div class="modal fade" id="quickReportModal" tabindex="-1">
+        <div class="modal-dialog modal-md">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white"><h5 class="modal-title"><i class="fa-solid fa-triangle-exclamation"></i> گزارش سریع دام (به دامپزشک)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <form action="{{ url_for('hr.quick_report') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body small">
+                        <div class="row g-2 text-center mb-3">
+                            <div class="col-4">
+                                <input type="radio" class="btn-check qr-issue-radio" name="issue_type" id="qrIssue1" value="لنگش شدید" autocomplete="off" required>
+                                <label class="btn btn-outline-danger w-100 py-2" for="qrIssue1"><i class="fa-solid fa-crutch fa-xl mb-1 d-block"></i> لنگش</label>
+                            </div>
+                            <div class="col-4">
+                                <input type="radio" class="btn-check qr-issue-radio" name="issue_type" id="qrIssue2" value="غذا نخوردن/بی‌حالی" autocomplete="off">
+                                <label class="btn btn-outline-danger w-100 py-2" for="qrIssue2"><i class="fa-solid fa-bed fa-xl mb-1 d-block"></i> بی‌حالی</label>
+                            </div>
+                            <div class="col-4">
+                                <input type="radio" class="btn-check qr-issue-radio" name="issue_type" id="qrIssue3" value="سقط / خونریزی" autocomplete="off">
+                                <label class="btn btn-outline-danger w-100 py-2" for="qrIssue3"><i class="fa-solid fa-droplet fa-xl mb-1 d-block"></i> خونریزی</label>
+                            </div>
+                            <div class="col-6 mt-2">
+                                <input type="radio" class="btn-check qr-issue-radio" name="issue_type" id="qrIssue4" value="کمبود انبار" autocomplete="off">
+                                <label class="btn btn-outline-warning w-100 py-2 text-dark" for="qrIssue4"><i class="fa-solid fa-box-open fa-xl mb-1 d-block"></i> کمبود انبار</label>
+                            </div>
+                            <div class="col-6 mt-2">
+                                <input type="radio" class="btn-check qr-issue-radio" name="issue_type" id="qrIssue5" value="سایر موارد" autocomplete="off">
+                                <label class="btn btn-outline-secondary w-100 py-2" for="qrIssue5"><i class="fa-solid fa-comment-dots fa-xl mb-1 d-block"></i> سایر موارد</label>
+                            </div>
+                        </div>
+                        <div id="qrSheepTagSection">
+                            <label class="fw-bold mb-1 small text-muted">شماره پلاک دام:</label>
+                            <div class="input-group mb-3">
+                                <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-qrcode"></i> اسکن</button>
+                                <input type="text" id="qrEarTagInput" name="ear_tag" class="form-control" placeholder="اسکن یا تایپ پلاک...">
+                            </div>
+                        </div>
+                        <div id="qrInventorySection" class="mb-3 p-3 bg-light rounded border" style="display:none">
+                            <label class="fw-bold mb-1 small">چه چیزی تمام شده؟</label>
+                            <select name="inventory_item" class="form-select mb-2">
+                                <option value="">انتخاب از لیست موجود...</option>
+                                <option value="یونجه">یونجه</option>
+                                <option value="جو">جو</option>
+                                <option value="کنسانتره">کنسانتره</option>
+                            </select>
+                            <input type="text" name="custom_inventory" class="form-control" placeholder="یا نام آن را تایپ کنید...">
+                        </div>
+                        <div id="qrOtherSection" class="mb-3" style="display:none">
+                            <label class="fw-bold mb-1 small">توضیح مشکل:</label>
+                            <textarea name="custom_desc" class="form-control" rows="2" placeholder="مشکل را اینجا بنویسید..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-success w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#quickWeightModal" type="button"><i class="fa-solid fa-scale-balanced"></i> ثبت سریع وزن دام</button>
+                        <button type="submit" class="btn btn-danger w-100 fw-bold"><i class="fa-solid fa-paper-plane"></i> ارسال گزارش</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- مودال اسکنر QR -->
+    <div class="modal fade" id="qrScannerModal" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">اسکن پلاک با دوربین گوشی</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body text-center"><div id="reader"></div></div>
+            </div>
+        </div>
+    </div>
+    <!-- مودال ثبت سریع وزن -->
+    <div class="modal fade" id="quickWeightModal" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-bolt text-warning"></i> ثبت سریع وزن</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <form action="{{ url_for('livestock.quick_weight') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body">
+                        <div class="input-group mb-3">
+                            <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#qrScannerModal"><i class="fa-solid fa-camera"></i></button>
+                            <input type="text" name="ear_tag" class="form-control form-control-lg text-center fw-bold" placeholder="اسکن یا تایپ پلاک" required>
+                        </div>
+                        <div class="mb-3"><label>وزن جدید (کیلوگرم)</label><input type="number" step="0.1" name="weight" class="form-control form-control-lg text-center text-success fw-bold" required></div>
+                    </div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold">ثبت</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+    function showQuickReport() {
+        new bootstrap.Modal(document.getElementById('quickReportModal')).show();
+    }
+    document.querySelectorAll('.qr-issue-radio').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            document.getElementById('qrSheepTagSection').style.display = (this.value === 'کمبود انبار' || this.value === 'سایر موارد') ? 'none' : 'block';
+            document.getElementById('qrInventorySection').style.display = (this.value === 'کمبود انبار') ? 'block' : 'none';
+            document.getElementById('qrOtherSection').style.display = (this.value === 'سایر موارد') ? 'block' : 'none';
+            document.getElementById('qrEarTagInput').required = (this.value !== 'کمبود انبار' && this.value !== 'سایر موارد');
+        });
+    });
+    document.getElementById('qrScannerModal').addEventListener('shown.bs.modal', function () {
+        if (typeof Html5QrcodeScanner !== 'undefined') {
+            var scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+            scanner.render(function(decodedText) {
+                var match = decodedText.match(/پلاک:\s*([^\n]+)/);
+                if (match) {
+                    var input = document.getElementById('qrEarTagInput');
+                    if (input) input.value = match[1];
+                    var weightInput = document.querySelector('#quickWeightModal input[name="ear_tag"]');
+                    if (weightInput) weightInput.value = match[1];
+                    scanner.clear();
+                    bootstrap.Modal.getInstance(document.getElementById('qrScannerModal')).hide();
+                }
+            });
+        }
+    });
+    </script>
+    <script>
+    (function() {
+        var toggle = document.getElementById('darkModeToggle');
+        var icon = document.getElementById('darkModeIcon');
+        if (localStorage.getItem('darkMode') === '1') {
+            document.body.classList.add('dark-mode');
+            icon.className = 'fa-solid fa-sun';
+        }
+        toggle.addEventListener('click', function() {
+            var isDark = document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', isDark ? '1' : '0');
+            icon.className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        });
+    })();
+    // سیستم اعلان (Toast)
+    function showToast(message, type) {
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'toast-custom alert alert-' + (type || 'info') + ' alert-dismissible fade show';
+        toast.innerHTML = message + '<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>';
+        container.appendChild(toast);
+        setTimeout(function() { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.5s'; setTimeout(function() { toast.remove(); }, 500); }, 4000);
+    }
+    // گزارش مشکل
+    function showBugReport() {
+        document.getElementById('bugReportCurrentUrl').textContent = window.location.href;
+        new bootstrap.Modal(document.getElementById('bugReportModal')).show();
+    }
+    function submitBugReport() {
+        var text = document.getElementById('bugReportText').value.trim();
+        var url = window.location.href;
+        if (!text) { showToast('لطفاً متن مشکل را وارد کنید.', 'warning'); return; }
+        $.post('/bug-report', {description: text, url: url, csrf_token: $('meta[name="csrf-token"]').attr('content')})
+            .done(function() { showToast('✅ گزارش شما ارسال شد. ممنون!', 'success'); })
+            .fail(function() { showToast('❌ خطا در ارسال. لطفاً مستقیماً با مدیر تماس بگیرید.', 'danger'); });
+        bootstrap.Modal.getInstance(document.getElementById('bugReportModal')).hide();
+        document.getElementById('bugReportText').value = '';
+    }
+    // بهبود فلش messages: auto-dismiss بعد از ۵ ثانیه
+    $(document).ready(function() {
+        setTimeout(function() {
+            $('.alert-dismissible').each(function() {
+                var alert = new bootstrap.Alert(this);
+                alert.close();
+            });
+        }, 5000);
+    });
+    </script>
 </body>
 </html>

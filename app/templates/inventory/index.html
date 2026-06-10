@@ -132,6 +132,7 @@
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
                                 <form action="{{ url_for('inventory.edit_item', id=item.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="modal-body">
                                         <div class="mb-3"><label>نام کالا</label><input type="text" name="name" class="form-control" value="{{ item.name }}" required></div>
                                         <div class="mb-3">
@@ -177,6 +178,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">تعریف کالای جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('inventory.add_item') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3"><label>نام کالا</label><input type="text" name="name" class="form-control" required placeholder="مثال: ذرت خرد شده"></div>
                     <div class="mb-3">
@@ -215,6 +217,7 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title" id="txModalTitle">ثبت عملیات انبار</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('inventory.transaction') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <input type="hidden" name="item_id" id="txItemId">
                     <input type="hidden" name="action_type" id="txActionType">

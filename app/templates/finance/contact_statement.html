@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="fa-solid fa-file-invoice text-primary"></i> صورت حساب</h2>
+    <a href="{{ url_for('finance.contacts') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به اشخاص</a>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-8"><h5 class="fw-bold mb-0">{{ contact.name }}</h5>
+                {% if contact.phone %}<small class="text-muted"><i class="fa-solid fa-phone ms-1"></i>{{ contact.phone }}</small>{% endif %}
+                {% if contact.contact_type %}<span class="badge bg-secondary ms-2">{{ contact.contact_type }}</span>{% endif %}
+            </div>
+            <div class="col-md-4 text-start"><span class="fw-bold">تراز: </span>
+                <span class="fw-bold fs-5 {% if contact.balance > 0 %}text-success{% elif contact.balance < 0 %}text-danger{% endif %}">{{ contact.balance|currency }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form class="row g-2 align-items-end" method="GET">
+            <div class="col-auto"><label class="form-label small fw-bold">از تاریخ</label><input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}"></div>
+            <div class="col-auto"><label class="form-label small fw-bold">تا تاریخ</label><input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}"></div>
+            <div class="col-auto"><button class="btn btn-primary btn-sm">فیلتر</button></div>
+        </form>
+    </div>
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-2 fw-bold d-flex justify-content-between"><span><i class="fa-solid fa-list text-primary me-1"></i> تراکنش‌ها از {{ date_from }} تا {{ date_to }}</span></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark"><tr><th>تاریخ</th><th>نوع</th><th>دسته‌بندی</th><th>مبلغ</th><th>توضیحات</th></tr></thead>
+                <tbody>
+                    {% set running = 0 %}
+                    {% for t in txs %}
+                    {% set running = running + (t.amount if t.t_type == 'درآمد' else -t.amount) %}
+                    <tr class="{% if t.t_type == 'درآمد' %}table-success{% else %}table-danger{% endif %}">
+                        <td>{{ t.t_date }}</td>
+                        <td><span class="badge {% if t.t_type == 'درآمد' %}bg-success{% else %}bg-danger{% endif %}">{{ t.t_type }}</span></td>
+                        <td>{{ t.category }}</td>
+                        <td>{{ t.amount|currency }}</td>
+                        <td class="text-muted small">{{ t.description or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="py-5 text-muted">تراکنشی در این بازه وجود ندارد.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light fw-bold"><tr><td colspan="3">مانده نهایی</td><td>{{ (txs|sum(attribute='amount') if txs else 0)|currency }}</td><td></td></tr></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

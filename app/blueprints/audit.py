@@ -31,7 +31,16 @@ def run_audit():
         'livestock': engine.verify_livestock_valuation,
         'depreciation': engine.verify_depreciation,
         'anomalies': engine.detect_anomalies,
+        'duplicate_ear_tags': engine.check_duplicate_ear_tags,
+        'weightless_sheep': engine.check_weightless_sheep,
+        'orphaned_entries': engine.check_orphaned_journal_entries,
+        'future_transactions': engine.check_future_transactions,
+        'overdue_tasks': engine.check_overdue_tasks,
+        'unpenned_sheep': engine.check_unpenned_sheep,
     }
+
+    if check == 'error_report':
+        return jsonify({'report': engine.generate_error_report()})
 
     if check in checks:
         result = checks[check]()

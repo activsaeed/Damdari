@@ -61,6 +61,7 @@
         </div>
         <div class="card-body p-4">
             <form action="{{ url_for('finance.contact_bulk_action') }}" method="POST" id="bulkActionForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="contact_id" value="{{ c.id }}">
             <div class="tab-content" id="pills-tabContent">
                 
@@ -225,6 +226,7 @@
                     <div class="p-4 bg-light border-bottom">
                         <h6 class="fw-bold mb-3"><i class="fa-solid fa-upload text-primary"></i> آپلود مدارک یا قرارداد جدید</h6>
                         <form action="{{ url_for('finance.upload_contact_doc', id=c.id) }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="row g-3">
                                 <div class="col-md-5">
                                     <input type="text" name="doc_title" class="form-control" placeholder="عنوان مدرک (مثلاً: قرارداد خرید سال 1404)" required>
@@ -304,6 +306,7 @@
         <div class="modal-content">
             <div class="modal-header bg-dark text-white"><h5 class="modal-title">ویرایش پروفایل</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('finance.edit_contact', id=c.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="mb-3"><label class="form-label fw-bold">نام کامل</label><input type="text" name="name" class="form-control" value="{{ c.name }}" required></div>
                     <div class="mb-3"><label class="form-label fw-bold">شماره تماس</label><input type="text" name="phone" class="form-control" value="{{ c.phone or '' }}" dir="ltr"></div>

@@ -292,6 +292,32 @@ class Cheque(db.Model):
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_deleted = db.Column(db.Boolean, default=False)
+    cheque_book_id = db.Column(db.Integer, db.ForeignKey('cheque_book.id'), nullable=True)
+
+
+class ChequeBook(db.Model):
+    """مدیریت دسته چک"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # نام دسته چک
+    bank_name = db.Column(db.String(100), nullable=False)  # نام بانک
+    start_number = db.Column(db.String(50), nullable=False)  # اولین شماره
+    end_number = db.Column(db.String(50), nullable=False)  # آخرین شماره
+    received_date = db.Column(db.Date, default=datetime.utcnow)  # تاریخ دریافت
+    status = db.Column(db.String(20), default='فعال')  # فعال / مصرف شده / باطل
+    notes = db.Column(db.String(255), nullable=True)
+    cheques = db.relationship('Cheque', backref='cheque_book', lazy=True)
+
+    @property
+    def total_count(self):
+        return int(self.end_number) - int(self.start_number) + 1 if self.end_number.isdigit() and self.start_number.isdigit() else 0
+
+    @property
+    def used_count(self):
+        return len([c for c in self.cheques if not c.is_deleted])
+
+    @property
+    def remaining_count(self):
+        return self.total_count - self.used_count
 
 # ==========================================
 # سیستم پیشرفته منابع انسانی (HR) و پرسنل بر اساس قانون کار
@@ -346,6 +372,18 @@ class WorkerLoan(db.Model):
     status = db.Column(db.String(50), default='در حال پرداخت') 
     document_image = db.Column(db.String(255), nullable=True) 
     description = db.Column(db.String(255), nullable=True)
+
+class WorkerContract(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    contract_type = db.Column(db.String(50), nullable=False)  # دائم, موقت, فصلی, پروژه‌ای
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    monthly_salary = db.Column(Numeric(18, 2), default=0.0)
+    description = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    worker = db.relationship('Worker', backref=db.backref('contracts', lazy=True, cascade='all, delete-orphan'))
 
 class PettyCash(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -440,12 +478,15 @@ class Payslip(db.Model):
     overtime_pay = db.Column(Numeric(18, 2), default=0.0) # مبلغ اضافه کاری
     night_shift_pay = db.Column(Numeric(18, 2), default=0.0) # مبلغ شیفت شب
     transportation_pay = db.Column(Numeric(18, 2), default=0.0) # ایاب ذهاب
+    mission_pay = db.Column(Numeric(18, 2), default=0.0) # حق ماموریت
     kpi_bonus = db.Column(Numeric(18, 2), default=0.0) # پاداش
     eydi_sanavat = db.Column(Numeric(18, 2), default=0.0) # عیدی و سنوات
     
     # کسورات
     loan_deduction = db.Column(Numeric(18, 2), default=0.0) 
     fines = db.Column(Numeric(18, 2), default=0.0) 
+    insurance = db.Column(Numeric(18, 2), default=0.0) # بیمه سهم کارگر (7% مجموع دریافتی ناخالص)
+    tax = db.Column(Numeric(18, 2), default=0.0) # مالیات
     
     gross_pay = db.Column(Numeric(18, 2), default=0.0) # ناخالص دریافتی
     net_pay = db.Column(Numeric(18, 2), default=0.0) # خالص پرداختی
@@ -504,3 +545,78 @@ class TelegramBot(db.Model):
     bot_token = db.Column(db.String(255), nullable=False)
     chat_id = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
+
+
+class Budget(db.Model):
+    """بودجه سالانه/ماهانه برای هر حساب"""
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)  # سال شمسی
+    month = db.Column(db.Integer, nullable=True)  # ماه (برای بودجه ماهانه)، None=سالانه
+    account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
+    amount = db.Column(Numeric(18, 2), nullable=False)  # سقف بودجه
+    notes = db.Column(db.String(255), nullable=True)
+    account = db.relationship('Account', backref='budgets')
+
+    @property
+    def spent(self):
+        """میزان مصرف شده از بودجه بر اساس تراکنش‌های همان حساب"""
+        from app import db
+        from sqlalchemy import func
+        from app.models import JournalEntryLine
+        total = db.session.query(func.sum(JournalEntryLine.debit)).filter(
+            JournalEntryLine.account_id == self.account_id
+        ).scalar() or 0
+        return float(total)
+
+
+class Instalment(db.Model):
+    """قسط بندی - قرارداد اقساط با مشتری"""
+    id = db.Column(db.Integer, primary_key=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=False)
+    total_amount = db.Column(Numeric(18, 2), nullable=False)
+    paid_amount = db.Column(Numeric(18, 2), default=0.0)
+    instalment_count = db.Column(db.Integer, nullable=False)  # تعداد کل اقساط
+    amount_per_instalment = db.Column(Numeric(18, 2), nullable=False)  # مبلغ هر قسط
+    start_date = db.Column(db.Date, nullable=False)
+    interval_days = db.Column(db.Integer, default=30)  # فاصله بین اقساط (روز)
+    description = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), default='فعال')  # فعال / تسویه شده / مشکل دار
+    contact = db.relationship('Contact', backref='instalments')
+
+    @property
+    def remaining(self):
+        return float(self.total_amount - self.paid_amount)
+
+    @property
+    def due_instalments(self):
+        """تعداد اقساط سررسید شده پرداخت نشده"""
+        from datetime import date
+        today = date.today()
+        passed = (today - self.start_date).days // self.interval_days
+        paid = int(float(self.paid_amount) / float(self.amount_per_instalment)) if self.amount_per_instalment else 0
+        return max(0, passed - paid)
+
+
+class DailyAttendance(db.Model):
+    """ثبت روزانه حضور و غیاب کارگران — اضافه‌کاری، شیفت شب، مرخصی"""
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.Integer, db.ForeignKey('worker.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(20), default='حاضر')  # حاضر / غایب / مرخصی / ماموریت
+    overtime_hours = db.Column(db.Float, default=0.0)  # ساعت اضافه‌کاری
+    night_shift_hours = db.Column(db.Float, default=0.0)  # ساعت شب‌کاری
+    fine_amount = db.Column(Numeric(18, 2), default=0.0)  # جریمه نقدی
+    notes = db.Column(db.String(255), nullable=True)
+    payslip_id = db.Column(db.Integer, db.ForeignKey('payslip.id'), nullable=True)  # ارجاع به فیش حقوقی صادر شده
+    worker = db.relationship('Worker', backref='attendances')
+
+
+class LivestockCost(db.Model):
+    """هزینه‌های ثبت شده برای محاسبه بهای تمام شده هر دام"""
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    cost_type = db.Column(db.String(50), nullable=False)  # خوراک / دارو / سایر
+    amount = db.Column(Numeric(18, 2), nullable=False)
+    record_date = db.Column(db.Date, nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    sheep = db.relationship('Sheep', backref='costs')

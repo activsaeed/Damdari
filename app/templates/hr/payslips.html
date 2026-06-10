@@ -1,102 +1,371 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h2><i class="fa-solid fa-file-invoice text-success"></i> سیستم حقوق و دستمزد (فیش حقوقی)</h2>
-    <div>
-        <a href="{{ url_for('hr.insurance_report') }}" class="btn btn-outline-danger fw-bold shadow-sm me-2"><i class="fa-solid fa-shield-heart"></i> گزارش بیمه ماهانه</a>
-        <button class="btn btn-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#addPayslipModal"><i class="fa-solid fa-calculator"></i> محاسبه و صدور فیش حقوقی</button>
+<style>
+#payslipTable tbody tr { cursor: pointer; transition: background 0.15s; }
+#payslipTable tbody tr:hover { background: #e8f0fe !important; }
+.pagination-wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+.pagination-wrap .page-info { font-size: 12px; color: #555; }
+.page-jump { width: 70px; text-align: center; }
+.table-foot-sum { background: #f0f2f5; font-weight: 700; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="fa-solid fa-file-invoice text-success"></i> مدیریت حقوق و دستمزد</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('hr.insurance_report') }}" class="btn btn-outline-danger btn-sm"><i class="fa-solid fa-shield-heart"></i> بیمه</a>
+        <a href="{{ url_for('hr.payroll_dashboard') }}" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-chart-line"></i> داشبورد</a>
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterOffcanvas"><i class="fa-solid fa-sliders"></i> فیلتر</button>
+        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addPayslipModal"><i class="fa-solid fa-calculator"></i> صدور فیش جدید</button>
     </div>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }} shadow-sm">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}
+<div class="alert alert-{{ category }} alert-dismissible fade show py-2 small">{{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endfor %}{% endif %}
+{% endwith %}
 
-<div class="alert alert-info border-0 shadow-sm mb-4 border-end border-info border-5">
-    <h6 class="fw-bold"><i class="fa-solid fa-robot"></i> سیستم هوشمند حقوق قانون کار:</h6>
-    <p class="mb-0 small">این سیستم به صورت اتوماتیک <b>حقوق پایه و مزایا (مسکن، بن، اولاد)</b> را از پرونده کارگر می‌خواند، <b>اقساط وام‌های او</b> را کسر می‌کند و بر اساس عملکرد ماهانه به او <b>پاداش (KPI Bonus)</b> می‌دهد. با زدن دکمه «تسویه»، مبلغ خالص به صورت اتوماتیک در هزینه‌های دفتر کل دامداری ثبت می‌شود.</p>
-</div>
-
-<div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle text-center mb-0">
-                <thead class="table-light"><tr><th>بابت ماه</th><th>نام پرسنل</th><th>ناخالص دریافتی</th><th>پاداش</th><th>کسورات (وام/جریمه)</th><th>خالص پرداختی</th><th>وضعیت</th></tr></thead>
-                <tbody>
-                    {% for p in payslips %}
-                    <tr class="{% if p.is_paid %}table-secondary text-muted{% endif %}">
-                        <td class="fw-bold">{{ p.month_name }}</td>
-                        <td class="fw-bold text-primary">{{ p.worker.name }}</td>
-                        <td>{{ "{:,.0f}".format(p.gross_pay) }}</td>
-                        <td class="text-success">+ {{ "{:,.0f}".format(p.kpi_bonus) }}</td>
-                        <td class="text-danger">- {{ "{:,.0f}".format(p.loan_deduction + p.fines) }}</td>
-                        <td class="fw-bold fs-5 text-dark">{{ "{:,.0f}".format(p.net_pay) }} ت</td>
-                        <td>
-                            {% if p.is_paid %}
-                            <span class="badge bg-success"><i class="fa-solid fa-check-double"></i> واریز شده</span>
-                            {% else %}
-                            <a href="{{ url_for('hr.pay_payslip', id=p.id) }}" class="btn btn-sm btn-success fw-bold" onclick="return confirm('آیا حقوق پرداخت شد؟ (مبلغ مستقیماً در دفتر کل به عنوان هزینه ثبت خواهد شد)')">تایید تسویه و ثبت سند</a>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="7" class="text-center py-5 text-muted">هیچ فیش حقوقی صادر نشده است.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="row g-2 mb-3">
+    <div class="col-lg-3 col-6">
+        <div class="card bg-primary text-white border-0 shadow-sm h-100">
+            <div class="card-body text-center py-2"><small>کل فیش‌ها</small><h4 class="mb-0">{{ total_count }}</h4></div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-6">
+        <div class="card bg-success text-white border-0 shadow-sm h-100">
+            <div class="card-body text-center py-2"><small>تسویه شده</small><h4 class="mb-0">{{ paid_count }}</h4></div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-6">
+        <div class="card bg-warning border-0 shadow-sm h-100">
+            <div class="card-body text-center py-2"><small>پرداخت نشده</small><h4 class="mb-0">{{ unpaid_count }}</h4></div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-6">
+        <div class="card bg-info text-white border-0 shadow-sm h-100">
+            <div class="card-body text-center py-2"><small>خالص کل</small><h4 class="mb-0">{{ total_net|currency }}</h4></div>
         </div>
     </div>
 </div>
 
-<!-- Modal صدور فیش حقوقی جدید -->
-<div class="modal fade" id="addPayslipModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white"><h5 class="modal-title"><i class="fa-solid fa-calculator"></i> محاسبه و صدور فیش حقوقی</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-            <form action="{{ url_for('hr.generate_payslip') }}" method="POST">
-                <div class="modal-body bg-light">
-                    
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="fw-bold">انتخاب پرسنل</label>
-                            <select name="worker_id" class="form-select fw-bold border-success" required>
-                                {% for w in workers %}<option value="{{ w.id }}">{{ w.name }} (پایه: {{ "{:,.0f}".format(w.salary) }})</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="fw-bold">بابت حقوق و کارکرد ماه:</label>
-                            <input type="text" name="month_name" class="form-control" required placeholder="مثال: شهریور 1403">
-                        </div>
-                    </div>
-                    
-                    <h6 class="fw-bold text-success mt-4 border-bottom pb-2">متغیرهای افزودنی (اضافه کار، شیفت شب، عیدی)</h6>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-3"><label class="small text-muted fw-bold">ساعات اضافه‌کاری</label><input type="number" step="0.5" name="overtime_hours" class="form-control" placeholder="تعداد ساعت"></div>
-                        <div class="col-md-3"><label class="small text-muted fw-bold">ساعات شب‌کاری</label><input type="number" step="0.5" name="night_shift_hours" class="form-control" placeholder="تعداد ساعت"></div>
-                        <div class="col-md-3"><label class="small text-muted fw-bold">حق ایاب و ذهاب</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_p1')"><input type="hidden" name="transportation_pay" id="raw_p1"></div>
-                        <div class="col-md-3"><label class="small text-muted fw-bold">عیدی / پاداش نقدی</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_p2')"><input type="hidden" name="eydi_sanavat" id="raw_p2"></div>
-                    </div>
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-bold small"><i class="fa-solid fa-list text-primary me-1"></i> لیست فیش‌ها</span>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <input type="text" id="payslipSearch" class="form-control form-control-sm" placeholder="🔍 جستجو..." style="width:160px" onkeyup="filterTable()">
+            {% if current_month or current_worker_id or current_status %}
+            <a href="{{ url_for('hr.payslips') }}" class="btn btn-sm btn-outline-secondary py-0">پاک کردن فیلتر</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0 small" id="payslipTable">
+                <thead class="table-dark">
+                    <tr><th onclick="sortTable(0)" style="cursor:pointer">ماه ↕</th><th onclick="sortTable(1)" style="cursor:pointer">پرسنل ↕</th><th>پایه</th><th>مزایا</th><th>اضافه‌کار</th><th>ناخالص</th><th>کسورات</th><th onclick="sortTable(7)" style="cursor:pointer">خالص ↕</th><th>وضعیت</th><th>عملیات</th></tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(page_gross=0, page_ded=0, page_net=0) %}
+                    {% for p in payslips %}
+                    {% set row_gross = (p.gross_pay or 0)|float %}
+                    {% set row_ded = ((p.loan_deduction or 0)|float + (p.fines or 0)|float + (p.insurance or 0)|float + (p.tax or 0)|float) %}
+                    {% set row_net = (p.net_pay or 0)|float %}
+                    {% set ns.page_gross = ns.page_gross + row_gross %}
+                    {% set ns.page_ded = ns.page_ded + row_ded %}
+                    {% set ns.page_net = ns.page_net + row_net %}
+                    <tr class="{% if p.is_paid %}table-success{% endif %}" onclick="location.href='{{ url_for('hr.profile', id=p.worker_id) }}'">
+                        <td class="fw-bold">{{ p.month_name }}</td>
+                        <td>{{ p.worker.name }}</td>
+                        <td>{{ p.base_salary|currency or 0 }}</td>
+                        <td>{{ (p.housing_allowance + p.food_allowance + p.family_allowance)|currency or 0 }}</td>
+                        <td class="small">
+                            {% set ot = (p.overtime_pay or 0)|float %}
+                            {% set nt = (p.night_shift_pay or 0)|float %}
+                            {% set mp = (p.mission_pay or 0)|float %}
+                            {{ (ot + nt + mp)|currency }}
+                            {% if nt > 0 or mp > 0 %}
+                            <i class="fa-solid fa-circle-info text-muted ms-1" data-bs-toggle="tooltip" title="اضافه‌کاری: {{ ot|currency }} | شب‌کاری: {{ nt|currency }} | مأموریت: {{ mp|currency }}"></i>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold">{{ row_gross|currency }}</td>
+                        <td class="text-danger">{{ row_ded|currency }}</td>
+                        <td class="fw-bold fs-6">{{ row_net|currency }}</td>
+                        <td>{% if p.is_paid %}<span class="badge bg-success">تسویه</span>{% else %}<span class="badge bg-warning text-dark">نشده</span>{% endif %}</td>
+                        <td onclick="event.stopPropagation()">
+                            <div class="d-inline-flex" style="gap:5px">
+                                <a href="{{ url_for('hr.payslip_print', id=p.id) }}" class="btn btn-outline-secondary btn-sm py-0 px-2" title="چاپ"><i class="fa-solid fa-print"></i></a>
+                                {% set mn_parts = p.month_name.split(' ') %}
+                                {% set ns_cal = namespace(year='', month='') %}
+                                {% if mn_parts|length > 1 %}
+                                {% set ns_cal.year = mn_parts[1] %}
+                                {% for mnum, mname in month_names.items() %}
+                                    {% if mname == mn_parts[0] %}{% set ns_cal.month = mnum %}{% endif %}
+                                {% endfor %}
+                                {% endif %}
+                                {% set cal_worker_id = p.worker_id %}
+                                {% set cal_year = ns_cal.year or current_year %}
+                                {% set cal_month = ns_cal.month or default_month %}
+                                <a href="{{ url_for('hr.attendance_calendar', year=cal_year, month=cal_month, worker_id=cal_worker_id) }}" class="btn btn-outline-info btn-sm py-0 px-2" title="تقویم حضور و غیاب"><i class="fa-solid fa-calendar-days"></i></a>
+                                {% if not p.is_paid %}
+                                <a href="{{ url_for('hr.pay_payslip', id=p.id) }}" class="btn btn-success btn-sm py-0 px-2" onclick="return confirm('تسویه {{ p.worker.name }} - {{ p.month_name }} به مبلغ {{ row_net|currency }}؟')">پرداخت</a>
+                                {% endif %}
+                                <form action="{{ url_for('hr.delete_payslip', id=p.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="return confirm('حذف فیش {{ p.month_name }} - {{ p.worker.name }}؟')"><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="10" class="py-5 text-muted">هیچ فیش حقوقی با این فیلترها یافت نشد.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-foot-sum">
+                    <tr>
+                        <td colspan="5" class="text-start">جمع این صفحه ({{ payslips|length }} فیش)</td>
+                        <td>{{ ns.page_gross|currency }}</td>
+                        <td class="text-danger">{{ ns.page_ded|currency }}</td>
+                        <td>{{ ns.page_net|currency }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% if pagination.pages > 1 %}
+    <div class="pagination-wrap border-top">
+        <div class="page-info">صفحه {{ pagination.page }} از {{ pagination.pages }} ({{ total_count }} فیش)</div>
+        <div class="d-flex gap-1 align-items-center flex-wrap">
+            <a href="{{ url_for('hr.payslips', page=1, year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}" class="btn btn-sm btn-outline-secondary {% if pagination.page == 1 %}disabled{% endif %}">اول</a>
+            <a href="{{ url_for('hr.payslips', page=pagination.prev_num, year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}" class="btn btn-sm btn-outline-secondary {% if not pagination.has_prev %}disabled{% endif %}">‹ قبل</a>
+            {% for p in range([1, pagination.page - 2]|max, [pagination.pages + 1, pagination.page + 3]|min) %}
+            <a href="{{ url_for('hr.payslips', page=p, year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}" class="btn btn-sm {% if p == pagination.page %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ p }}</a>
+            {% endfor %}
+            <a href="{{ url_for('hr.payslips', page=pagination.next_num, year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}" class="btn btn-sm btn-outline-secondary {% if not pagination.has_next %}disabled{% endif %}">بعد ›</a>
+            <a href="{{ url_for('hr.payslips', page=pagination.pages, year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}" class="btn btn-sm btn-outline-secondary {% if pagination.page == pagination.pages %}disabled{% endif %}">آخر</a>
+            <div class="input-group input-group-sm" style="width:130px">
+                <input type="number" class="form-control page-jump" min="1" max="{{ pagination.pages }}" placeholder="صفحه">
+                <button class="btn btn-outline-primary" onclick="var p=this.previousElementSibling;if(p.value&&p.value>0&&p.value<={{ pagination.pages }})location.href='{{ url_for('hr.payslips', year=current_year, month=current_month, worker_id=current_worker_id, status=current_status) }}&page='+p.value">برو</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
 
-                    <h6 class="fw-bold text-danger mt-4 border-bottom pb-2">کسورات و جریمه‌ها</h6>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6"><label class="small text-muted fw-bold">کسر جریمه یا غیبت ({{ get_system_currency_from_settings() }})</label><input type="text" class="form-control" dir="ltr" onkeyup="formatCurrency(this, 'raw_p3')"><input type="hidden" name="fines" id="raw_p3"></div>
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="alert alert-warning mb-0 w-100 py-2 small fw-bold"><i class="fa-solid fa-circle-info"></i> اقساط وام و مساعده به صورت اتوماتیک توسط سیستم کسر می‌شود.</div>
+<div class="modal fade" id="addPayslipModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white"><h5 class="modal-title"><i class="fa-solid fa-calculator"></i> صدور فیش حقوقی</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('hr.generate_payslip') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body bg-light">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold border-bottom pb-1">اطلاعات فیش</h6>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="fw-bold small">پرسنل</label>
+                                    <select name="worker_id" id="previewWorker" class="form-select form-select-sm" required>
+                                        {% for w in workers %}<option value="{{ w.id }}" data-salary="{{ w.salary or 0 }}">{{ w.name }} (پایه: {{ w.salary|currency }})</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold small">ماه</label>
+                                    <input type="text" name="month_name" id="previewMonth" class="form-control form-control-sm" required value="{{ default_month }}">
+                                </div>
+                            </div>
+                            <div class="fw-bold text-success mt-3 border-bottom pb-1 small">متغیرها <span class="badge bg-info ms-1" id="attStatus" style="display:none">بر اساس حضور و غیاب</span></div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-3"><label class="small">اضافه‌کار (ساعت)</label><input type="number" step="0.5" name="overtime_hours" id="otField" class="form-control form-control-sm preview-trigger" placeholder="خودکار" value="0"></div>
+                                <div class="col-3"><label class="small">نرخ اضافه‌کاری</label><input type="number" step="0.01" name="overtime_rate" id="otRateField" class="form-control form-control-sm preview-trigger" value="{{ settings_data.overtime_rate|default(1.4) }}"></div>
+                                <div class="col-3"><label class="small">شب‌کاری (ساعت)</label><input type="number" step="0.5" name="night_shift_hours" id="nightField" class="form-control form-control-sm preview-trigger" placeholder="خودکار" value="0"></div>
+                                <div class="col-3"><label class="small">نرخ شب‌کاری</label><input type="number" step="0.01" name="night_shift_rate" id="nightRateField" class="form-control form-control-sm preview-trigger" value="{{ settings_data.night_shift_rate|default(0.35) }}"></div>
+                                <div class="col-3"><label class="small">ایاب و ذهاب</label><input type="text" class="form-control form-control-sm preview-trigger" dir="ltr" id="transportDisplay" onkeyup="formatCurrency(this, 'raw_p1');updatePreview();"><input type="hidden" name="transportation_pay" id="raw_p1"></div>
+                                <div class="col-3"><label class="small">عیدی/پاداش نقدی</label><input type="text" class="form-control form-control-sm preview-trigger" dir="ltr" id="eydiDisplay" onkeyup="formatCurrency(this, 'raw_p2');updatePreview();"><input type="hidden" name="eydi_sanavat" id="raw_p2"></div>
+                                <div class="col-6"><a class="small text-muted" data-bs-toggle="collapse" href="#calcGuide" role="button"><i class="fa-solid fa-calculator"></i> راهنمای محاسبه</a></div>
+                            </div>
+                            <div class="collapse small mb-2" id="calcGuide">
+                                <div class="card card-body bg-light py-2 px-3">
+                                    <div class="fw-bold text-primary">فرمول محاسبه دستمزد متغیر:</div>
+                                    <ul class="mb-0 ps-3">
+                                        <li>نرخ ساعت عادی = <strong>حقوق پایه ÷ ۲۲۰</strong></li>
+                                        <li>اضافه‌کاری = ساعت × (نرخ ساعت عادی × <strong id="guideOtRate">{{ settings_data.overtime_rate|default(1.4) }}</strong>)</li>
+                                        <li>شب‌کاری = ساعت × (نرخ ساعت عادی × <strong id="guideNightRate">{{ settings_data.night_shift_rate|default(0.35) }}</strong>)</li>
+                                        <li>جریمه غیبت = <strong>(حقوق پایه ÷ ۳۰)</strong> × تعداد روزهای غیبت</li>
+                                        <li>مرخصی بیش از ۳۰ روز در سال = کسر خودکار</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="fw-bold text-danger mt-3 border-bottom pb-1 small">کسورات</div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6"><label class="small">جریمه/غیبت</label><input type="text" class="form-control form-control-sm preview-trigger" dir="ltr" id="finesDisplay" onkeyup="formatCurrency(this, 'raw_p3');updatePreview();"><input type="hidden" name="fines" id="raw_p3"></div>
+                                <div class="col-6 d-flex align-items-end"><div class="alert alert-warning mb-0 w-100 py-1 small fw-bold"><i class="fa-solid fa-circle-info"></i> اقساط وام خودکار کسر می‌شود.</div></div>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100 fw-bold mt-3"><i class="fa-solid fa-check-circle"></i> صدور و ثبت فیش حقوقی</button>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold border-bottom pb-1"><i class="fa-solid fa-eye"></i> پیش‌نمایش زنده</h6>
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body py-2" style="background:#f8f9fa;border-radius:8px">
+                                    <div class="d-flex justify-content-between mb-2"><span class="fw-bold small"><i class="fa-solid fa-user"></i> <span id="pvWorker">-</span></span><span class="small text-muted">ماه: <span id="pvMonth">-</span></span></div>
+                                    <table class="table table-sm table-borderless mb-0 small">
+                                        <tr><td>حقوق پایه</td><td class="text-start" dir="ltr" id="pvBase">0</td></tr>
+                                        <tr><td>حق مسکن + بن + اولاد</td><td class="text-start" dir="ltr" id="pvBenefits">0</td></tr>
+                                        <tr><td>اضافه‌کاری + شب‌کاری + مأموریت</td><td class="text-start" dir="ltr" id="pvOvertime">0</td></tr>
+                                        <tr><td>پاداش KPI</td><td class="text-start" dir="ltr" id="pvKpi">0</td></tr>
+                                        <tr><td>ایاب و ذهاب + عیدی</td><td class="text-start" dir="ltr" id="pvOther">0</td></tr>
+                                        <tr class="border-top fw-bold text-success"><td>ناخالص</td><td class="text-start" dir="ltr" id="pvGross">0</td></tr>
+                                        <tr class="text-danger"><td>بیمه (۷٪)</td><td class="text-start" dir="ltr" id="pvInsurance">0</td></tr>
+                                        <tr class="text-danger"><td>مالیات</td><td class="text-start" dir="ltr" id="pvTax">0</td></tr>
+                                        <tr class="text-danger"><td>قسط وام</td><td class="text-start" dir="ltr" id="pvLoan">0</td></tr>
+                                        <tr class="text-danger"><td>جریمه</td><td class="text-start" dir="ltr" id="pvFines">0</td></tr>
+                                        <tr class="border-top fw-bold fs-6 bg-primary text-white"><td>خالص پرداختی</td><td class="text-start" dir="ltr" id="pvNet">0</td></tr>
+                                    </table>
+                                    <div id="pvLoanCapWarning" class="small text-warning mt-1" style="display:none"><i class="fa-solid fa-triangle-exclamation"></i> قسط وام بیش از ۵۰٪ خالص — سقف اعمال شد</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    
                 </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-success w-100 fw-bold fs-5">محاسبه و صدور فیش</button></div>
             </form>
         </div>
     </div>
 </div>
 
+<div class="offcanvas offcanvas-end" tabindex="-1" id="filterOffcanvas">
+    <div class="offcanvas-header bg-light border-bottom">
+        <h5 class="offcanvas-title fw-bold"><i class="fa-solid fa-sliders text-primary"></i> فیلتر پیشرفته</h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form method="GET">
+            <div class="mb-3"><label class="form-label fw-bold">سال</label>
+                <select name="year" class="form-select">
+                    <option value="">همه سال‌ها</option>
+                    {% for y in range(1400, 1410) %}<option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                </select></div>
+            <div class="mb-3"><label class="form-label fw-bold">ماه</label>
+                <select name="month" class="form-select">
+                    <option value="">همه ماه‌ها</option>
+                    {% for m, name in month_names.items() %}<option value="{{ m }}" {% if current_month == m %}selected{% endif %}>{{ name }}</option>{% endfor %}
+                </select></div>
+            <div class="mb-3"><label class="form-label fw-bold">پرسنل</label>
+                <select name="worker_id" class="form-select">
+                    <option value="">همه پرسنل</option>
+                    {% for w in workers %}<option value="{{ w.id }}" {% if current_worker_id == w.id %}selected{% endif %}>{{ w.name }} ({{ w.worker_code }})</option>{% endfor %}
+                </select></div>
+            <div class="mb-3"><label class="form-label fw-bold">وضعیت پرداخت</label>
+                <select name="status" class="form-select">
+                    <option value="">همه</option>
+                    <option value="paid" {% if current_status == 'paid' %}selected{% endif %}>تسویه شده</option>
+                    <option value="unpaid" {% if current_status == 'unpaid' %}selected{% endif %}>پرداخت نشده</option>
+                </select></div>
+            <button type="submit" class="btn btn-primary w-100 mb-2">اعمال فیلتر</button>
+            <a href="{{ url_for('hr.payslips') }}" class="btn btn-outline-secondary w-100">پاک کردن</a>
+        </form>
+    </div>
+</div>
+
 <script>
-    function formatCurrency(input, hiddenFieldId) { 
-        let value = input.value.replace(/\D/g, ""); 
-        document.getElementById(hiddenFieldId).value = value; 
-        if (value) input.value = Number(value).toLocaleString('en-US'); 
-        else input.value = ""; 
-    }
+var workersData = {{ workers_data_json|safe }};
+var settingsData = {{ settings_data_json|safe }};
+
+function formatCurrency(input, hiddenFieldId) {
+    let v = input.value.replace(/\D/g, "");
+    document.getElementById(hiddenFieldId).value = v;
+    input.value = v ? Number(v).toLocaleString('en-US') : "";
+}
+function num(v) { return parseFloat(v) || 0; }
+function fmt(v) { return Number(v).toLocaleString('en-US') + ' تومان'; }
+
+function updatePreview() {
+    var wid = parseInt(document.getElementById('previewWorker').value);
+    if (!wid || !workersData[wid]) return;
+    var w = workersData[wid];
+    var base = num(w.salary), housing = num(w.housing), food = num(w.food), family = num(w.family);
+    var otHours = num(document.getElementById('otField').value);
+    var nightHours = num(document.getElementById('nightField').value);
+    var transport = num(document.getElementById('raw_p1').value);
+    var eydi = num(document.getElementById('raw_p2').value);
+    var fines = num(document.getElementById('raw_p3').value);
+    var otRate = num(document.getElementById('otRateField').value || settingsData.overtime_rate);
+    var nightRate = num(document.getElementById('nightRateField').value || settingsData.night_shift_rate);
+    var wh = num(settingsData.working_hours), taxPct = num(settingsData.tax_percent);
+    var hourly = wh > 0 ? base / wh : 0;
+    var otPay = otHours * (hourly * otRate), nightPay = nightHours * (hourly * nightRate);
+    var dailyWage = base / 30, missionPay = num(window._previewMissionDays || 0) * dailyWage;
+    document.getElementById('guideOtRate').textContent = otRate;
+    document.getElementById('guideNightRate').textContent = nightRate;
+    var benefits = housing + food + family, kpi = num(w.kpi), other = transport + eydi + missionPay;
+    var gross = base + benefits + otPay + nightPay + kpi + other;
+    var ins = (w.insurance === 'بیمه اجباری' || w.insurance === 'فعال') ? gross * 0.07 : 0;
+    var tax = gross * (taxPct / 100), loan = num(w.loan);
+    var maxCap = (gross - ins - tax) * 0.5, capped = false;
+    if (loan > maxCap) { loan = Math.max(0, maxCap); capped = true; }
+    var net = gross - (loan + fines + ins + tax);
+    document.getElementById('pvWorker').textContent = document.getElementById('previewWorker').options[document.getElementById('previewWorker').selectedIndex].text.split('(')[0].trim();
+    document.getElementById('pvMonth').textContent = document.getElementById('previewMonth').value;
+    document.getElementById('pvBase').textContent = fmt(base);
+    document.getElementById('pvBenefits').textContent = fmt(benefits);
+    document.getElementById('pvOvertime').textContent = fmt(otPay + nightPay + missionPay);
+    document.getElementById('pvKpi').textContent = fmt(kpi);
+    document.getElementById('pvOther').textContent = fmt(other - missionPay);
+    document.getElementById('pvGross').textContent = fmt(gross);
+    document.getElementById('pvInsurance').textContent = fmt(ins);
+    document.getElementById('pvTax').textContent = fmt(tax);
+    document.getElementById('pvLoan').textContent = fmt(loan);
+    document.getElementById('pvFines').textContent = fmt(fines);
+    document.getElementById('pvNet').textContent = fmt(net);
+    document.getElementById('pvLoanCapWarning').style.display = capped ? 'block' : 'none';
+}
+
+function loadAttendance(workerId, monthName) {
+    if (!workerId || !monthName) return;
+    var st = document.getElementById('attStatus');
+    fetch('/hr/attendance/summary?worker_id=' + workerId + '&month_name=' + encodeURIComponent(monthName))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var ot = document.getElementById('otField'), ni = document.getElementById('nightField');
+            window._previewMissionDays = d.mission || 0;
+            window._previewAbsentDays = d.absent || 0;
+            if (!ot.dataset.auto && d.overtime > 0) ot.value = d.overtime;
+            if (!ni.dataset.auto && d.night > 0) ni.value = d.night;
+            if (d.overtime > 0 || d.night > 0) st.style.display = 'inline';
+            updatePreview();
+        });
+}
+
+function filterTable() {
+    var f = document.getElementById('payslipSearch').value.toLowerCase();
+    document.querySelectorAll('#payslipTable tbody tr').forEach(function(r) { r.style.display = r.textContent.toLowerCase().includes(f) ? '' : 'none'; });
+}
+
+function sortTable(c) {
+    var t = document.getElementById('payslipTable'), b = t.querySelector('tbody'), rs = Array.from(b.querySelectorAll('tr'));
+    var asc = t.dataset.sortAsc === 'true' ? false : true;
+    t.dataset.sortAsc = asc;
+    rs.sort(function(a, b) {
+        var x = a.cells[c].textContent.trim().replace(/,/g, ''), y = b.cells[c].textContent.trim().replace(/,/g, '');
+        var xn = parseFloat(x) || x, yn = parseFloat(y) || y;
+        return typeof xn === 'number' ? (asc ? xn - yn : yn - xn) : (asc ? String(x).localeCompare(String(y)) : String(y).localeCompare(String(x)));
+    });
+    rs.forEach(function(r) { b.appendChild(r); });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var m = document.getElementById('addPayslipModal');
+    m.addEventListener('shown.bs.modal', function() {
+        var w = this.querySelector('[name="worker_id"]'), mn = this.querySelector('[name="month_name"]');
+        loadAttendance(w.value, mn.value);
+        w.onchange = function() { loadAttendance(w.value, mn.value); };
+        mn.onchange = function() { loadAttendance(w.value, mn.value); };
+    });
+    document.querySelectorAll('.preview-trigger').forEach(function(e) { e.addEventListener('input', updatePreview); e.addEventListener('change', updatePreview); });
+    document.getElementById('previewWorker').addEventListener('change', updatePreview);
+    document.getElementById('previewMonth').addEventListener('input', updatePreview);
+    updatePreview();
+    var tt = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tt.forEach(function(el) { new bootstrap.Tooltip(el); });
+});
 </script>
 {% endblock %}
