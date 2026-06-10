@@ -1,7 +1,42 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h2><i class="fa-solid fa-water text-primary"></i> صورت جریان وجوه نقد</h2>
+    <h2><i class="fa-solid fa-water text-primary"></i> صورت جریان وجوه نقد
+        <button class="btn btn-sm btn-outline-info py-0 px-1" data-bs-toggle="collapse" data-bs-target="#cfHelp"><i class="fa-solid fa-question-circle"></i> راهنما</button>
+    </h2>
+    <div class="collapse mb-3" id="cfHelp">
+        <div class="card border-info border-1 bg-light">
+            <div class="card-body py-3 small text-secondary">
+                <p class="mb-1"><strong>صورت جریان وجوه نقد یعنی چی؟</strong></p>
+                <p class="mb-1">صورت جریان وجوه نقد (Cash Flow Statement) دقیقاً مثل یه ردگیری از مسیر پول تو کسب‌وکارته. سه بخش اصلی داره:</p>
+                <p class="mb-1"><strong>۱. فعالیت‌های عملیاتی (Operating Activities)</strong><br>
+                پولی که از کار روزمره دامداری درمیاد یا خرج می‌شه:<br>
+                <span class="text-success">ورودی:</span> فروش شیر، فروش دام زنده، فروش کود<br>
+                <span class="text-danger">خروجی:</span> خرید خوراک دام، حقوق کارگرها، قبض آب و برق، دارو و واکسن<br>
+                اگه این بخش منفی باشه → یعنی دامداری از کار اصلی‌اش ضرر می‌ده، حتی اگه کلی دارایی داشته باشی.</p>
+                <p class="mb-1"><strong>۲. فعالیت‌های سرمایه‌گذاری (Investing Activities)</strong><br>
+                پولی که بابت خرید و فروش دارایی‌های بزرگ خرج/دریافت می‌شه:<br>
+                <span class="text-success">ورودی:</span> فروش یه دستگاه شیردوش قدیمی، فروش یه انبار<br>
+                <span class="text-danger">خروجی:</span> خرید تریلی جدید، ساختن یه بهاربند جدید<br>
+                این بخش معمولاً منفی‌ست (چون همیشه داری سرمایه‌گذاری می‌کنی). اگه زیاد منفی بشه یعنی بیش از حد خرج کرده‌ای.</p>
+                <p class="mb-1"><strong>۳. فعالیت‌های تأمین مالی (Financing Activities)</strong><br>
+                پولی که از قرض و سرمایه میاد یا برمی‌گرده:<br>
+                <span class="text-success">ورودی:</span> وام گرفتن از بانک، شریک آوردن پول<br>
+                <span class="text-danger">خروجی:</span> اقساط وام پس دادن، سود دادن به شریک</p>
+                <p class="mb-1"><strong>چرا این گزارش مهمه؟</strong><br>
+                ترازنامه می‌گه «چقدر دارایی داری» — ولی نمی‌گه پول نقدت چقدره. مثال: دامداری ۱۰ میلیارد دام داره، ولی صبح که می‌خواد خوراک بخره، پول نقد توی حساب نداره. صورت جریان نقد اینو نشون می‌ده: پول نقد واقعاً کجاست و آیا می‌تونی فردا حقوق کارگرها رو بدی یا نه.</p>
+                <p class="mb-0"><strong>سه تا سوالی که این گزارش جواب می‌ده:</strong><br>
+                آیا سودمون به پول نقد تبدیل شده یا نه؟<br>
+                چقدر پول نقد برای خرج‌های ضروری داریم؟<br>
+                اگر ورشکسته بشیم، چقدر پول نقد واقعی داریم؟</p>
+                <p class="mb-0 mt-2"><strong>سه خط پایانی گزارش یعنی چی؟</strong><br>
+                <strong>موجودی نقد ابتدای دوره</strong> → چقدر پول نقد اول سال تو حساب و جیبت بود.<br>
+                <strong>تغییر خالص وجوه نقد</strong> → مجموع پولی که در طول سال آمد منهای رفته (مثبت = بیشتر شده، منفی = کمتر شده).<br>
+                <strong>موجودی نقد پایان دوره</strong> → چقدر پول نقد الان داری (ابتدای دوره + تغییرات).<br>
+                اگه موجودی آخر از اول کمتر باشه → یعنی بیشتر از درآمدت خرج کردی 🟥. اگه بیشتر باشه → یا فروش رفته بالا یا خرجت کم شده 🟩.</p>
+            </div>
+        </div>
+    </div>
     <form method="GET" class="d-flex gap-2 align-items-center">
         <label class="small fw-bold">از تاریخ:</label>
         <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from.strftime('%Y-%m-%d') }}">

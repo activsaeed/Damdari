@@ -143,7 +143,6 @@
                         <th>شرکت/شخص</th>
                         <th>دسته‌بندی</th>
                         <th>مبلغ ({{ get_system_currency_from_settings() }})</th>
-                        <th>نوع سند / وضعیت</th>
                         <th>اسناد/فایل</th>
                         <th>عملیات</th>
                     </tr>
@@ -190,8 +189,8 @@
                         <td>
                             <div class="btn-group">
                                 <a href="{{ url_for('finance.tx_profile', id=t.id) }}" class="btn btn-sm btn-outline-primary" title="پرونده فاکتور"><i class="fa-solid fa-address-card"></i> پرونده</a>
-                                <form method="POST" action="{{ url_for('finance.delete_tx', id=t.id) }}" style="display:inline" onsubmit="return confirm('آیا از حذف مطمئن هستید؟')"><button type="submit" class="btn btn-sm btn-outline-danger" title="حذف"><i class="fa-solid fa-trash"></i></button></form>
-                                <form method="POST" action="{{ url_for('finance.archive_tx', id=t.id) }}" style="display:inline" onsubmit="return confirm('آیا فاکتور بایگانی شود؟ مبالغ آن دیگر در محاسبات لحاظ نخواهد شد.')"><button type="submit" class="btn btn-sm btn-outline-warning" title="بایگانی فاکتور"><i class="fa-solid fa-box-archive"></i></button></form>
+                                <form method="POST" action="{{ url_for('finance.delete_tx', id=t.id) }}" style="display:inline" onsubmit="return confirm('آیا از حذف مطمئن هستید؟')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger" title="حذف"><i class="fa-solid fa-trash"></i></button></form>
+                                <form method="POST" action="{{ url_for('finance.archive_tx', id=t.id) }}" style="display:inline" onsubmit="return confirm('آیا فاکتور بایگانی شود؟ مبالغ آن دیگر در محاسبات لحاظ نخواهد شد.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-warning" title="بایگانی فاکتور"><i class="fa-solid fa-box-archive"></i></button></form>
                             </div>
                         </td>
                     </tr>
@@ -199,7 +198,7 @@
 
                 
                     {% else %}
-                    <tr><td colspan="9" class="text-center py-5 text-muted">هیچ تراکنشی با این مشخصات یافت نشد.</td></tr>
+                    <tr><td colspan="8" class="text-center py-5 text-muted">هیچ تراکنشی با این مشخصات یافت نشد.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -239,8 +238,10 @@
 <script>
     // تابع تغییر آنی ستاره فاکتور بدون رفرش صفحه
     function toggleStarTx(txId, element) {
+        showLoading(element);
         fetch(`/finance/toggle_star_tx/${txId}`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } })
             .then(response => response.json())
+            .finally(function() { hideLoading(element); })
             .then(data => {
                 if(data.success) {
                     if(data.is_starred) {

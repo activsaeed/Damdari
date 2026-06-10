@@ -50,7 +50,7 @@
                             <small class="text-muted"><i class="fa-solid fa-check-circle text-success"></i> زایش‌های موفق: {{ item.successful_births }} بار</small>
                         </div>
                         <div class="text-end">
-                            <span class="badge bg-info text-dark rounded-pill px-3 py-2 mb-1">سن: {{ ((today_str|default(''))[:4]) }}</span><br>
+                            <span class="badge bg-info text-dark rounded-pill px-3 py-2 mb-1">سن: {{ (today_str[:4]|int - item.ewe.birth_date.year) if item.ewe.birth_date else 'نامشخص' }} سال</span><br>
                             <a href="{{ url_for('livestock.profile', id=item.ewe.id) }}" class="btn btn-sm btn-outline-primary w-100">بررسی پرونده</a>
                         </div>
                     </li>

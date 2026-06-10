@@ -6,7 +6,7 @@
     <div>
         <a href="javascript:history.back()" class="btn btn-secondary shadow-sm"><i class="fa-solid fa-arrow-right"></i> بازگشت به لیست</a>
         <button class="btn btn-warning shadow-sm mx-1" data-bs-toggle="modal" data-bs-target="#editChequeModal{{ c.id }}"><i class="fa-solid fa-pen"></i> ویرایش</button>
-        <a href="{{ url_for('finance.delete_cheque', id=c.id) }}" class="btn btn-danger shadow-sm" onclick="return confirm('حذف کامل؟')"><i class="fa-solid fa-trash"></i></a>
+        <form action="{{ url_for('finance.delete_cheque', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف کامل؟')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger shadow-sm"><i class="fa-solid fa-trash"></i></button></form>
     </div>
 </div>
 
@@ -54,7 +54,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش چک</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST">
+            <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
                         <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>                        

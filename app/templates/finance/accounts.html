@@ -6,6 +6,30 @@
         <i class="fa-solid fa-plus"></i> حساب جدید
     </button>
 </div>
+<p class="text-muted">
+    <button class="btn btn-sm btn-outline-info py-0 px-1" data-bs-toggle="collapse" data-bs-target="#codingHelp"><i class="fa-solid fa-question-circle"></i> کدینگ یعنی چی؟</button>
+</p>
+<div class="collapse mb-3" id="codingHelp">
+    <div class="card border-info border-1 bg-light">
+        <div class="card-body py-3 small text-secondary">
+            <p class="mb-1"><strong>کدینگ حسابداری یعنی چی؟</strong></p>
+            <p class="mb-1">فرض کن کتابخونه‌ای داری با کلی کتاب. اگه همه کتاب‌ها رو بدون نظم بریزی توی یه جعبه، وقتی لازمشون داری باید کلی بگردی تا پیداشون کنی.</p>
+            <p class="mb-1">کدینگ حسابداری یعنی به هر «دسته» از پول‌های کسب‌وکارت یه کد و برچسب می‌دی:</p>
+            <table class="table table-sm table-bordered small mb-2 w-auto mx-auto">
+                <tr><th>کد</th><th>اسم دسته</th><th>مثال</th></tr>
+                <tr><td>۱۰۱۰</td><td>بانک</td><td>پول نقد تو بانک</td></tr>
+                <tr><td>۱۰۲۰</td><td>صندوق</td><td>پول نقد تو کشو</td></tr>
+                <tr><td>۲۰۱۰</td><td>بدهی به تأمین‌کننده</td><td>چیزی که بدهکاری</td></tr>
+                <tr><td>۳۰۱۰</td><td>حقوق صاحب کسب‌وکار</td><td>سود تو</td></tr>
+            </table>
+            <p class="mb-1">فایده‌ش چیه؟</p>
+            <p class="mb-1">وقتی می‌خوای بدونی <strong>چقدر پول توی بانک داری</strong> → کد ۱۰۱۰ رو نگاه می‌کنی<br>
+            وقتی می‌خوای بدونی <strong>چقدر از دیگران طلب داری</strong> → کد ۱۰۳۰<br>
+            وقتی می‌خوای <strong>ترازنامه</strong> بگیری → سیستم همه کدها رو جمع می‌زنه</p>
+            <p class="mb-0"><strong>خلاصه:</strong> کدینگ یعنی به هر جا که پول می‌ره یا میاد، یه شماره منظم می‌دی تا بعداً راحت پیداش کنی و گزارش بگیری.</p>
+        </div>
+    </div>
+</div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
 
 <div class="card shadow-sm border-0">

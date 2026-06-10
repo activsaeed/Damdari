@@ -99,6 +99,14 @@ def create_app():
     def inject_global_settings():
         return dict(get_system_currency_from_settings=lambda: get_system_setting('currency_unit', 'تومان'))
 
+    @app.errorhandler(404)
+    def not_found(e):
+        return '<div style="text-align:center;padding:80px 20px;font-family:Vazirmatn,sans-serif"><h1 style="font-size:80px;color:#dc3545">۴۰۴</h1><p style="font-size:20px;color:#666">صفحه مورد نظر یافت نشد</p><a href="/" style="color:#0d6efd;text-decoration:none">← بازگشت به داشبورد</a></div>', 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return '<div style="text-align:center;padding:80px 20px;font-family:Vazirmatn,sans-serif"><h1 style="font-size:80px;color:#dc3545">۵۰۰</h1><p style="font-size:20px;color:#666">خطای داخلی سرور</p><a href="/" style="color:#0d6efd;text-decoration:none">← بازگشت به داشبورد</a></div>', 500
+
     @app.before_request
     def check_valid_login():
         if request.endpoint in ['finance.update_sensors', 'finance.update_weight_iot']:

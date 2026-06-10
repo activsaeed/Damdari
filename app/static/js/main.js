@@ -24,6 +24,25 @@ overlay.addEventListener('click', function() {
     overlay.classList.add('d-none');
 });
 
+// نمایش/مخفی کردن وضعیت بارگذاری
+function showLoading(el) { if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; } }
+function hideLoading(el) { if (el) { el.style.opacity = '1'; el.style.pointerEvents = ''; } }
+
+// افزودن دکمه لغو به همه مودال‌ها
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.modal-footer').forEach(function(footer) {
+        var btn = footer.querySelector('button[type="submit"]');
+        if (btn && !footer.querySelector('.btn-cancel')) {
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn btn-secondary btn-cancel';
+            cancel.textContent = 'لغو';
+            cancel.setAttribute('data-bs-dismiss', 'modal');
+            footer.insertBefore(cancel, btn);
+        }
+    });
+});
+
 function formatCurrency(input) {
     var raw = input.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
     if (raw) {

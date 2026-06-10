@@ -1,7 +1,22 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2><i class="fa-solid fa-building-columns text-primary"></i> تطبیق بانکی (Bank Reconciliation)</h2>
-<p class="text-muted">مقایسه مانده حساب بانکی در سیستم با صورت حساب بانک</p>
+<p class="text-muted">مقایسه مانده حساب بانکی در سیستم با صورت حساب بانک
+    <button class="btn btn-sm btn-outline-info py-0 px-1 ms-2" data-bs-toggle="collapse" data-bs-target="#bankHelp"><i class="fa-solid fa-question-circle"></i> راهنما</button>
+</p>
+<div class="collapse mb-3" id="bankHelp">
+    <div class="card border-info border-1 bg-light">
+        <div class="card-body py-3 small text-secondary">
+            <p class="mb-1"><strong>تطبیق بانکی یعنی چی؟</strong></p>
+            <p class="mb-1">فرض کن تو یه دفتر کوچیک داری و هر روز خرید و فروش‌هات رو توی یه دفترچه یادداشت می‌کنی. بانکم برات یه پیامک می‌فرسته که چقدر پول تو حسابته.</p>
+            <p class="mb-1">حالا دو تا عدد داری: عددی که خودت توی دفترچه نوشتی (مثلاً ۷ میلیون) و عددی که بانک توی پیامک گفته (مثلاً ۱۰ میلیون).</p>
+            <p class="mb-1">چرا فرق می‌کنه؟ چون تو یه چک ۳ میلیونی به یه فروشنده دادی که هنوز از حساب تو کم نکرده (هنوز پاس نشده). پس توی دفتر تو اون ۳ میلیون رو کم کردی، ولی توی بانک هنوز هست.</p>
+            <p class="mb-1">تطبیق بانکی یعنی: این دو تا عدد رو می‌ذاری کنار هم، چک‌هایی که دادی ولی هنوز پاس نشده رو جدا می‌کنی، می‌بینی که آیا بعد از کم کردن اون چک‌ها، عددها به هم می‌خورن یا نه.</p>
+            <p class="mb-1">اگه به هم خوردند → یعنی دفترت با بانک "هماهنگ"ه ✅. اگه به هم نخوردند → یا یه جای کار میلنگه، یا یه تراکنشی رو از قلم انداختی ❌.</p>
+            <p class="mb-0"><strong>خلاصه:</strong> تطبیق بانکی یعنی چک کردن اینکه پولی که توی ذهنت هست با پولی که توی بانکه یکی هست یا نه.</p>
+        </div>
+    </div>
+</div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
 
 <div class="row g-3 mb-4">

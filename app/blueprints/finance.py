@@ -558,6 +558,13 @@ def cheques():
     warning_date = today + timedelta(days=5)
     urgent_cheques = Cheque.query.filter(Cheque.is_deleted == False, Cheque.status == 'در جریان', Cheque.due_date <= warning_date).all()
 
+    # Aging buckets for overdue in-progress cheques
+    overdue_cheques = Cheque.query.filter(Cheque.is_deleted == False, Cheque.status == 'در جریان', Cheque.due_date < today).all()
+    aging_30 = sum(c.amount for c in overdue_cheques if (today - c.due_date).days <= 30)
+    aging_60 = sum(c.amount for c in overdue_cheques if 30 < (today - c.due_date).days <= 60)
+    aging_90 = sum(c.amount for c in overdue_cheques if 60 < (today - c.due_date).days <= 90)
+    aging_plus = sum(c.amount for c in overdue_cheques if (today - c.due_date).days > 90)
+
     contacts = Contact.query.order_by(Contact.name).all()
 
     return render_template('finance/cheques.html', 
@@ -565,6 +572,7 @@ def cheques():
                            total_receivable=total_receivable, total_bounced=total_bounced,
                            pending_count=pending_count, cleared_count=cleared_count, bounced_count=bounced_count,
                            urgent_cheques=urgent_cheques, today=today,
+                           aging_30=aging_30, aging_60=aging_60, aging_90=aging_90, aging_plus=aging_plus,
                            current_search=search_q, current_type=type_q, current_status=status_q, current_starred=starred_q,
                            open_add=open_add, contacts=contacts)
 
@@ -2183,7 +2191,7 @@ def bank_reconciliation():
     from sqlalchemy import func
 
     cash_acc = Account.query.filter_by(code='1010').first()
-    bank_balance_str = request.args.get('bank_balance', '').strip()
+    bank_balance_str = request.args.get('bank_balance', '').replace(',', '').strip()
     bank_balance = Decimal(bank_balance_str) if bank_balance_str else None
 
     # مانده دفتر کل

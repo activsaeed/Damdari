@@ -150,7 +150,7 @@
                             <td>
                                 <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-sm btn-outline-info" title="پرونده دام"><i class="fa-solid fa-address-card"></i> پرونده</a>
                                 {% if current_user.role == 'مدیر' %}
-                                <form method="POST" action="{{ url_for('livestock.delete_sheep', id=sheep.id) }}" style="display:inline" onsubmit="return confirm('آیا از حذف کامل این دام مطمئن هستید؟')"><button type="submit" class="btn btn-sm btn-outline-danger ms-1"><i class="fa-solid fa-trash"></i></button></form>
+                                <form method="POST" action="{{ url_for('livestock.delete_sheep', id=sheep.id) }}" style="display:inline" onsubmit="return confirm('آیا از حذف کامل این دام مطمئن هستید؟')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger ms-1"><i class="fa-solid fa-trash"></i></button></form>
                                 {% endif %}
                             </td>
                         </tr>

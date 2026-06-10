@@ -4,8 +4,37 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2><i class="fa-solid fa-file-invoice-dollar text-danger"></i> داشبورد مالیاتی و سامانه مودیان</h2>
     <div>
+        <button class="btn btn-sm btn-outline-info py-0 px-1 me-2" data-bs-toggle="collapse" data-bs-target="#taxHelp"><i class="fa-solid fa-question-circle"></i> راهنما</button>
         <button class="btn btn-outline-dark shadow-sm fw-bold me-2" data-bs-toggle="modal" data-bs-target="#moadianConfigModal"><i class="fa-solid fa-key text-warning"></i> کلیدهای مالیاتی</button>
         <a href="{{ url_for('finance.export_vat_return') }}" class="btn btn-dark shadow-sm fw-bold"><i class="fa-solid fa-file-excel"></i> اظهارنامه فصلی (Excel)</a>
+    </div>
+</div>
+
+<div class="collapse mb-3" id="taxHelp">
+    <div class="card border-info border-1 bg-light">
+        <div class="card-body py-3 small text-secondary">
+            <p class="mb-1"><strong>داشبورد مالیاتی و سامانه مودیان یعنی چی؟</strong></p>
+            <p class="mb-1">فرض کن مغازه‌داری. هر وقت جنس می‌فروشی، دولت می‌گه «۹٪ از پول فروشت رو باید به من بدی» (مالیات ارزش افزوده). این صفحه بهت نشون می‌ده چقدر از مشتری‌ها مالیات گرفتی، چقدر خودت مالیات دادی، و چقدر بدهکاری یا طلبکاری.</p>
+
+            <p class="mb-0 mt-3"><strong>نوع سند: "درآمد نوع 1" یعنی چی؟</strong></p>
+            <p class="mb-0">سیستم به هر فاکتور یه برچسب می‌زنه: <strong>درآمد</strong> → پولی که از مشتری گرفتی | <strong>هزینه</strong> → پولی که بابت خرید دادی. عدد «نوع 1» صرفاً یه شناسه داخلیه برای سامانه مودیان. کار خاصی نداره. مهم اینه که درآمد یا هزینه است.</p>
+
+            <p class="mb-0 mt-3"><strong>مالیات فروش (بدهی به دولت) یعنی چی؟</strong></p>
+            <p class="mb-0">فرض کن ماهی ۱۰۰ تومن جنس فروختی. ۹٪ مالیاتش میشه ۹ تومن که از مشتری گرفتی. این پول مال تو نیست، باید بدی به دولت. این کارت نشون می‌ده چقدر از مشتری‌ها مالیات جمع کردی و باید به خزانه بپردازی.</p>
+
+            <p class="mb-0 mt-3"><strong>اعتبار مالیاتی (طلب از دولت) یعنی چی؟</strong></p>
+            <p class="mb-0">حالا خودت رفتی ۵۰ تومن خوراک دام خریدی. بابت این خرید ۴٫۵ تومن مالیات به فروشنده دادی. دولت می‌گه «این ۴٫۵ تومن رو از بدهی‌ات کم کن». به این می‌گن اعتبار مالیاتی — سهم مالیاتی که خودت دادی و دولت بهت بدهکار شده.</p>
+
+            <p class="mb-0 mt-3"><strong>تراز نهایی مالیات ارزش افزوده یعنی چی؟</strong></p>
+            <p class="mb-1">مالیات فروش (۹ تومن) منهای اعتبار مالیاتی (۴٫۵ تومن) = ۴٫۵ تومن خالص بدهی. این کارت می‌گه در نهایت چقدر باید به دولت پول بدی (یا چقدر دولت بهت بدهکار). سه حالت داره:</p>
+            <p class="mb-0">🔴 <strong>قرمز (بدهکار)</strong> → باید به دولت پرداخت کنی<br>
+            🟢 <strong>سبز (طلبکار)</strong> → دولت به تو بدهکار شده / می‌تونی دوره بعد تهاتر کنی<br>
+            ⚫ <strong>سیاه (صفر)</strong> → نه بدهکاری نه طلبکاری</p>
+
+            <p class="mb-0 mt-3"><strong>پیکربندی اتصال به سامانه مودیان یعنی چی؟</strong></p>
+            <p class="mb-1">سامانه مودیان (my.tax.gov.ir) یه سایت دولتی‌ست که باید فاکتورهای فروشت رو بهش بفرستی. مثل این می‌مونه که قبلاً کاغذی اظهارنامه می‌بردی، حالا باید الکترونیکی بفرستی.</p>
+            <p class="mb-0">برای اتصال، دو تا کلید نیاز داری: <strong>شناسه حافظه مالیاتی</strong> — یه کد ۶ رقمی از سایت دولت | <strong>کلید خصوصی</strong> — یه فایل رمزنگاری شده که می‌گیری از مراکز صدور گواهی. تا وقتی اینا رو تنظیم نکنی، سیستم فقط شبیه‌سازی (Sandbox) می‌کنه و فاکتورها واقعاً ارسال نمی‌شن.</p>
+        </div>
     </div>
 </div>
 

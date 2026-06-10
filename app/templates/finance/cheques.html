@@ -50,7 +50,7 @@
                     <!-- دکمه پرونده اضافه شد -->
                     <a href="{{ url_for('finance.cheque_profile', id=uc.id) }}" class="btn btn-sm btn-outline-dark py-0 px-2"><i class="fa-solid fa-eye"></i> پرونده</a>
                     
-                    <form action="{{ url_for('finance.update_cheque_status', id=uc.id) }}" method="POST" class="d-inline">
+                    <form action="{{ url_for('finance.update_cheque_status', id=uc.id) }}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="status" value="پاس شده">
                         <button type="submit" class="btn btn-sm btn-success py-0 px-2" onclick="return confirm('تایید تسویه؟')">تسویه</button>
                     </form>
@@ -60,6 +60,16 @@
         </div>
         {% endfor %}
     </div>
+</div>
+{% endif %}
+
+{% if pending_count > 0 %}
+<div class="row g-2 mb-3">
+    <div class="col-md-12"><h6 class="text-muted mb-2"><i class="fa-solid fa-clock"></i> چک‌های سررسید گذشته</h6></div>
+    <div class="col-3"><div class="card border-0 shadow-sm border-start border-warning border-4 h-100"><div class="card-body py-2 px-3"><small class="text-muted d-block">&lt; ۳۰ روز</small><span class="fw-bold fs-6">{{ aging_30|currency }}</span></div></div></div>
+    <div class="col-3"><div class="card border-0 shadow-sm border-start border-orange border-4 h-100" style="border-color:#e67e22 !important;"><div class="card-body py-2 px-3"><small class="text-muted d-block">۳۰-۶۰ روز</small><span class="fw-bold fs-6">{{ aging_60|currency }}</span></div></div></div>
+    <div class="col-3"><div class="card border-0 shadow-sm border-start border-danger border-4 h-100"><div class="card-body py-2 px-3"><small class="text-muted d-block">۶۰-۹۰ روز</small><span class="fw-bold fs-6">{{ aging_90|currency }}</span></div></div></div>
+    <div class="col-3"><div class="card border-0 shadow-sm border-start border-dark border-4 h-100"><div class="card-body py-2 px-3"><small class="text-muted d-block">&gt; ۹۰ روز</small><span class="fw-bold fs-6">{{ aging_plus|currency }}</span></div></div></div>
 </div>
 {% endif %}
 
@@ -157,15 +167,15 @@
                             <div class="dropdown d-inline">
                                 <button class="btn btn-sm btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">وضعیت</button>
                                 <ul class="dropdown-menu">
-                                    <li><form action="{{ url_for('finance.update_cheque_status', id=c.id) }}" method="POST"><input type="hidden" name="status" value="پاس شده"><button class="dropdown-item text-success fw-bold" onclick="return confirm('تایید تسویه؟ مبلغ وارد دفتر کل میشود.')">تسویه شد / خرج شد</button></form></li>
-                                    <li><form action="{{ url_for('finance.update_cheque_status', id=c.id) }}" method="POST"><input type="hidden" name="status" value="برگشت خورده"><button class="dropdown-item text-danger fw-bold" onclick="return confirm('آیا چک برگشت خورد؟')">برگشت خورد</button></form></li>
+                                    <li><form action="{{ url_for('finance.update_cheque_status', id=c.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="پاس شده"><button class="dropdown-item text-success fw-bold" onclick="return confirm('تایید تسویه؟ مبلغ وارد دفتر کل میشود.')">تسویه شد / خرج شد</button></form></li>
+                                    <li><form action="{{ url_for('finance.update_cheque_status', id=c.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="برگشت خورده"><button class="dropdown-item text-danger fw-bold" onclick="return confirm('آیا چک برگشت خورد؟')">برگشت خورد</button></form></li>
                                 </ul>
                             </div>
                             {% endif %}
                             <a href="{{ url_for('finance.cheque_profile', id=c.id) }}" class="btn btn-sm btn-outline-primary ms-1" title="پرونده چک"><i class="fa-solid fa-address-card"></i> پرونده</a>
                             <button class="btn btn-sm btn-outline-warning ms-1" data-bs-toggle="modal" data-bs-target="#editChequeModal{{ c.id }}"><i class="fa-solid fa-pen"></i></button>
                             {% if c.image_path %}<a href="{{ url_for('static', filename=c.image_path) }}" target="_blank" class="btn btn-sm btn-outline-info ms-1"><i class="fa-solid fa-image"></i></a>{% endif %}
-                            <a href="{{ url_for('finance.delete_cheque', id=c.id) }}" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('حذف کامل؟')"><i class="fa-solid fa-trash"></i></a>
+                            <form action="{{ url_for('finance.delete_cheque', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف کامل؟')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger ms-1"><i class="fa-solid fa-trash"></i></button></form>
                         </td>
                     </tr>
 
@@ -174,7 +184,7 @@
                         <div class="modal-dialog modal-lg">
                             <div class="modal-content">
                                 <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-pen text-warning"></i> ویرایش چک</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                                <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST">
+                                <form action="{{ url_for('finance.edit_cheque', id=c.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="modal-body">
                                         <div class="row g-3 mb-3">                                            
                                             <div class="col-md-6"><label class="form-label fw-bold">نوع چک</label><select name="cheque_type" class="form-select fw-bold"><option value="دریافتی (مشتری)" {% if c.cheque_type=='دریافتی (مشتری)' %}selected{% endif %}>دریافتی از مشتری</option><option value="پرداختی (خودم)" {% if c.cheque_type=='پرداختی (خودم)' %}selected{% endif %}>پرداختی خودم</option></select></div>                                            
@@ -249,7 +259,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-money-check text-primary"></i> ثبت چک</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <form action="{{ url_for('finance.add_cheque') }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ url_for('finance.add_cheque') }}" method="POST" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
                         <div class="col-md-6"><label class="form-label fw-bold text-primary">نوع چک</label><select name="cheque_type" class="form-select fw-bold" required><option value="دریافتی (مشتری)">دریافتی از مشتری (طلب)</option><option value="پرداختی (خودم)">پرداختی خودم (بدهی)</option></select></div>                        
@@ -336,8 +346,10 @@
 <script>
     // تابع تغییر آنی ستاره چک بدون رفرش صفحه
     function toggleStarCheque(chequeId, element) {
+        showLoading(element);
         fetch(`/finance/toggle_star_cheque/${chequeId}`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } })
             .then(response => response.json())
+            .finally(function() { hideLoading(element); })
             .then(data => {
                 if(data.success) {
                     if(data.is_starred) {

@@ -615,7 +615,7 @@ def vet_queue():
     due_ids = [m.sheep_id for m in due_meds]
     med_sheep = Sheep.query.filter(Sheep.id.in_(due_ids)).all() if due_ids else []
     newborns = [s for s in Sheep.query.filter(Sheep.birth_date >= today - timedelta(days=7)).all() if not MedicalRecord.query.filter_by(sheep_id=s.id, medicine_name="چکاپ سلامت نوزاد").first()]
-    return render_template('livestock/vet_queue.html', sick_sheep=sick_sheep, med_sheep=med_sheep, newborns=newborns, templates=TreatmentTemplate.query.all(), today=today)
+    return render_template('livestock/vet_queue.html', sick_sheep=sick_sheep, due_meds=due_meds, newborns=newborns, templates=TreatmentTemplate.query.all(), today=today)
 
 @livestock_bp.route('/apply_protocol/<int:id>', methods=['POST'])
 @login_required
@@ -639,6 +639,36 @@ def medical_overview():
     sick_sheep = Sheep.query.filter_by(status='بیمار').all()
     upcoming_meds = MedicalRecord.query.filter(MedicalRecord.next_date != None, MedicalRecord.next_date <= today + timedelta(days=7)).order_by(MedicalRecord.next_date.asc()).all()
     return render_template('livestock/medical.html', sick_sheep=sick_sheep, upcoming_meds=upcoming_meds, today=today)
+
+@livestock_bp.route('/genetics')
+@login_required
+@permission_required('can_view_livestock')
+def genetics():
+    from sqlalchemy import func
+    today = datetime.now(UTC).date()
+    today_str = str(today.year)
+    # 5 قوچ برتر با بیشترین تعداد فرزند و دوقلو
+    rams = Sheep.query.filter(Sheep.gender.in_(['قوچ', 'بره نر']), Sheep.is_deleted == False).all()
+    top_rams = []
+    for ram in rams:
+        offsprings = Sheep.query.filter(Sheep.father_id == ram.id).count()
+        if offsprings == 0:
+            continue
+        twins = BirthRecord.query.filter(BirthRecord.father_id == ram.id, BirthRecord.birth_type == 'دوقلو').count()
+        top_rams.append({'ram': ram, 'offsprings': offsprings, 'twins': twins})
+    top_rams.sort(key=lambda x: (x['twins'], x['offsprings']), reverse=True)
+    top_rams = top_rams[:5]
+    # 5 میش برتر با بیشترین زایش موفق
+    ewes = Sheep.query.filter(Sheep.gender.in_(['میش', 'بره ماده']), Sheep.is_deleted == False).all()
+    top_ewes = []
+    for ewe in ewes:
+        successful_births = BirthRecord.query.filter(BirthRecord.mother_id == ewe.id).count()
+        if successful_births == 0:
+            continue
+        top_ewes.append({'ewe': ewe, 'successful_births': successful_births})
+    top_ewes.sort(key=lambda x: x['successful_births'], reverse=True)
+    top_ewes = top_ewes[:5]
+    return render_template('livestock/genetics.html', top_rams=top_rams, top_ewes=top_ewes, today_str=today_str)
 
 @livestock_bp.route('/mating-suggestion')
 @login_required

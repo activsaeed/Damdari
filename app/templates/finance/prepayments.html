@@ -1,7 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2><i class="fa-solid fa-hand-holding-heart text-primary"></i> پیش‌پرداخت و پیش‌دریافت</h2>
-<p class="text-muted">پیگیری وجوهی که قبل از انجام معامله پرداخت یا دریافت شده‌اند</p>
+<p class="text-muted">پیگیری وجوهی که قبل از انجام معامله پرداخت یا دریافت شده‌اند
+    <button class="btn btn-sm btn-outline-info py-0 px-1 ms-2" data-bs-toggle="collapse" data-bs-target="#prepayHelp"><i class="fa-solid fa-question-circle"></i> راهنما</button>
+</p>
+<div class="collapse mb-3" id="prepayHelp">
+    <div class="card border-info border-1 bg-light">
+        <div class="card-body py-3 small text-secondary">
+            <p class="mb-1"><strong>پیش‌پرداخت و پیش‌دریافت یعنی چی؟</strong></p>
+            <p class="mb-1">فرض کن می‌خوای یه تلویزیون بخری و فروشنده می‌گه "اگه یه ماه دیگه بیای ۱۰ میلیون گرون‌تر شده، ولی اگه الان ۲ میلیون پیش بدی، همون قیمت امروز رو برات نگه می‌دارم." تو الان ۲ میلیون بهش می‌دی و بعداً بقیه رو تکمیل می‌کنی.</p>
+            <p class="mb-1">تو حسابداری به این می‌گن <strong>پیش‌پرداخت</strong>: پولی که دادی ولی هنوز جنس یا خدمتش رو نگرفتی.</p>
+            <p class="mb-1"><strong>پیش‌دریافت</strong> برعکسشه: مشتری به تو پول میده که مثلاً سه ماه بعد بهش گوسفند بدی. پول تو جیب توئه ولی هنوز مال تو نیست، چون باید بعداً باهاش جنس بدی.</p>
+            <p class="mb-0">اینجا تو نرم‌افزار، این مبالغ رو نشون می‌ده تا یادت باشه: چقدر پول دادی و هنوز طلبکار هستی (پیش‌پرداخت)، چقدر پول گرفتی و هنوز بدهکاری (پیش‌دریافت).</p>
+        </div>
+    </div>
+</div>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
 
 <div class="card shadow-sm border-0">
