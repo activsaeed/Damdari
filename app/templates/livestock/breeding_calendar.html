@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block content %}
+<style> .event-item { padding:6px 8px; margin:2px 0; border-radius:4px; font-size:0.75rem; cursor:pointer; } .event-item:hover { opacity:0.85; } </style>
+{% set pmonth = 12 if month == 1 else month - 1 %}{% set pyear = year - 1 if month == 1 else year %}
+{% set nmonth = 1 if month == 12 else month + 1 %}{% set nyear = year + 1 if month == 12 else year %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="mb-0"><i class="fa-solid fa-calendar-check text-danger"></i> تقویم تولیدمثل</h2>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="{{ url_for('livestock.breeding_calendar') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-calendar-day"></i> امروز</a>
+        <a href="{{ url_for('livestock.breeding_calendar', year=pyear, month=pmonth) }}" class="btn btn-outline-secondary btn-sm">← ماه قبل</a>
+        <select class="form-select form-select-sm d-inline-block" style="width:auto" onchange="window.location='{{ url_for('livestock.breeding_calendar', year=9999, month=1) }}'.replace('9999', this.value.split('-')[0]).replace('month=1', 'month='+this.value.split('-')[1])">
+            {% for y in range(year-2, year+3) %}{% for m in range(1, 13) %}
+            <option value="{{ y }}-{{ m }}" {% if y == year and m == month %}selected{% endif %}>{{ month_names[m] }} {{ y }}</option>
+            {% endfor %}{% endfor %}
+        </select>
+        <a href="{{ url_for('livestock.breeding_calendar', year=nyear, month=nmonth) }}" class="btn btn-outline-secondary btn-sm">ماه بعد →</a>
+        <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#quickMatingModal"><i class="fa-solid fa-heart"></i> جفت‌اندازی</button>
+        <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#quickUltrasoundModal"><i class="fa-solid fa-microscope"></i> سونوگرافی</button>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-2">
+                <table class="table table-bordered table-sm text-center mb-0">
+                    <thead class="table-light"><tr>{% for d in range(1, days_in_month + 1) %}<th class="small">{{ d }}</th>{% endfor %}</tr></thead>
+                    <tbody><tr>{% for d in range(1, days_in_month + 1) %}
+                        <td style="height:80px;vertical-align:top;padding:2px;font-size:0.7rem;position:relative;cursor:pointer" title="کلیک برای ثبت رویداد در روز {{ d }}">
+                            <div class="fw-bold">{{ d }}</div>
+                            {% for m in matings %}{% if (m.mating_date - g_first).days == d - 1 %}
+                            <div class="event-item bg-danger text-white" title="جفت‌اندازی {{ m.sheep.ear_tag }}">{{ m.sheep.ear_tag }} 💕</div>
+                            {% endif %}{% endfor %}
+                            {% for u in ultrasounds %}{% if (u.exam_date - g_first).days == d - 1 %}
+                            <div class="event-item bg-info text-dark" title="سونوگرافی {{ u.sheep.ear_tag }}: {{ u.result }}">{{ u.sheep.ear_tag }} 🔬</div>
+                            {% endif %}{% endfor %}
+                            {% for b in births %}{% if (b.birth_date - g_first).days == d - 1 %}
+                            <div class="event-item bg-success text-white" title="زایش {{ b.mother.ear_tag }}">{{ b.mother.ear_tag }} 🐑</div>
+                            {% endif %}{% endfor %}
+                            {% for p in predicted_births %}{% if p.due_date and (p.due_date - g_first).days == d - 1 %}
+                            <div class="event-item bg-warning text-dark" title="زایش پیش‌بینی {{ p.sheep.ear_tag }}">{{ p.sheep.ear_tag }} ⏳</div>
+                            {% endif %}{% endfor %}
+                        </td>
+                    {% endfor %}</tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-list text-primary"></i> راهنما</div>
+            <div class="card-body p-3 small">
+                <div class="mb-2"><span class="badge bg-danger">جفت‌اندازی</span></div>
+                <div class="mb-2"><span class="badge bg-info text-dark">سونوگرافی</span></div>
+                <div class="mb-2"><span class="badge bg-success">زایش</span></div>
+                <div class="mb-2"><span class="badge bg-warning text-dark">زایش پیش‌بینی</span></div>
+            </div>
+        </div>
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-clock text-warning"></i> پیش‌بینی فحلی</div>
+            <div class="card-body p-2 small">
+                {% for e in next_heats %}
+                <div class="d-flex justify-content-between border-bottom py-1">
+                    <span>{{ e.ear_tag }}</span>
+                    <span class="text-danger fw-bold">{{ e.next|jalali }}</span>
+                </div>
+                {% else %}<div class="text-muted text-center py-2">داده‌ای نیست</div>{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="quickMatingModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت جفت‌اندازی سریع</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_mating', id=0) }}" method="POST" id="quickMatingForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-2"><label>دام (ماده)</label><select name="sheep_id" class="form-select" required><option value="">انتخاب کنید...</option>{% for e in ewes %}<option value="{{ e.id }}">{{ e.ear_tag }} ({{ e.breed or '-' }})</option>{% endfor %}</select></div><div class="mb-2"><label>تاریخ (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="mating_date" class="gregorian-hidden-field"></div><div class="mb-2"><label>نوع تلقیح</label><select name="mating_type" class="form-select"><option value="طبیعی">طبیعی</option><option value="تلقیح مصنوعی">تلقیح مصنوعی</option><option value="لاپاراسکوپی">لاپاراسکوپی</option></select></div><div class="mb-2"><label>قوچ</label><select name="male_id" class="form-select"><option value="">انتخاب کنید...</option>{% for r in rams %}<option value="{{ r.id }}">{{ r.ear_tag }}</option>{% endfor %}</select></div><div class="mb-2"><label>اسپرم (در صورت تلقیح مصنوعی)</label><select name="semen_id" class="form-select"><option value="">بدون اسپرم</option>{% for s in semen_doses %}<option value="{{ s.id }}">{{ s.ram_name }} ({{ s.quantity_doses }} دوز)</option>{% endfor %}</select></div><div class="mb-2"><label>توضیحات</label><input type="text" name="notes" class="form-control"></div></div><div class="modal-footer"><button type="submit" class="btn btn-danger w-100 fw-bold">ثبت</button></div></form></div></div></div>
+<div class="modal fade" id="quickUltrasoundModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت سونوگرافی سریع</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_ultrasound', id=0) }}" method="POST" id="quickUSForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-2"><label>دام</label><select name="sheep_id" class="form-select" required><option value="">انتخاب کنید...</option>{% for e in ewes %}<option value="{{ e.id }}">{{ e.ear_tag }}</option>{% endfor %}</select></div><div class="mb-2"><label>تاریخ معاینه (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="exam_date" class="gregorian-hidden-field"></div><div class="mb-2"><label>نوع معاینه</label><select name="exam_type" class="form-select"><option value="روتین">روتین</option><option value="تشخیصی">تشخیصی</option><option value="تأیید آبستنی">تأیید آبستنی</option><option value="فولیکولی">فولیکولی</option></select></div><div class="mb-2"><label>نتیجه</label><select name="result" class="form-select" required><option value="آبستن">آبستن</option><option value="خالی">خالی</option><option value="سقط">سقط</option><option value="نامشخص">نامشخص</option></select></div><div class="row g-2 mb-2"><div class="col-6"><label>تعداد جنین</label><input type="number" name="fetus_count" class="form-control"></div><div class="col-6"><label>روز آبستنی</label><input type="number" name="gestational_days" class="form-control"></div></div><div class="mb-2"><label>توضیحات</label><input type="text" name="notes" class="form-control"></div></div><div class="modal-footer"><button type="submit" class="btn btn-info w-100 fw-bold text-white">ثبت</button></div></form></div></div></div>
+<script>
+document.getElementById('quickMatingForm')?.addEventListener('submit', function(e) {
+    const sid = document.querySelector('[name=sheep_id]', this).value;
+    this.action = this.action.replace('/0', '/' + sid);
+});
+document.getElementById('quickUSForm')?.addEventListener('submit', function(e) {
+    const sid = document.querySelector('[name=sheep_id]', this).value;
+    this.action = this.action.replace('/0', '/' + sid);
+});
+</script>
+{% endblock %}

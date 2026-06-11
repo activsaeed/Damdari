@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2><i class="fa-solid fa-chart-line text-danger"></i> داشبورد اپیدمیولوژی</h2>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card border-0 shadow-sm bg-danger text-white"><div class="card-body text-center"><h3>{{ deaths }}</h3><small>تلفات ۳ ماه</small></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm bg-primary text-white"><div class="card-body text-center"><h3>{{ records_count }}</h3><small>درمان ثبت شده</small></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm bg-warning text-dark"><div class="card-body text-center"><h3>{{ alerts|length }}</h3><small>هشدار طغیان</small></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm bg-info text-white"><div class="card-body text-center"><h3>{{ monthly_disease|length }}</h3><small>داروی پرمصرف</small></div></div></div>
+</div>
+{% if alerts %}
+<div class="alert alert-danger"><h6><i class="fa-solid fa-bell"></i> هشدار طغیان بیماری در بهاربندها</h6><ul>{% for a in alerts %}<li><strong>{{ a.pen.name }}:</strong> {{ a.sick }} از {{ a.total }} دام بیمار ({{ "%.0f"|format(a.ratio) }}%) — نیاز به بازدید فوری</li>{% endfor %}</ul></div>
+{% endif %}
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-pills"></i> شایع‌ترین داروها/درمان‌ها (۳ ماه)</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0"><thead class="table-light"><tr><th>دارو/درمان</th><th>تعداد دفعات</th></tr></thead>
+                <tbody>{% for name, cnt in monthly_disease %}<tr><td>{{ name }}</td><td><span class="badge bg-primary">{{ cnt }}</span></td></tr>{% else %}<tr><td colspan="2" class="text-muted text-center">داده‌ای نیست</td></tr>{% endfor %}</tbody></table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-chart-bar text-danger"></i> روند تلفات ماهانه (۶ ماه)</div>
+            <div class="card-body">
+                <canvas id="deathsChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12">
+        <div class="card shadow-sm border-0 bg-light">
+            <div class="card-body text-center py-4">
+                <i class="fa-solid fa-shield-halved fa-3x text-secondary mb-3"></i>
+                <p class="text-muted">برای آنالیز عمیق‌تر اپیدمیولوژی، گزارشات ماهانه و فصلی از منوی گزارشات قابل استخراج است.</p>
+                <a href="{{ url_for('livestock.vet_queue') }}" class="btn btn-outline-danger">صف درمان دامپزشکی</a>
+                <a href="{{ url_for('livestock.vet_dashboard') }}" class="btn btn-outline-primary">داشبورد KPI دامپزشکی</a>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const ctx = document.getElementById('deathsChart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: {{ monthly_labels|tojson }},
+        datasets: [{
+            label: 'تلفات',
+            data: {{ monthly_deaths|tojson }},
+            backgroundColor: 'rgba(220, 53, 69, 0.6)',
+            borderColor: 'rgba(220, 53, 69, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+});
+</script>
+{% endblock %}

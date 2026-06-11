@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2><i class="fa-solid fa-fire text-danger"></i> هشدارهای فحلی پیش‌بینی شده</h2>
+<p class="text-muted">نمایش میش‌هایی که در ۵ روز آینده انتظار فحلی داریم (بر اساس سیکل قبلی)</p>
+<p class="text-muted"><small class="text-danger">●</small> قرمز = امروز/دیروز <small class="text-warning">●</small> زرد = ۱-۲ روز دیگر</p>
+{% if heat_list %}
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm text-center align-middle mb-0">
+            <thead class="table-light"><tr><th>پلاک</th><th>نژاد</th><th>بهاربند</th><th>آخرین فحلی</th><th>میانگین سیکل</th><th>پیش‌بینی فحلی بعدی</th><th>وضعیت</th><th>ثبت جفت‌اندازی</th></tr></thead>
+            <tbody>{% for h in heat_list %}<tr class="{% if h.days_until <= 0 %}table-danger{% elif h.days_until <= 2 %}table-warning{% endif %}"><td class="fw-bold"><a href="{{ url_for('livestock.profile', id=h.sheep.id) }}">{{ h.sheep.ear_tag }}</a></td><td>{{ h.sheep.breed or '-' }}</td><td>{{ h.sheep.pen.name if h.sheep.pen else '-' }}</td><td>{{ h.sheep.last_heat_date|jalali }}</td><td>{{ h.cycle }} روز</td><td class="fw-bold text-danger">{{ h.next_heat|jalali }}</td><td>{% if h.days_until <= 0 %}<span class="badge bg-danger">اکنون</span>{% elif h.days_until == 1 %}<span class="badge bg-warning text-dark">فردا</span>{% else %}<span class="badge bg-info text-dark">{{ h.days_until }} روز دیگر</span>{% endif %}</td><td><button class="btn btn-sm btn-outline-danger py-0" data-bs-toggle="modal" data-bs-target="#quickMatingModal{{ h.sheep.id }}"><i class="fa-solid fa-heart"></i> جفت‌اندازی</button></td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</div>
+{% for h in heat_list %}
+<div class="modal fade" id="quickMatingModal{{ h.sheep.id }}"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت جفت‌اندازی {{ h.sheep.ear_tag }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_mating', id=h.sheep.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-2"><label>تاریخ جفت‌اندازی (شمسی)</label><input type="text" class="form-control jalali-datepicker" data-jalali="{{ h.next_heat|jalali }}"><input type="hidden" name="mating_date" class="gregorian-hidden-field" value="{{ h.next_heat }}"></div><div class="mb-2"><label>نوع تلقیح</label><select name="mating_type" class="form-select"><option value="طبیعی">طبیعی</option><option value="تلقیح مصنوعی">تلقیح مصنوعی</option><option value="لاپاراسکوپی">لاپاراسکوپی</option></select></div><div class="mb-2"><label>قوچ / اسپرم</label><div class="row g-2"><div class="col-6"><select name="male_id" class="form-select"><option value="">انتخاب قوچ</option>{% for r in rams %}<option value="{{ r.id }}">{{ r.ear_tag }}</option>{% endfor %}</select></div><div class="col-6"><select name="semen_id" class="form-select"><option value="">بدون اسپرم</option>{% for s in semen_doses %}<option value="{{ s.id }}">{{ s.ram_name }} ({{ s.quantity_doses }} دوز)</option>{% endfor %}</select></div></div></div><div class="mb-2"><label>توضیحات</label><input type="text" name="notes" class="form-control"></div></div><div class="modal-footer"><button type="submit" class="btn btn-danger w-100 fw-bold">ثبت جفت‌اندازی</button></div></form></div></div></div>
+{% endfor %}
+{% else %}
+<div class="alert alert-success text-center"><i class="fa-solid fa-check-circle"></i> هیچ هشدار فحلی فعالی در ۵ روز آینده وجود ندارد.</div>
+{% endif %}
+{% endblock %}

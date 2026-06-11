@@ -129,12 +129,14 @@ class MedicalRecord(db.Model):
     sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
     action_type = db.Column(db.String(50), nullable=False)
     medicine_name = db.Column(db.String(100), nullable=False)
+    drug_id = db.Column(db.Integer, db.ForeignKey('drug_inventory.id', ondelete='SET NULL'), nullable=True)
     record_date = db.Column(db.Date, default=datetime.utcnow)
     next_date = db.Column(db.Date, nullable=True)
     withdrawal_end_date = db.Column(db.Date, nullable=True)
     operator = db.Column(db.String(100), nullable=True)
     notes = db.Column(db.String(200), nullable=True)
     photos = db.relationship('MedicalPhoto', backref='medical_record', lazy=True, cascade="all, delete-orphan")
+    drug = db.relationship('DrugInventory', backref='medical_records', lazy=True)
 
 class MedicalPhoto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -620,3 +622,92 @@ class LivestockCost(db.Model):
     record_date = db.Column(db.Date, nullable=False)
     description = db.Column(db.String(255), nullable=True)
     sheep = db.relationship('Sheep', backref='costs')
+
+# ==========================================
+# تولیدمثل، سونوگرافی و اصلاح نژاد
+# ==========================================
+
+class MatingRecord(db.Model):
+    """ثبت جفت‌اندازی و تلقیح"""
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
+    male_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
+    mating_date = db.Column(db.Date, nullable=False)
+    mating_type = db.Column(db.String(50), default='طبیعی')  # طبیعی, تلقیح مصنوعی, لاپاراسکوپی
+    semen_id = db.Column(db.Integer, db.ForeignKey('semen_inventory.id', ondelete='SET NULL'), nullable=True)
+    result = db.Column(db.String(50), default='منتظر نتیجه')  # منتظر نتیجه, آبستن, خالی, سقط
+    result_date = db.Column(db.Date, nullable=True)
+    confirmed_by = db.Column(db.String(50), nullable=True)  # سونوگرافی, لمس, مشاهده
+    notes = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sheep = db.relationship('Sheep', foreign_keys=[sheep_id], backref='matings_as_female')
+    male = db.relationship('Sheep', foreign_keys=[male_id], backref='matings_as_male')
+
+class UltrasoundRecord(db.Model):
+    """ثبت نتایج سونوگرافی"""
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
+    exam_date = db.Column(db.Date, nullable=False)
+    exam_type = db.Column(db.String(50), default='روتین')  # روتین, تشخیصی, تأیید آبستنی, فولیکولی
+    result = db.Column(db.String(50), nullable=False)  # آبستن, خالی, سقط, نامشخص, تخمک‌گذاری
+    fetus_count = db.Column(db.Integer, nullable=True)
+    gestational_days = db.Column(db.Integer, nullable=True)
+    due_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sheep = db.relationship('Sheep', backref='ultrasounds')
+    images = db.relationship('UltrasoundImage', backref='record', lazy=True, cascade='all, delete-orphan')
+
+class UltrasoundImage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ultrasound_id = db.Column(db.Integer, db.ForeignKey('ultrasound_record.id', ondelete='CASCADE'), nullable=False)
+    image_path = db.Column(db.String(255), nullable=False)
+
+class SemenInventory(db.Model):
+    """مدیریت اسپرم/سیمن برای تلقیح مصنوعی"""
+    id = db.Column(db.Integer, primary_key=True)
+    ram_name = db.Column(db.String(100), nullable=False)
+    ram_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True)
+    breed = db.Column(db.String(50), nullable=True)
+    collection_date = db.Column(db.Date, nullable=True)
+    quantity_doses = db.Column(db.Integer, default=0)
+    price_per_dose = db.Column(Numeric(18, 2), default=0.0)
+    storage_location = db.Column(db.String(100), nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+
+# ==========================================
+# قرنطینه و اپیدمیولوژی
+# ==========================================
+
+class QuarantineRecord(db.Model):
+    """مدیریت قرنطینه دام‌های جدید یا بیمار"""
+    id = db.Column(db.Integer, primary_key=True)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='CASCADE'), nullable=False, index=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    reason = db.Column(db.String(100), nullable=False)  # دام جدید, بیماری, بازگشت از نمایشگاه
+    expected_end_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+
+    sheep = db.relationship('Sheep', backref='quarantines')
+
+# ==========================================
+# انبار دارو
+# ==========================================
+
+class DrugInventory(db.Model):
+    """موجودی داروهای دامپزشکی"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(50), default='عمومی')  # آنتی‌بیوتیک, واکسن, مکمل, ضدانگل, ضدالتهاب, سایر
+    stock_quantity = db.Column(Numeric(18, 2), default=0.0)
+    unit = db.Column(db.String(20), default='عدد')  # عدد, سی‌سی, میلی‌لیتر, گرم, دوز
+    price_per_unit = db.Column(Numeric(18, 2), default=0.0)
+    supplier = db.Column(db.String(100), nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
+    min_stock_alert = db.Column(Numeric(18, 2), default=0.0)
+    notes = db.Column(db.String(255), nullable=True)

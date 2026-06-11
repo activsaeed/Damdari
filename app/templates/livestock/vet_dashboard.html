@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2><i class="fa-solid fa-kit-medical text-danger"></i> داشبورد تخصصی دامپزشکی</h2>
+{% if alerts %}
+<div class="alert alert-danger alert-dismissible fade show"><ul class="mb-0">{% for a in alerts %}<li>{{ a }}</li>{% endfor %}</ul><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+{% endif %}
+<div class="row g-3 mb-4">
+    <a href="{{ url_for('livestock.index') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-primary text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.total }}</h3><small>کل دام</small></div></div></a>
+    <a href="{{ url_for('livestock.vet_queue') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-danger text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.sick }}</h3><small>بیمار</small></div></div></a>
+    <a href="{{ url_for('livestock.vet_queue') }}?status=تحت درمان" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-warning text-dark"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.under_treatment }}</h3><small>تحت درمان</small></div></div></a>
+    <a href="{{ url_for('livestock.breeding_calendar') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-info text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.pregnant }}</h3><small>آبستن</small></div></div></a>
+    <a href="{{ url_for('livestock.index') }}?status=قرنطینه" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-secondary text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.quarantined }}</h3><small>قرنطینه</small></div></div></a>
+    <a href="{{ url_for('livestock.epidemiology') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-dark text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.deaths }}</h3><small>تلفات ۳۰ روز</small><br><small class="text-warning">({{ "%.1f"|format(mortality_rate) }}%)</small></div></div></a>
+    <a href="{{ url_for('livestock.index') }}?status=زنده" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-success text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.births }}</h3><small>زایش ۳۰ روز</small></div></div></a>
+    <a href="{{ url_for('livestock.breeding_calendar') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm" style="background:#e67e22;color:#fff"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.matings }}</h3><small>جفت‌اندازی ۳۰ روز</small></div></div></a>
+    <a href="{{ url_for('livestock.medical_overview') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm" style="background:#8e44ad;color:#fff"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.treatments }}</h3><small>درمان ۳۰ روز</small></div></div></a>
+    <a href="{{ url_for('livestock.drug_inventory') }}?expiring=1" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-danger text-white"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.expiring_drugs }}</h3><small>داروی در شرف انقضا</small></div></div></a>
+    <a href="{{ url_for('livestock.drug_inventory') }}" class="col-md-3 col-6 text-decoration-none"><div class="card border-0 shadow-sm bg-warning text-dark"><div class="card-body text-center py-3"><h3 class="mb-0">{{ kpi.low_stock_drugs }}</h3><small>داروی کم‌موجودی</small></div></div></a>
+</div>
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-list-check text-primary"></i> دسترسی سریع</div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('livestock.vet_queue') }}" class="btn btn-outline-danger text-start fw-bold"><i class="fa-solid fa-truck-medical me-2"></i> صف درمان</a>
+                    <a href="{{ url_for('livestock.medical_overview') }}" class="btn btn-outline-info text-start fw-bold"><i class="fa-solid fa-calendar-plus me-2"></i> تقویم درمان</a>
+                    <a href="{{ url_for('livestock.epidemiology') }}" class="btn btn-outline-warning text-start fw-bold"><i class="fa-solid fa-biohazard me-2"></i> اپیدمیولوژی</a>
+                    <a href="{{ url_for('livestock.drug_inventory') }}" class="btn btn-outline-success text-start fw-bold"><i class="fa-solid fa-prescription-bottle me-2"></i> انبار دارو</a>
+                    <a href="{{ url_for('livestock.breeding_calendar') }}" class="btn btn-outline-primary text-start fw-bold"><i class="fa-solid fa-calendar-heart me-2"></i> تقویم تولیدمثل</a>
+                    <a href="{{ url_for('livestock.heat_alerts') }}" class="btn btn-outline-danger text-start fw-bold"><i class="fa-solid fa-fire me-2"></i> هشدار فحلی</a>
+                    <a href="{{ url_for('livestock.semen_inventory') }}" class="btn btn-outline-info text-start fw-bold"><i class="fa-solid fa-droplet me-2"></i> بانک اسپرم</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-clock-rotate-left text-secondary"></i> آخرین درمان‌ها</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>دام</th><th>دارو</th><th>تاریخ</th></tr></thead>
+                    <tbody>{% for t in recent_treatments %}<tr><td><a href="{{ url_for('livestock.profile', id=t.sheep_id) }}" class="text-decoration-none">{{ t.sheep.ear_tag if t.sheep else '?' }}</a></td><td>{{ t.medicine_name }}</td><td class="small">{{ t.record_date|jalali }}</td></tr>{% else %}<tr><td colspan="3" class="text-muted text-center">درمانی ثبت نشده</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-heart text-danger"></i> آخرین جفت‌اندازی‌ها</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>دام</th><th>نوع</th><th>تاریخ</th></tr></thead>
+                    <tbody>{% for m in recent_matings %}<tr><td><a href="{{ url_for('livestock.profile', id=m.sheep_id) }}" class="text-decoration-none">{{ m.sheep.ear_tag if m.sheep else '?' }}</a></td><td>{{ m.mating_type }}</td><td class="small">{{ m.mating_date|jalali }}</td></tr>{% else %}<tr><td colspan="3" class="text-muted text-center">جفت‌اندازی ثبت نشده</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

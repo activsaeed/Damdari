@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="fa-solid fa-dna text-warning"></i> گزارش شاخص ژنتیکی</h2>
+    <a href="{{ url_for('livestock.profile', id=sheep.id) }}" class="btn btn-outline-secondary">بازگشت به پرونده</a>
+</div>
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 border-top border-warning border-4">
+            <div class="card-body text-center">
+                <i class="fa-solid fa-{% if sheep.gender == 'قوچ' %}horse-head{% else %}sheep{% endif %} fa-4x text-secondary mb-2"></i>
+                <h4>{{ sheep.ear_tag }}</h4>
+                <span class="badge bg-secondary fs-6">{{ sheep.breed or 'نامشخص' }}</span>
+                <span class="badge bg-primary fs-6">{{ sheep.gender }}</span>
+                <hr>
+                <h1 class="display-4 fw-bold {% if index_score >= 70 %}text-success{% elif index_score >= 40 %}text-warning{% else %}text-danger{% endif %}">{{ "%.0f"|format(index_score) }}</h1>
+                <p class="text-muted">شاخص ترکیبی ژنتیکی (از ۱۰۰)</p>
+                {% if inbreeding %}<div class="alert alert-danger mt-3 py-2"><i class="fa-solid fa-exclamation-triangle"></i> <strong>هشدار هم‌خونی!</strong> ضریب تخمینی: {{ inbreeding_pct }}%</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5>جزئیات شاخص</h5>
+                <div class="progress mb-3" style="height:20px"><div class="progress-bar {% if index_score >= 70 %}bg-success{% elif index_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ index_score }}%">{{ "%.0f"|format(index_score) }}/100</div></div>
+                <table class="table table-sm table-bordered">
+                    <tr><th>رتبه در گله ({{ sheep.gender }})</th><td>از {{ total_gender }} رأس</td></tr>
+                    <tr><th>نژاد</th><td>{{ sheep.breed or 'نامشخص' }}</td></tr>
+                    {% if sheep.gender == 'میش' %}
+                    <tr><th>وزن شاخص (تولد)</th><td>—</td></tr>
+                    {% else %}
+                    <tr><th>تعداد نتاج</th><td>—</td></tr>
+                    {% endif %}
+                    <tr><th>پدر</th><td>{% if sheep.father_id %}<a href="{{ url_for('livestock.profile', id=sheep.father_id) }}">{{ sheep.father.ear_tag if sheep.father else '?' }}</a>{% else %}نامشخص{% endif %}</td></tr>
+                    <tr><th>مادر</th><td>{% if sheep.mother_id %}<a href="{{ url_for('livestock.profile', id=sheep.mother_id) }}">{{ sheep.mother.ear_tag if sheep.mother else '?' }}</a>{% else %}نامشخص{% endif %}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

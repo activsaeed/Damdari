@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 from app import db, rate_limit
 from sqlalchemy import func, case
-from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog
+from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog, MatingRecord, UltrasoundRecord, UltrasoundImage, SemenInventory, QuarantineRecord, DrugInventory
 from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
 import qrcode
@@ -14,6 +14,7 @@ import io
 import xlsxwriter
 import time
 import random
+import tempfile
 from flask_login import current_user, login_required
 from app.blueprints.finance import permission_required, normalize_amount_to_toman
 from app.blueprints.dashboard import get_setting
@@ -374,9 +375,17 @@ def profile(id):
     for w in weight_history: timeline_events.append({'date': w.record_date, 'title': f'وزن ({w.weight} کیلو)', 'desc': w.notes or 'ثبت روتین', 'icon': 'fa-weight-scale', 'color': 'info'})
     for m in medical_history: timeline_events.append({'date': m.record_date, 'title': f'درمان ({m.action_type})', 'desc': f"{m.medicine_name} - {m.notes or ''}", 'icon': 'fa-syringe', 'color': 'danger', 'img': m.photos})
     for b in birth_history: timeline_events.append({'date': b.birth_date, 'title': f'زایش ({b.lambs_count} بره)', 'desc': b.status, 'icon': 'fa-child', 'color': 'warning'})
+    for mt in MatingRecord.query.filter_by(sheep_id=id).order_by(MatingRecord.mating_date.desc()).all():
+        timeline_events.append({'date': mt.mating_date, 'title': f'جفت‌اندازی ({mt.mating_type})', 'desc': f"نتیجه: {mt.result}", 'icon': 'fa-heart', 'color': 'danger'})
+    for us in UltrasoundRecord.query.filter_by(sheep_id=id).order_by(UltrasoundRecord.exam_date.desc()).all():
+        timeline_events.append({'date': us.exam_date, 'title': f'سونوگرافی ({us.result})', 'desc': f"{us.fetus_count or '-'} جنین", 'icon': 'fa-stethoscope', 'color': 'info'})
     timeline_events.sort(key=lambda x: x['date'], reverse=True)
 
-    from app.models import Medicine, BreedCategory, PurposeCategory, StatusCategory, BuyerCategory
+    matings = MatingRecord.query.filter_by(sheep_id=id).order_by(MatingRecord.mating_date.desc()).all()
+    ultrasounds = UltrasoundRecord.query.filter_by(sheep_id=id).order_by(UltrasoundRecord.exam_date.desc()).all()
+    quarantines = QuarantineRecord.query.filter_by(sheep_id=id).order_by(QuarantineRecord.start_date.desc()).all()
+
+    from app.models import Medicine, BreedCategory, PurposeCategory, StatusCategory, BuyerCategory, SemenInventory, DrugInventory
     return render_template('livestock/profile.html', 
                            sheep=sheep, chart_labels=chart_labels, chart_data=chart_data, adg=adg,
                            medical_history=medical_history, birth_history=birth_history, timeline_events=timeline_events,
@@ -389,7 +398,10 @@ def profile(id):
                            audit_history=audit_history,
                            purposes=PurposeCategory.query.all(), statuses=StatusCategory.query.all(),
                            buyer_categories=BuyerCategory.query.all(),
-                           mother=mother, father=father, today_str=today.strftime('%Y-%m-%d'))
+                           mother=mother, father=father, today_str=today.strftime('%Y-%m-%d'),
+                           matings=matings, ultrasounds=ultrasounds, quarantines=quarantines,
+                           semen_doses=SemenInventory.query.filter(SemenInventory.quantity_doses > 0).all(),
+                           drugs_inventory=DrugInventory.query.filter(DrugInventory.stock_quantity > 0).order_by(DrugInventory.name).all())
 
 @livestock_bp.route('/edit/<int:id>', methods=['POST'])
 @login_required
@@ -533,14 +545,24 @@ def add_medical(id):
     n_date = parse_smart_date(request.form.get('next_date'))
     w_date = parse_smart_date(request.form.get('withdrawal_end_date'))
     
-    action_type = request.form.get('action_type', 'درمان') 
+    action_type = request.form.get('action_type', 'درمان')
+    drug_id = request.form.get('drug_id', type=int) or None
+    
     record = MedicalRecord(
         sheep_id=id, action_type=action_type, 
         medicine_name=request.form.get('medicine_name', 'نامشخص'), 
+        drug_id=drug_id,
         notes=request.form.get('notes'), record_date=r_date, 
         next_date=n_date, withdrawal_end_date=w_date
     )
     db.session.add(record)
+    
+    if drug_id:
+        drug = DrugInventory.query.get(drug_id)
+        if drug and drug.stock_quantity > 0:
+            qty = float(request.form.get('quantity_used', 1))
+            drug.stock_quantity = max(0, float(drug.stock_quantity) - qty)
+    
     db.session.commit()
     
     photos = request.files.getlist('photos')
@@ -991,3 +1013,643 @@ def cleanup_weights():
 
     flash(f'عملیات سبک‌سازی با موفقیت انجام شد. تعداد {deleted_count} رکورد وزن‌کشی قدیمی (بیش از ۲ سال) از سیستم حذف گردید.', 'success')
     return redirect(url_for('dashboard.settings'))
+
+# ============================================================
+# تولیدمثل: جفت‌اندازی، سونوگرافی، تقویم آبستنی
+# ============================================================
+
+@livestock_bp.route('/add_mating/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def add_mating(id):
+    sheep = Sheep.query.get_or_404(id)
+    male_id = request.form.get('male_id') or None
+    semen_id = request.form.get('semen_id', type=int) or None
+    mating = MatingRecord(
+        sheep_id=id,
+        male_id=int(male_id) if male_id else None,
+        mating_date=parse_smart_date(request.form.get('mating_date')),
+        mating_type=request.form.get('mating_type', 'طبیعی'),
+        semen_id=semen_id,
+        notes=request.form.get('notes')
+    )
+    db.session.add(mating)
+    if semen_id:
+        semen = SemenInventory.query.get(semen_id)
+        if semen and semen.quantity_doses > 0:
+            semen.quantity_doses -= 1
+    sheep.last_heat_date = mating.mating_date
+    if sheep.status == 'زنده و سالم':
+        sheep.status = 'جفت‌اندازی شده'
+    db.session.commit()
+    log_audit(f"ثبت جفت‌اندازی {sheep.ear_tag} ({mating.mating_type})")
+    flash('جفت‌اندازی ثبت شد.', 'success')
+    return redirect(url_for('livestock.profile', id=id))
+
+@livestock_bp.route('/add_ultrasound/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def add_ultrasound(id):
+    sheep = Sheep.query.get_or_404(id)
+    result = request.form.get('result')
+    exam_date = parse_smart_date(request.form.get('exam_date'))
+    fetus_count = request.form.get('fetus_count', type=int) or None
+    gestational_days = request.form.get('gestational_days', type=int) or None
+    due_date = None
+    if result == 'آبستن' and gestational_days:
+        due_date = exam_date + timedelta(days=(147 - gestational_days))
+    elif result == 'آبستن' and request.form.get('due_date'):
+        due_date = parse_smart_date(request.form.get('due_date'))
+    us = UltrasoundRecord(
+        sheep_id=id, exam_date=exam_date,
+        exam_type=request.form.get('exam_type', 'روتین'),
+        result=result, fetus_count=fetus_count,
+        gestational_days=gestational_days,
+        due_date=due_date, notes=request.form.get('notes')
+    )
+    db.session.add(us)
+    db.session.flush()
+    # آپلود تصاویر سونوگرافی
+    images = request.files.getlist('us_images')
+    for img in images:
+        if img and img.filename:
+            filename = f"us_{id}_{int(time.time())}_{secure_filename(img.filename)}"
+            os.makedirs(os.path.join('app', 'static', 'uploads', 'medical'), exist_ok=True)
+            img.save(os.path.join('app', 'static', 'uploads', 'medical', filename))
+            db.session.add(UltrasoundImage(ultrasound_id=us.id, image_path=f"uploads/medical/{filename}"))
+    if result == 'آبستن':
+        sheep.status = 'آبستن'
+        # به‌روزرسانی آخرین جفت‌اندازی مرتبط
+        last_mating = MatingRecord.query.filter_by(sheep_id=id, result='منتظر نتیجه').order_by(MatingRecord.id.desc()).first()
+        if last_mating:
+            last_mating.result = 'آبستن'
+            last_mating.result_date = exam_date
+            last_mating.confirmed_by = 'سونوگرافی'
+    elif result == 'خالی':
+        last_mating = MatingRecord.query.filter_by(sheep_id=id, result='منتظر نتیجه').order_by(MatingRecord.id.desc()).first()
+        if last_mating:
+            last_mating.result = 'خالی'
+            last_mating.result_date = exam_date
+            last_mating.confirmed_by = 'سونوگرافی'
+    db.session.commit()
+    log_audit(f"ثبت سونوگرافی {sheep.ear_tag}: {result}")
+    flash(f'نتیجه سونوگرافی ثبت شد: {result}', 'success')
+    return redirect(url_for('livestock.profile', id=id))
+
+@livestock_bp.route('/breeding_calendar')
+@login_required
+@permission_required('can_view_livestock')
+def breeding_calendar():
+    import jdatetime
+    now_j = jdatetime.datetime.now()
+    year = request.args.get('year', now_j.year, type=int)
+    month = request.args.get('month', now_j.month, type=int)
+    month_names = {1:'فروردین',2:'اردیبهشت',3:'خرداد',4:'تیر',5:'مرداد',6:'شهریور',7:'مهر',8:'آبان',9:'آذر',10:'دی',11:'بهمن',12:'اسفند'}
+    j_first = jdatetime.date(year, month, 1)
+    if month == 12: j_last = jdatetime.date(year + 1, 1, 1)
+    else: j_last = jdatetime.date(year, month + 1, 1)
+    g_first = j_first.togregorian()
+    g_last = j_last.togregorian()
+    days_in_month = (g_last - g_first).days
+
+    # جفت‌اندازی‌های این ماه
+    matings = MatingRecord.query.filter(
+        MatingRecord.mating_date >= g_first, MatingRecord.mating_date < g_last
+    ).options(db.joinedload(MatingRecord.sheep), db.joinedload(MatingRecord.male)).all()
+
+    # سونوگرافی‌های این ماه
+    ultrasounds = UltrasoundRecord.query.filter(
+        UltrasoundRecord.exam_date >= g_first, UltrasoundRecord.exam_date < g_last
+    ).options(db.joinedload(UltrasoundRecord.sheep)).all()
+
+    # زایش‌های این ماه
+    births = BirthRecord.query.filter(
+        BirthRecord.birth_date >= g_first, BirthRecord.birth_date < g_last
+    ).options(db.joinedload(BirthRecord.mother)).all()
+
+    # زایش‌های پیش‌بینی شده (بر اساس سونوگرافی با due_date در این ماه)
+    predicted_births = UltrasoundRecord.query.filter(
+        UltrasoundRecord.due_date >= g_first, UltrasoundRecord.due_date < g_last,
+        UltrasoundRecord.result == 'آبستن'
+    ).options(db.joinedload(UltrasoundRecord.sheep)).all()
+
+    # میش‌های آماده جفت‌اندازی
+    ready_ewes = Sheep.query.filter(
+        Sheep.is_deleted == False,
+        Sheep.gender.in_(['میش', 'بره ماده']),
+        Sheep.status.in_(['زنده و سالم', 'آبستن']),
+        Sheep.last_heat_date != None
+    ).order_by(Sheep.last_heat_date.desc()).all()
+    next_heats = [{'ear_tag': e.ear_tag, 'next': e.last_heat_date + timedelta(days=17)} for e in ready_ewes[:10]]
+
+    # داده‌های مورد نیاز برای فرم‌های سریع
+    ewes = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender.in_(['میش', 'بره ماده'])).order_by(Sheep.ear_tag).all()
+    rams = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ').order_by(Sheep.ear_tag).all()
+    semen_doses = SemenInventory.query.filter(SemenInventory.quantity_doses > 0).order_by(SemenInventory.ram_name).all()
+    pens = Pen.query.order_by(Pen.name).all()
+
+    return render_template('livestock/breeding_calendar.html', year=year, month=month,
+        month_name=month_names.get(month, ''),
+        month_names=month_names, days_in_month=days_in_month,
+        g_first=g_first, matings=matings, ultrasounds=ultrasounds,
+        births=births, predicted_births=predicted_births, next_heats=next_heats,
+        ewes=ewes, rams=rams, semen_doses=semen_doses, pens=pens)
+
+@livestock_bp.route('/semen_inventory')
+@login_required
+@permission_required('can_view_livestock')
+def semen_inventory():
+    q = request.args.get('q', '').strip()
+    doses = SemenInventory.query
+    if q:
+        doses = doses.filter(SemenInventory.ram_name.ilike(f'%{q}%') | SemenInventory.breed.ilike(f'%{q}%'))
+    doses = doses.order_by(SemenInventory.expiry_date).all()
+    total_doses = sum(d.quantity_doses for d in doses)
+    unique_rams = len(set(d.ram_name for d in doses))
+    return render_template('livestock/semen_inventory.html', doses=doses, q=q,
+        total_doses=total_doses, unique_rams=unique_rams)
+
+@livestock_bp.route('/add_semen', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def add_semen():
+    s = SemenInventory(
+        ram_name=request.form.get('ram_name'),
+        ram_id=request.form.get('ram_id', type=int) or None,
+        breed=request.form.get('breed'),
+        collection_date=parse_smart_date(request.form.get('collection_date')),
+        quantity_doses=request.form.get('quantity_doses', type=int) or 0,
+        price_per_dose=normalize_amount_to_toman(request.form.get('price_per_dose')),
+        storage_location=request.form.get('storage_location'),
+        expiry_date=parse_smart_date(request.form.get('expiry_date')),
+        notes=request.form.get('notes')
+    )
+    db.session.add(s)
+    db.session.commit()
+    log_audit(f"ثبت اسپرم {s.ram_name} ({s.quantity_doses} دوز)")
+    flash('اسپرم/سیمن ثبت شد.', 'success')
+    return redirect(url_for('livestock.semen_inventory'))
+
+@livestock_bp.route('/delete_semen/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def delete_semen(id):
+    s = SemenInventory.query.get_or_404(id)
+    db.session.delete(s)
+    db.session.commit()
+    flash("اسپرم حذف شد.", "success")
+    return redirect(url_for('livestock.semen_inventory'))
+
+@livestock_bp.route('/edit_semen/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def edit_semen(id):
+    s = SemenInventory.query.get_or_404(id)
+    s.ram_name = request.form.get('ram_name')
+    s.ram_id = request.form.get('ram_id', type=int) or None
+    s.breed = request.form.get('breed')
+    s.collection_date = parse_smart_date(request.form.get('collection_date'))
+    s.quantity_doses = request.form.get('quantity_doses', type=int) or 0
+    s.price_per_dose = normalize_amount_to_toman(request.form.get('price_per_dose'))
+    s.storage_location = request.form.get('storage_location')
+    s.expiry_date = parse_smart_date(request.form.get('expiry_date'))
+    s.notes = request.form.get('notes')
+    db.session.commit()
+    flash('اسپرم ویرایش شد.', 'success')
+    return redirect(url_for('livestock.semen_inventory'))
+
+# ============================================================
+# خروجی Excel
+# ============================================================
+
+@livestock_bp.route('/export_semen_excel')
+@login_required
+@permission_required('can_view_livestock')
+def export_semen_excel():
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'اسپرم'
+    headers = ['نام قوچ', 'نژاد', 'تاریخ جمع‌آوری', 'دوز موجود', 'قیمت هر دوز', 'محل نگهداری', 'انقضا', 'توضیحات']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal='center')
+    doses = SemenInventory.query.order_by(SemenInventory.expiry_date).all()
+    for d in doses:
+        ws.append([d.ram_name, d.breed or '', str(d.collection_date or ''), d.quantity_doses,
+            str(d.price_per_dose or ''), d.storage_location or '', str(d.expiry_date or ''), d.notes or ''])
+    from flask import send_file
+    path = os.path.join(tempfile.gettempdir(), 'semen_inventory.xlsx')
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='semen_inventory.xlsx')
+
+@livestock_bp.route('/export_drug_excel')
+@login_required
+@permission_required('can_view_livestock')
+def export_drug_excel():
+    import openpyxl
+    from openpyxl.styles import Font, Alignment
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'دارو'
+    headers = ['نام دارو', 'دسته', 'موجودی', 'واحد', 'قیمت واحد', 'تأمین‌کننده', 'انقضا', 'حداقل هشدار', 'توضیحات']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal='center')
+    drugs = DrugInventory.query.order_by(DrugInventory.expiry_date).all()
+    for d in drugs:
+        ws.append([d.name, d.category, float(d.stock_quantity), d.unit, float(d.price_per_unit) if d.price_per_unit else '',
+            d.supplier or '', str(d.expiry_date or ''), float(d.min_stock_alert) if d.min_stock_alert else '', d.notes or ''])
+    from flask import send_file
+    path = os.path.join(tempfile.gettempdir(), 'drug_inventory.xlsx')
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='drug_inventory.xlsx')
+
+# ============================================================
+# انبار دارو
+# ============================================================
+
+@livestock_bp.route('/drug_inventory')
+@login_required
+@permission_required('can_view_livestock')
+def drug_inventory():
+    q = request.args.get('q', '').strip()
+    filter_cat = request.args.get('category', '').strip()
+    drugs = DrugInventory.query
+    if q:
+        drugs = drugs.filter(DrugInventory.name.ilike(f'%{q}%') | DrugInventory.supplier.ilike(f'%{q}%'))
+    if filter_cat:
+        drugs = drugs.filter(DrugInventory.category == filter_cat)
+    drugs = drugs.order_by(DrugInventory.expiry_date).all()
+    low_stock = [d for d in drugs if d.stock_quantity <= d.min_stock_alert and d.min_stock_alert > 0]
+    near_expiry = [d for d in drugs if d.expiry_date and (d.expiry_date - datetime.now(UTC).date()).days <= 30]
+    categories = db.session.query(DrugInventory.category).distinct().all()
+    categories = [c[0] for c in categories if c[0]]
+    total_value = sum(float(d.stock_quantity) * float(d.price_per_unit) for d in drugs if d.price_per_unit)
+    return render_template('livestock/drug_inventory.html', drugs=drugs, low_stock=low_stock, near_expiry=near_expiry,
+        q=q, filter_cat=filter_cat, categories=categories, total_value=total_value)
+
+@livestock_bp.route('/add_drug', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def add_drug():
+    d = DrugInventory(
+        name=request.form.get('name'),
+        category=request.form.get('category', 'عمومی'),
+        stock_quantity=normalize_amount_to_toman(request.form.get('stock_quantity')),
+        unit=request.form.get('unit', 'عدد'),
+        price_per_unit=normalize_amount_to_toman(request.form.get('price_per_unit')),
+        supplier=request.form.get('supplier'),
+        expiry_date=parse_smart_date(request.form.get('expiry_date')),
+        min_stock_alert=normalize_amount_to_toman(request.form.get('min_stock_alert')),
+        notes=request.form.get('notes')
+    )
+    db.session.add(d)
+    db.session.commit()
+    log_audit(f"ثبت داروی جدید: {d.name}")
+    flash(f'داروی {d.name} ثبت شد.', 'success')
+    return redirect(url_for('livestock.drug_inventory'))
+
+@livestock_bp.route('/edit_drug/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def edit_drug(id):
+    d = DrugInventory.query.get_or_404(id)
+    d.name = request.form.get('name')
+    d.category = request.form.get('category', 'عمومی')
+    d.stock_quantity = normalize_amount_to_toman(request.form.get('stock_quantity'))
+    d.unit = request.form.get('unit', 'عدد')
+    d.price_per_unit = normalize_amount_to_toman(request.form.get('price_per_unit'))
+    d.supplier = request.form.get('supplier')
+    d.expiry_date = parse_smart_date(request.form.get('expiry_date'))
+    d.min_stock_alert = normalize_amount_to_toman(request.form.get('min_stock_alert'))
+    d.notes = request.form.get('notes')
+    db.session.commit()
+    flash('دارو ویرایش شد.', 'success')
+    return redirect(url_for('livestock.drug_inventory'))
+
+@livestock_bp.route('/delete_drug/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def delete_drug(id):
+    d = DrugInventory.query.get_or_404(id)
+    db.session.delete(d)
+    db.session.commit()
+    flash('دارو حذف شد.', 'success')
+    return redirect(url_for('livestock.drug_inventory'))
+
+# ============================================================
+# قرنطینه
+# ============================================================
+
+@livestock_bp.route('/add_quarantine/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def add_quarantine(id):
+    sheep = Sheep.query.get_or_404(id)
+    start_date = parse_smart_date(request.form.get('start_date'))
+    expected_days = request.form.get('expected_days', type=int) or 14
+    expected_end_date = start_date + timedelta(days=expected_days) if start_date else None
+    q = QuarantineRecord(
+        sheep_id=id, start_date=start_date,
+        reason=request.form.get('reason', 'بیماری'),
+        expected_end_date=expected_end_date,
+        notes=request.form.get('notes')
+    )
+    db.session.add(q)
+    sheep.status = 'قرنطینه'
+    db.session.commit()
+    log_audit(f"قرنطینه {sheep.ear_tag}: {q.reason}")
+    flash(f'{sheep.ear_tag} به قرنطینه رفت.', 'warning')
+    return redirect(url_for('livestock.profile', id=id))
+
+@livestock_bp.route('/release_quarantine/<int:id>', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def release_quarantine(id):
+    q = QuarantineRecord.query.get_or_404(id)
+    q.end_date = datetime.now(UTC).date()
+    q.is_active = False
+    sheep = Sheep.query.get(q.sheep_id)
+    if sheep:
+        sheep.status = 'زنده و سالم'
+    db.session.commit()
+    log_audit(f"خروج از قرنطینه {sheep.ear_tag if sheep else 'نامشخص'}")
+    flash('دام از قرنطینه خارج شد.', 'success')
+    return redirect(url_for('livestock.profile', id=q.sheep_id))
+
+# ============================================================
+# اپیدمیولوژی و هشدار طغیان
+# ============================================================
+
+@livestock_bp.route('/epidemiology')
+@login_required
+@permission_required('can_view_livestock')
+def epidemiology():
+    import jdatetime
+    now_j = jdatetime.datetime.now()
+    # آنالیز ۳ ماه اخیر
+    three_months_ago = datetime.now(UTC).date() - timedelta(days=90)
+    records = MedicalRecord.query.filter(MedicalRecord.record_date >= three_months_ago).all()
+
+    # طغیان بر اساس بهاربند: اگر > 20٪ دام‌های یه بهاربند توی ۲ هفته بیماری مشابه داشته باشند
+    pens = Pen.query.all()
+    alerts = []
+    for pen in pens:
+        pen_sheep = Sheep.query.filter_by(pen_id=pen.id, is_deleted=False).count()
+        if pen_sheep < 2: continue
+        two_weeks_ago = datetime.now(UTC).date() - timedelta(days=14)
+        sick_pen = db.session.query(MedicalRecord.sheep_id).filter(
+            MedicalRecord.record_date >= two_weeks_ago,
+            MedicalRecord.sheep_id.in_(
+                db.session.query(Sheep.id).filter(Sheep.pen_id == pen.id, Sheep.is_deleted == False)
+            )
+        ).distinct().count()
+        ratio = sick_pen / pen_sheep * 100
+        if ratio >= 20:
+            alerts.append({'pen': pen, 'ratio': ratio, 'sick': sick_pen, 'total': pen_sheep})
+
+    # بیماری‌های فصلی
+    monthly_disease = db.session.query(
+        MedicalRecord.medicine_name, func.count(MedicalRecord.id).label('cnt')
+    ).filter(MedicalRecord.record_date >= three_months_ago).group_by(MedicalRecord.medicine_name).order_by(func.count(MedicalRecord.id).desc()).limit(10).all()
+
+    # تلفات ماهانه برای نمودار (۶ ماه)
+    monthly_deaths = []
+    monthly_labels = []
+    for i in range(5, -1, -1):
+        m = now_j.month - i
+        y = now_j.year
+        while m < 1:
+            m += 12
+            y -= 1
+        while m > 12:
+            m -= 12
+            y += 1
+        j_start = jdatetime.date(y, m, 1)
+        if m == 12:
+            j_end = jdatetime.date(y + 1, 1, 1)
+        else:
+            j_end = jdatetime.date(y, m + 1, 1)
+        g_start = j_start.togregorian()
+        g_end = j_end.togregorian()
+        deaths_month = Sheep.query.filter(
+            Sheep.is_deleted == False, Sheep.status == 'تلف شده',
+            Sheep.entry_date >= g_start, Sheep.entry_date < g_end
+        ).count()
+        monthly_deaths.append(deaths_month)
+        month_names = {1:'فروردین',2:'اردیبهشت',3:'خرداد',4:'تیر',5:'مرداد',6:'شهریور',7:'مهر',8:'آبان',9:'آذر',10:'دی',11:'بهمن',12:'اسفند'}
+        monthly_labels.append(month_names[m])
+
+    # تلفات
+    deaths = Sheep.query.filter(
+        Sheep.is_deleted == False,
+        Sheep.status == 'تلف شده',
+        Sheep.entry_date >= three_months_ago
+    ).count()
+
+    return render_template('livestock/epidemiology.html', alerts=alerts,
+        monthly_disease=monthly_disease, deaths=deaths, records_count=len(records),
+        monthly_deaths=monthly_deaths, monthly_labels=monthly_labels)
+
+# ============================================================
+# تقویم فحلی پیش‌بینی شده + آلرت
+# ============================================================
+
+@livestock_bp.route('/heat_alerts')
+@login_required
+@permission_required('can_view_livestock')
+def heat_alerts():
+    import jdatetime
+    now = datetime.now(UTC).date()
+    # میش‌هایی که last_heat_date دارند و آبستن نیستند
+    eligible = Sheep.query.filter(
+        Sheep.is_deleted == False,
+        Sheep.gender.in_(['میش', 'بره ماده']),
+        Sheep.last_heat_date != None,
+        Sheep.status.notin_(['آبستن', 'قرنطینه', 'تلف شده', 'فروخته شده'])
+    ).all()
+
+    heat_list = []
+    for s in eligible:
+        # میانگین سیکل از تاریخ‌های جفت‌اندازی قبلی
+        matings = MatingRecord.query.filter_by(sheep_id=s.id).order_by(MatingRecord.mating_date.desc()).limit(3).all()
+        if len(matings) >= 2:
+            # محاسبه میانگین فاصله بین جفت‌اندازی‌ها
+            intervals = []
+            for i in range(len(matings) - 1):
+                diff = (matings[i].mating_date - matings[i + 1].mating_date).days
+                if 14 <= diff <= 21:
+                    intervals.append(diff)
+            avg_cycle = sum(intervals) / len(intervals) if intervals else 17
+        else:
+            avg_cycle = 17  # پیش‌فرض استاندارد
+
+        next_heat = s.last_heat_date + timedelta(days=int(avg_cycle))
+        days_until = (next_heat - now).days
+        if -3 <= days_until <= 5:  # بازه هشدار
+            heat_list.append({
+                'sheep': s, 'next_heat': next_heat,
+                'days_until': days_until, 'cycle': int(avg_cycle),
+                'confidence': 'بالا' if len(matings) >= 2 else 'متوسط'
+            })
+
+    heat_list.sort(key=lambda x: x['days_until'])
+    rams = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ').order_by(Sheep.ear_tag).all()
+    semen_doses = SemenInventory.query.filter(SemenInventory.quantity_doses > 0).order_by(SemenInventory.ram_name).all()
+    return render_template('livestock/heat_alerts.html', heat_list=heat_list, rams=rams, semen_doses=semen_doses)
+
+# ============================================================
+# شاخص ژنتیکی ترکیبی (Genetic Index)
+# ============================================================
+
+@livestock_bp.route('/genetic_report/<int:id>')
+@login_required
+@permission_required('can_view_livestock')
+def genetic_report(id):
+    sheep = Sheep.query.get_or_404(id)
+    if sheep.gender not in ('قوچ', 'میش'):
+        flash('فقط برای قوچ و میش شاخص ژنتیکی قابل محاسبه است.', 'warning')
+        return redirect(url_for('livestock.profile', id=id))
+
+    # محاسبه شاخص ترکیبی
+    # وزن تولد (از اولین WeightRecord نزدیک به تولد)
+    birth_weight = WeightRecord.query.filter_by(sheep_id=id).order_by(WeightRecord.record_date).first()
+
+    # تعداد زایش (برای میش) / تعداد نتاج (برای قوچ)
+    if sheep.gender == 'میش':
+        births = BirthRecord.query.filter_by(mother_id=id).all()
+        total_births = len(births)
+        total_lambs = sum(b.lambs_count for b in births)
+        live_births = sum(1 for b in births if b.status == 'موفق')
+        twin_rate = sum(1 for b in births if b.lambs_count >= 2) / total_births if total_births else 0
+        # شاخص: (نرخ چندقلوزایی × ۳۵) + (نرخ زایش موفق × ۳۰) + (تعداد کل بره × ۲۰) + (وزن تولد شاخص × ۱۵)
+        index_score = (twin_rate * 35) + ((live_births / total_births if total_births else 0) * 30) + (min(total_lambs, 20) * 2) + (float(birth_weight.weight or 0) * 1.5 if birth_weight else 7.5)
+    else:  # قوچ
+        offspring = Sheep.query.filter(db.or_(Sheep.father_id == id)).count()
+        father_births = BirthRecord.query.filter_by(father_id=id).all()
+        fb_count = len(father_births)
+        twin_fb = sum(1 for b in father_births if b.lambs_count >= 2)
+        twin_rate = twin_fb / fb_count if fb_count else 0
+        index_score = (offspring * 3) + (twin_rate * 40) + (float(birth_weight.weight or 0) * 1.5 if birth_weight else 7.5)
+
+    # بررسی هم‌خونی
+    inbreeding = False
+    inbreeding_pct = 0
+    if sheep.mother_id and sheep.father_id:
+        common = db.session.query(Sheep).filter(
+            Sheep.id.in_([sheep.mother_id, sheep.father_id])
+        ).first()
+        # ساده: اگر مادر و پدر هر دو یک parent مشترک داشته باشند
+        mother = Sheep.query.get(sheep.mother_id)
+        father = Sheep.query.get(sheep.father_id)
+        if mother and father:
+            mother_parents = {mother.mother_id, mother.father_id}
+            father_parents = {father.mother_id, father.father_id}
+            common_parents = mother_parents & father_parents
+            common_parents.discard(None)
+            if common_parents:
+                inbreeding = True
+                inbreeding_pct = 25  # هم‌خونی درجه یک
+            # بررسی نسل دوم
+            for mp in mother_parents:
+                if mp:
+                    mp_sheep = Sheep.query.get(mp)
+                    if mp_sheep:
+                        for fp in father_parents:
+                            if fp:
+                                fp_sheep = Sheep.query.get(fp)
+                                if fp_sheep and (mp_sheep.mother_id == fp_sheep.mother_id or mp_sheep.father_id == fp_sheep.father_id):
+                                    inbreeding = True
+                                    inbreeding_pct = 12.5
+                                    break
+
+    # رتبه در گله
+    all_same_gender = Sheep.query.filter(Sheep.gender == sheep.gender, Sheep.is_deleted == False).count()
+
+    return render_template('livestock/genetic_report.html', sheep=sheep,
+        index_score=min(index_score, 100), inbreeding=inbreeding,
+        inbreeding_pct=inbreeding_pct, total_gender=all_same_gender)
+
+# ============================================================
+# گواهی سلامت دام (PDF/چاپ)
+# ============================================================
+
+@livestock_bp.route('/health_certificate/<int:id>')
+@login_required
+@permission_required('can_view_livestock')
+def health_certificate(id):
+    sheep = Sheep.query.get_or_404(id)
+    today = datetime.now(UTC).date()
+    treatments = MedicalRecord.query.filter_by(sheep_id=id).order_by(MedicalRecord.record_date.desc()).limit(20).all()
+    vaccines = [m for m in treatments if m.action_type == 'واکسن']
+    weights = WeightRecord.query.filter_by(sheep_id=id).order_by(WeightRecord.record_date.desc()).limit(5).all()
+    import jdatetime
+    age_months = ((today - sheep.birth_date).days // 30) if sheep.birth_date else 0
+    return render_template('livestock/health_certificate.html', sheep=sheep, vaccines=vaccines, weights=weights, today=today, age_months=age_months)
+
+# ============================================================
+# داشبورد دامپزشکی با KPI
+# ============================================================
+
+@livestock_bp.route('/vet_dashboard')
+@login_required
+@permission_required('can_view_livestock')
+def vet_dashboard():
+    today = datetime.now(UTC).date()
+    thirty_days_ago = today - timedelta(days=30)
+
+    total_sheep = Sheep.query.filter(Sheep.is_deleted == False).count()
+    sick_count = Sheep.query.filter(Sheep.status == 'بیمار', Sheep.is_deleted == False).count()
+    under_treatment = Sheep.query.filter(Sheep.status == 'تحت درمان', Sheep.is_deleted == False).count()
+    pregnant_count = Sheep.query.filter(Sheep.status == 'آبستن', Sheep.is_deleted == False).count()
+    quarantined = Sheep.query.filter(Sheep.status == 'قرنطینه', Sheep.is_deleted == False).count()
+    deaths_30d = Sheep.query.filter(Sheep.status == 'تلف شده', Sheep.entry_date >= thirty_days_ago, Sheep.is_deleted == False).count()
+
+    # درمان‌های ۳۰ روز اخیر
+    treatments_30d = MedicalRecord.query.filter(MedicalRecord.record_date >= thirty_days_ago).count()
+
+    # داروهای در شرف انقضا (۳۰ روز آینده)
+    expiring_drugs = DrugInventory.query.filter(
+        DrugInventory.expiry_date != None,
+        DrugInventory.expiry_date <= today + timedelta(days=30),
+        DrugInventory.expiry_date >= today
+    ).count()
+
+    # داروهای کم‌موجودی
+    low_stock_drugs = DrugInventory.query.filter(
+        DrugInventory.stock_quantity <= DrugInventory.min_stock_alert,
+        DrugInventory.min_stock_alert > 0
+    ).count()
+
+    # جفت‌اندازی‌های ۳۰ روز اخیر
+    matings_30d = MatingRecord.query.filter(MatingRecord.mating_date >= thirty_days_ago).count()
+
+    # زایش‌های ۳۰ روز اخیر
+    births_30d = BirthRecord.query.filter(BirthRecord.birth_date >= thirty_days_ago).count()
+
+    kpi = {
+        'total': total_sheep, 'sick': sick_count, 'under_treatment': under_treatment,
+        'pregnant': pregnant_count, 'quarantined': quarantined, 'deaths': deaths_30d,
+        'treatments': treatments_30d, 'expiring_drugs': expiring_drugs,
+        'low_stock_drugs': low_stock_drugs, 'matings': matings_30d, 'births': births_30d
+    }
+
+    # آلرت‌ها
+    alerts = []
+    if sick_count > 0: alerts.append(f"{sick_count} دام بیمار نیازمند درمان")
+    if quarantined > 0: alerts.append(f"{quarantined} دام در قرنطینه")
+    if expiring_drugs > 0: alerts.append(f"{expiring_drugs} داروی در شرف انقضا")
+    if low_stock_drugs > 0: alerts.append(f"{low_stock_drugs} داروی کم‌موجودی")
+    mortality_rate = (deaths_30d / total_sheep * 100) if total_sheep > 0 else 0
+    if mortality_rate > 2: alerts.append(f"نرخ تلفات {mortality_rate:.1f}٪ در ۳۰ روز اخیر (هشدار)")
+
+    # فعالیت‌های اخیر
+    recent_treatments = MedicalRecord.query.options(db.joinedload(MedicalRecord.drug)).order_by(MedicalRecord.id.desc()).limit(10).all()
+    recent_matings = MatingRecord.query.order_by(MatingRecord.id.desc()).limit(5).all()
+
+    return render_template('livestock/vet_dashboard.html', kpi=kpi, alerts=alerts, mortality_rate=mortality_rate,
+        recent_treatments=recent_treatments, recent_matings=recent_matings)
