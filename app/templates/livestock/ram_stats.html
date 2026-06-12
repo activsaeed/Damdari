@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="mb-0"><i class="ti ti-trophy text-warning"></i> آمار قوچ‌ها</h2>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <a href="{{ url_for('livestock.breeding_calendar') }}" class="btn btn-outline-secondary btn-sm"><i class="ti ti-arrow-right"></i> بازگشت به تقویم</a>
+        <button class="btn btn-primary shadow-sm fw-bold" type="button" data-bs-toggle="offcanvas" data-bs-target="#ramFilterOffcanvas">
+            <i class="ti ti-filter"></i> فیلتر پیشرفته
+        </button>
+    </div>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="ramFilterOffcanvas">
+    <div class="offcanvas-header bg-light border-bottom">
+        <h5 class="offcanvas-title fw-bold"><i class="ti ti-filter text-primary"></i> فیلتر پیشرفته قوچ‌ها</h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form method="GET" action="{{ url_for('livestock.ram_stats_list') }}">
+            <input type="hidden" name="sort" value="{{ sort_by }}">
+            <div class="mb-3">
+                <label class="form-label fw-bold">جستجوی پلاک</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="ti ti-search"></i></span>
+                    <input type="text" name="search" class="form-control" placeholder="پلاک قوچ..." value="{{ search }}">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">نژاد</label>
+                <select name="breed" class="form-select">
+                    <option value="">همه نژادها</option>
+                    {% for b in breeds %}
+                    <option value="{{ b }}" {% if breed_filter == b %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">حداقل نرخ موفقیت (%)</label>
+                <input type="number" name="min_rate" class="form-control" min="0" max="100" placeholder="مثلاً ۵۰" value="{{ min_rate if min_rate is not none else '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">مرتب‌سازی</label>
+                <select name="sort" class="form-select">
+                    <option value="total" {% if sort_by == 'total' %}selected{% endif %}>بیشترین تعداد جفت‌اندازی</option>
+                    <option value="rate" {% if sort_by == 'rate' %}selected{% endif %}>بیشترین نرخ موفقیت</option>
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>پلاک</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2"><i class="ti ti-check"></i> اعمال فیلتر</button>
+            <a href="{{ url_for('livestock.ram_stats_list') }}" class="btn btn-outline-danger w-100 mt-2">حذف تمام فیلترها</a>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="ti ti-list text-primary"></i> {{ total }} قوچ</span>
+        <span class="text-muted small">صفحه {{ page }} از {{ total_pages }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>#</th><th>پلاک</th><th>نژاد</th><th>جفت‌اندازی</th><th>موفق</th><th>ناموفق</th><th>در انتظار</th><th>نرخ موفقیت</th><th>وضعیت</th></tr>
+                </thead>
+                <tbody>
+                    {% for r in rams %}
+                    <tr>
+                        <td>{{ loop.index + (page-1) * per_page }}</td>
+                        <td><a href="{{ url_for('livestock.profile', id=r.id) }}" class="fw-bold text-decoration-none">{{ r.name }}</a></td>
+                        <td>{{ r.breed }}</td>
+                        <td>{{ r.total }}</td>
+                        <td class="text-success fw-bold">{{ r.successful }}</td>
+                        <td class="text-danger">{{ r.failed }}</td>
+                        <td>{{ r.pending }}</td>
+                        <td>{% if r.success_rate is not none %}
+                            <span class="badge bg-{% if r.success_rate >= 60 %}success{% elif r.success_rate >= 30 %}warning{% else %}danger{% endif %}">{{ "%.1f"|format(r.success_rate) }}%</span>
+                        {% else %}<span class="badge bg-secondary">—</span>{% endif %}</td>
+                        <td>{{ r.status }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="text-muted text-center py-4">هیچ قوچی یافت نشد.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if total_pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center">
+        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('livestock.ram_stats_list', page=page-1, search=search, min_rate=min_rate, breed=breed_filter, sort=sort_by) }}">قبلی</a>
+        </li>
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('livestock.ram_stats_list', page=p, search=search, min_rate=min_rate, breed=breed_filter, sort=sort_by) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('livestock.ram_stats_list', page=page+1, search=search, min_rate=min_rate, breed=breed_filter, sort=sort_by) }}">بعدی</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

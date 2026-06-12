@@ -1014,6 +1014,59 @@ def cleanup_weights():
     flash(f'عملیات سبک‌سازی با موفقیت انجام شد. تعداد {deleted_count} رکورد وزن‌کشی قدیمی (بیش از ۲ سال) از سیستم حذف گردید.', 'success')
     return redirect(url_for('dashboard.settings'))
 
+@livestock_bp.route('/api/sheep_search')
+@login_required
+@permission_required('can_view_livestock')
+def sheep_search():
+    q = request.args.get('q', '').strip()
+    gender_filter = request.args.get('gender', '').strip()
+    if not q or len(q) < 1:
+        return jsonify([])
+    results = Sheep.query.filter(
+        Sheep.is_deleted == False,
+        Sheep.ear_tag.ilike(f'%{q}%')
+    )
+    if gender_filter == 'ماده':
+        results = results.filter(Sheep.gender.in_(['میش', 'بره ماده']))
+    elif gender_filter == 'نر':
+        results = results.filter(Sheep.gender.in_(['قوچ', 'بره نر']))
+    results = results.order_by(Sheep.ear_tag).limit(20).all()
+    return jsonify([{
+        'id': s.id, 'ear_tag': s.ear_tag, 'breed': s.breed or 'نامشخص',
+        'gender': s.gender, 'pen': s.pen.name if s.pen else 'بدون بهاربند',
+        'status': s.status, 'weight': float(s.weight) if s.weight else 0
+    } for s in results])
+
+@livestock_bp.route('/api/mating_suggestions/<int:sheep_id>')
+@login_required
+@permission_required('can_view_livestock')
+def mating_suggestions(sheep_id):
+    ewe = Sheep.query.get_or_404(sheep_id)
+    if ewe.gender not in ('میش', 'بره ماده'):
+        return jsonify({'error': 'not a ewe'}), 400
+    suggestions = []
+    rams = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ').all()
+    for ram in rams:
+        total = MatingRecord.query.filter_by(male_id=ram.id).count()
+        successful = MatingRecord.query.filter_by(male_id=ram.id, result='آبستن').count()
+        failed = MatingRecord.query.filter_by(male_id=ram.id, result='خالی').count()
+        rate = (successful / (successful + failed) * 100) if (successful + failed) > 0 else None
+        # همخونی
+        inbred = (ewe.father_id and ram.father_id and ewe.father_id == ram.father_id) or \
+                 (ewe.mother_id and ram.mother_id and ewe.mother_id == ram.mother_id)
+        suggestions.append({
+            'id': ram.id, 'name': ram.ear_tag, 'breed': ram.breed or 'نامشخص',
+            'total': total, 'successful': successful, 'failed': failed,
+            'success_rate': round(rate, 1) if rate is not None else None,
+            'inbred': inbred, 'status': ram.status
+        })
+    suggestions.sort(key=lambda x: (x['inbred'], -(x['success_rate'] or 0)))
+    # تاریخ پیشنهادی
+    recommended_date = None
+    if ewe.last_heat_date:
+        recommended_date = (ewe.last_heat_date + timedelta(days=17)).strftime('%Y-%m-%d')
+    return jsonify({'suggestions': suggestions[:5], 'recommended_date': recommended_date})
+
 # ============================================================
 # تولیدمثل: جفت‌اندازی، سونوگرافی، تقویم آبستنی
 # ============================================================
@@ -1104,56 +1157,344 @@ def breeding_calendar():
     now_j = jdatetime.datetime.now()
     year = request.args.get('year', now_j.year, type=int)
     month = request.args.get('month', now_j.month, type=int)
+    view = request.args.get('view', 'month')
+    pen_filter = request.args.get('pen_id', type=int) or None
+    event_filter = request.args.get('event_type', '')
+    is_print = request.args.get('print', type=int) == 1
+
     month_names = {1:'فروردین',2:'اردیبهشت',3:'خرداد',4:'تیر',5:'مرداد',6:'شهریور',7:'مهر',8:'آبان',9:'آذر',10:'دی',11:'بهمن',12:'اسفند'}
     j_first = jdatetime.date(year, month, 1)
-    if month == 12: j_last = jdatetime.date(year + 1, 1, 1)
-    else: j_last = jdatetime.date(year, month + 1, 1)
+    j_last = jdatetime.date(year + 1, 1, 1) if month == 12 else jdatetime.date(year, month + 1, 1)
     g_first = j_first.togregorian()
     g_last = j_last.togregorian()
     days_in_month = (g_last - g_first).days
+    g_today = datetime.now(UTC).date()
+    today_day = (g_today - g_first).days + 1 if g_first <= g_today < g_last else 0
+
+    # فیلتر بر اساس بهاربند
+    def pen_mating_q(base):
+        if pen_filter:
+            return base.join(Sheep, MatingRecord.sheep_id == Sheep.id).filter(Sheep.pen_id == pen_filter)
+        return base
+    def pen_us_q(base):
+        if pen_filter:
+            return base.join(Sheep, UltrasoundRecord.sheep_id == Sheep.id).filter(Sheep.pen_id == pen_filter)
+        return base
+    def pen_birth_q(base):
+        if pen_filter:
+            return base.join(Sheep, BirthRecord.mother_id == Sheep.id).filter(Sheep.pen_id == pen_filter)
+        return base
 
     # جفت‌اندازی‌های این ماه
-    matings = MatingRecord.query.filter(
+    matings_q = MatingRecord.query.filter(
         MatingRecord.mating_date >= g_first, MatingRecord.mating_date < g_last
-    ).options(db.joinedload(MatingRecord.sheep), db.joinedload(MatingRecord.male)).all()
+    ).options(db.joinedload(MatingRecord.sheep), db.joinedload(MatingRecord.male))
+    matings = pen_mating_q(matings_q).all()
 
     # سونوگرافی‌های این ماه
-    ultrasounds = UltrasoundRecord.query.filter(
+    us_q = UltrasoundRecord.query.filter(
         UltrasoundRecord.exam_date >= g_first, UltrasoundRecord.exam_date < g_last
-    ).options(db.joinedload(UltrasoundRecord.sheep)).all()
+    ).options(db.joinedload(UltrasoundRecord.sheep))
+    ultrasounds = pen_us_q(us_q).all()
 
     # زایش‌های این ماه
-    births = BirthRecord.query.filter(
+    births_q = BirthRecord.query.filter(
         BirthRecord.birth_date >= g_first, BirthRecord.birth_date < g_last
-    ).options(db.joinedload(BirthRecord.mother)).all()
+    ).options(db.joinedload(BirthRecord.mother))
+    births = pen_birth_q(births_q).all()
 
-    # زایش‌های پیش‌بینی شده (بر اساس سونوگرافی با due_date در این ماه)
-    predicted_births = UltrasoundRecord.query.filter(
+    # زایش‌های پیش‌بینی شده
+    pred_q = UltrasoundRecord.query.filter(
         UltrasoundRecord.due_date >= g_first, UltrasoundRecord.due_date < g_last,
         UltrasoundRecord.result == 'آبستن'
-    ).options(db.joinedload(UltrasoundRecord.sheep)).all()
+    ).options(db.joinedload(UltrasoundRecord.sheep))
+    predicted_births = pen_us_q(pred_q).all()
 
-    # میش‌های آماده جفت‌اندازی
+    # فیلتر نوع رویداد
+    if event_filter == 'mating':
+        ultrasounds = []; births = []; predicted_births = []
+    elif event_filter == 'ultrasound':
+        matings = []; births = []; predicted_births = []
+    elif event_filter == 'birth':
+        matings = []; ultrasounds = []; predicted_births = []
+    elif event_filter == 'predicted':
+        matings = []; ultrasounds = []; births = []
+
+    # داده‌های ویو هفتگی
+    weeks = []
+    if view == 'week':
+        current_week_start = request.args.get('week_start', type=int) or 1
+        week_end = min(current_week_start + 6, days_in_month)
+        weeks = [(d, current_week_start + d) for d in range(7) if current_week_start + d <= days_in_month]
+
+    # داده‌های ویو لیستی
+    all_events = []
+    if view == 'list':
+        for m in matings:
+            all_events.append({'date': m.mating_date, 'type': 'جفت‌اندازی', 'sheep_tag': m.sheep.ear_tag if m.sheep else '?', 'detail': m.mating_type, 'color': 'danger', 'sheep_id': m.sheep_id})
+        for u in ultrasounds:
+            all_events.append({'date': u.exam_date, 'type': 'سونوگرافی', 'sheep_tag': u.sheep.ear_tag if u.sheep else '?', 'detail': u.result, 'color': 'info', 'sheep_id': u.sheep_id})
+        for b in births:
+            all_events.append({'date': b.birth_date, 'type': 'زایش', 'sheep_tag': b.mother.ear_tag if b.mother else '?', 'detail': f'{b.lambs_count} بره', 'color': 'success', 'sheep_id': b.mother_id})
+        for p in predicted_births:
+            all_events.append({'date': p.due_date, 'type': 'زایش پیش‌بینی', 'sheep_tag': p.sheep.ear_tag if p.sheep else '?', 'detail': 'در انتظار', 'color': 'warning', 'sheep_id': p.sheep_id})
+        all_events.sort(key=lambda x: x['date'])
+
+    # آمار قوچ‌ها
+    ram_stats = []
+    rams_list = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ').order_by(Sheep.ear_tag).all()
+    for ram in rams_list:
+        total_matings = MatingRecord.query.filter_by(male_id=ram.id).count()
+        if total_matings == 0:
+            continue
+        successful = MatingRecord.query.filter_by(male_id=ram.id, result='آبستن').count()
+        failed = MatingRecord.query.filter_by(male_id=ram.id, result='خالی').count()
+        pending = total_matings - successful - failed
+        success_rate = (successful / (successful + failed) * 100) if (successful + failed) > 0 else None
+        ram_stats.append({
+            'name': ram.ear_tag, 'id': ram.id, 'total': total_matings,
+            'successful': successful, 'failed': failed, 'pending': pending,
+            'success_rate': success_rate
+        })
+    ram_stats.sort(key=lambda x: x['total'], reverse=True)
+
+    # ===== ۱. پیش‌بینی زایش ۶ ماه آینده =====
+    forecast_months = []
+    forecast_counts = []
+    forecast_lambs = []
+    for i in range(6):
+        m = now_j.month + i
+        y = now_j.year
+        while m > 12: m -= 12; y += 1
+        fm_start = jdatetime.date(y, m, 1).togregorian()
+        fm_end = (jdatetime.date(y + 1, 1, 1) if m == 12 else jdatetime.date(y, m + 1, 1)).togregorian()
+        cnt = UltrasoundRecord.query.filter(
+            UltrasoundRecord.due_date >= fm_start, UltrasoundRecord.due_date < fm_end,
+            UltrasoundRecord.result == 'آبستن'
+        ).count()
+        total_lambs = db.session.query(func.coalesce(func.sum(UltrasoundRecord.fetus_count), 0)).filter(
+            UltrasoundRecord.due_date >= fm_start, UltrasoundRecord.due_date < fm_end,
+            UltrasoundRecord.result == 'آبستن'
+        ).scalar()
+        forecast_counts.append(cnt)
+        forecast_lambs.append(int(total_lambs))
+        forecast_months.append(month_names.get(m, ''))
+
+    # آماده‌سازی داده‌های پایه (قبل از smart alerts)
     ready_ewes = Sheep.query.filter(
         Sheep.is_deleted == False,
         Sheep.gender.in_(['میش', 'بره ماده']),
         Sheep.status.in_(['زنده و سالم', 'آبستن']),
         Sheep.last_heat_date != None
     ).order_by(Sheep.last_heat_date.desc()).all()
-    next_heats = [{'ear_tag': e.ear_tag, 'next': e.last_heat_date + timedelta(days=17)} for e in ready_ewes[:10]]
+    next_heats = [{'ear_tag': e.ear_tag, 'next': e.last_heat_date + timedelta(days=17), 'sheep': e} for e in ready_ewes[:10]]
 
-    # داده‌های مورد نیاز برای فرم‌های سریع
-    ewes = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender.in_(['میش', 'بره ماده'])).order_by(Sheep.ear_tag).all()
-    rams = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ').order_by(Sheep.ear_tag).all()
+    # آمار ماه (قبل از smart alerts)
+    total_events = len(matings) + len(ultrasounds) + len(births) + len(predicted_births)
+    pregnant_ultrasounds = [u for u in ultrasounds if u.result == 'آبستن']
+    empty_ultrasounds = [u for u in ultrasounds if u.result == 'خالی']
+    preg_rate = (len(pregnant_ultrasounds) / (len(pregnant_ultrasounds) + len(empty_ultrasounds)) * 100) if (len(pregnant_ultrasounds) + len(empty_ultrasounds)) > 0 else None
+
+    # ===== ۲. Smart Alerts =====
+    smart_alerts = []
+    # ۲-۱. فحلی در ۳ روز آینده
+    coming_heats = [e for e in ready_ewes if e.last_heat_date and 0 <= (e.last_heat_date + timedelta(days=17) - g_today).days <= 3]
+    if coming_heats:
+        tags = '، '.join([e.ear_tag for e in coming_heats[:5]])
+        if len(coming_heats) > 5: tags += f' و {len(coming_heats)-5} رأس دیگر'
+        smart_alerts.append({'type': 'heat', 'text': f'🔥 {len(coming_heats)} رأس در ۳ روز آینده فحلی دارند — {tags}', 'severity': 'warning'})
+    # ۲-۲. قوچ‌های کم‌کار
+    for ram in rams_list:
+        two_month_ago = g_today - timedelta(days=60)
+        recent = MatingRecord.query.filter_by(male_id=ram.id).filter(MatingRecord.mating_date >= two_month_ago).count()
+        if recent is not None and recent <= 2:
+            smart_alerts.append({'type': 'ram', 'text': f'🐏 قوچ {ram.ear_tag} فقط {recent} جفت‌اندازی در ۲ ماه داشته — بررسی سلامت', 'severity': 'danger'})
+            break
+    # ۲-۳. میش‌های با شکست مکرر
+    for ewe in ready_ewes:
+        recent_matings = MatingRecord.query.filter_by(sheep_id=ewe.id).order_by(MatingRecord.id.desc()).limit(3).all()
+        failures = [m for m in recent_matings if m.result == 'خالی']
+        if len(failures) >= 2:
+            smart_alerts.append({'type': 'ewe', 'text': f'🐑 میش {ewe.ear_tag} از {len(recent_matings)} جفت‌اندازی پشت سر هم خالی بوده — بررسی یا حذف از گله', 'severity': 'danger'})
+            break
+    # ۲-۴. افت نرخ آبستنی
+    if preg_rate is not None:
+        prev_m = month - 1 if month > 1 else 12
+        prev_y = year if month > 1 else year - 1
+        prev_j_first = jdatetime.date(prev_y, prev_m, 1)
+        prev_g_first = prev_j_first.togregorian()
+        prev_preg = UltrasoundRecord.query.filter(
+            UltrasoundRecord.exam_date >= prev_g_first, UltrasoundRecord.exam_date < g_first,
+            UltrasoundRecord.result == 'آبستن'
+        ).count()
+        prev_empty = UltrasoundRecord.query.filter(
+            UltrasoundRecord.exam_date >= prev_g_first, UltrasoundRecord.exam_date < g_first,
+            UltrasoundRecord.result == 'خالی'
+        ).count()
+        prev_rate = (prev_preg / (prev_preg + prev_empty) * 100) if (prev_preg + prev_empty) > 0 else None
+        if prev_rate and preg_rate < prev_rate - 10:
+            smart_alerts.append({'type': 'rate', 'text': f'📉 نرخ آبستنی {preg_rate:.0f}٪ — نسبت به ماه قبل {prev_rate:.0f}٪ افت داشته', 'severity': 'danger'})
+    # ۲-۵. دام‌های عقب افتاده از سونوگرافی
+    overdue_tags = []
+    for mating in MatingRecord.query.filter(MatingRecord.result == 'منتظر نتیجه').options(db.joinedload(MatingRecord.sheep)).all():
+        if mating.sheep and (g_today - mating.mating_date).days >= 35:
+            overdue_tags.append(mating.sheep.ear_tag)
+    if overdue_tags:
+        tags = '، '.join(overdue_tags[:5])
+        if len(overdue_tags) > 5: tags += f' و {len(overdue_tags)-5} رأس دیگر'
+        smart_alerts.append({'type': 'us', 'text': f'🔬 {len(overdue_tags)} رأس بیش از ۳۵ روز از جفت‌اندازی گذشته — نیاز به سونوگرافی: {tags}', 'severity': 'warning'})
+
+    # ===== ۳. نقشه حرارتی باروری (۱۲ ماه) =====
+    fertility_months = []
+    fertility_rates = []
+    fertility_counts = []
+    for i in range(11, -1, -1):
+        m = now_j.month - i
+        y = now_j.year
+        while m < 1: m += 12; y -= 1
+        while m > 12: m -= 12; y += 1
+        fm_start = jdatetime.date(y, m, 1).togregorian()
+        fm_end = (jdatetime.date(y + 1, 1, 1) if m == 12 else jdatetime.date(y, m + 1, 1)).togregorian()
+        preg_m = UltrasoundRecord.query.filter(
+            UltrasoundRecord.exam_date >= fm_start, UltrasoundRecord.exam_date < fm_end,
+            UltrasoundRecord.result == 'آبستن'
+        ).count()
+        empty_m = UltrasoundRecord.query.filter(
+            UltrasoundRecord.exam_date >= fm_start, UltrasoundRecord.exam_date < fm_end,
+            UltrasoundRecord.result == 'خالی'
+        ).count()
+        rate = (preg_m / (preg_m + empty_m) * 100) if (preg_m + empty_m) > 0 else None
+        fertility_months.append(month_names.get(m, ''))
+        fertility_rates.append(rate)
+        fertility_counts.append(preg_m + empty_m)
+
+    # ===== ۴. گانت چارت (میش‌های آبستن) =====
+    gantt_data = []
+    pregnant_q = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender.in_(['میش', 'بره ماده']), Sheep.status == 'آبستن')
+    if pen_filter:
+        pregnant_q = pregnant_q.filter(Sheep.pen_id == pen_filter)
+    for ewe in pregnant_q.order_by(Sheep.ear_tag).limit(30).all():
+        last_us = UltrasoundRecord.query.filter_by(sheep_id=ewe.id, result='آبستن').order_by(UltrasoundRecord.id.desc()).first()
+        due_date = last_us.due_date if last_us and last_us.due_date else None
+        days_left = (due_date - g_today).days if due_date else None
+        gantt_data.append({
+            'ear_tag': ewe.ear_tag, 'id': ewe.id,
+            'confirm_date': last_us.exam_date if last_us else None,
+            'due_date': due_date, 'days_left': days_left,
+            'fetus_count': last_us.fetus_count if last_us else None
+        })
+    gantt_data.sort(key=lambda x: x['days_left'] if x['days_left'] is not None else 999)
+
+    # میش‌های آماده جفت‌اندازی
+    # داده‌های مورد نیاز
+    rams = rams_list
     semen_doses = SemenInventory.query.filter(SemenInventory.quantity_doses > 0).order_by(SemenInventory.ram_name).all()
     pens = Pen.query.order_by(Pen.name).all()
 
-    return render_template('livestock/breeding_calendar.html', year=year, month=month,
-        month_name=month_names.get(month, ''),
-        month_names=month_names, days_in_month=days_in_month,
-        g_first=g_first, matings=matings, ultrasounds=ultrasounds,
-        births=births, predicted_births=predicted_births, next_heats=next_heats,
-        ewes=ewes, rams=rams, semen_doses=semen_doses, pens=pens)
+    return render_template('livestock/breeding_calendar.html',
+        year=year, month=month, view=view, pen_filter=pen_filter, event_filter=event_filter, is_print=is_print,
+        month_name=month_names.get(month, ''), month_names=month_names, days_in_month=days_in_month,
+        g_first=g_first, g_today=g_today, today_day=today_day,
+        matings=matings, ultrasounds=ultrasounds, births=births, predicted_births=predicted_births,
+        next_heats=next_heats, rams=rams, semen_doses=semen_doses, pens=pens,
+        total_events=total_events, preg_rate=preg_rate,
+        preg_count=len(pregnant_ultrasounds), empty_count=len(empty_ultrasounds), birth_count=len(births),
+        weeks=weeks, all_events=all_events if view == 'list' else [], ram_stats=ram_stats,
+        forecast_months=forecast_months, forecast_counts=forecast_counts, forecast_lambs=forecast_lambs,
+        smart_alerts=smart_alerts,
+        fertility_months=fertility_months, fertility_rates=fertility_rates, fertility_counts=fertility_counts,
+        gantt_data=gantt_data)
+
+@livestock_bp.route('/bulk_mating', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def bulk_mating():
+    sheep_ids = request.form.getlist('sheep_ids')
+    male_id = request.form.get('male_id')
+    mating_date = parse_smart_date(request.form.get('mating_date'))
+    mating_type = request.form.get('mating_type', 'طبیعی')
+    if not sheep_ids or not mating_date:
+        flash('لطفاً دام‌ها و تاریخ را انتخاب کنید.', 'danger')
+        return redirect(url_for('livestock.breeding_calendar'))
+    count = 0
+    for sid in sheep_ids:
+        sid = sid.strip()
+        if not sid.isdigit(): continue
+        sheep = Sheep.query.get(int(sid))
+        if not sheep or sheep.is_deleted: continue
+        db.session.add(MatingRecord(
+            sheep_id=int(sid),
+            male_id=int(male_id) if male_id else None,
+            mating_date=mating_date,
+            mating_type=mating_type,
+            notes=request.form.get('notes')
+        ))
+        sheep.last_heat_date = mating_date
+        if sheep.status == 'زنده و سالم':
+            sheep.status = 'جفت‌اندازی شده'
+        count += 1
+    db.session.commit()
+    log_audit(f"جفت‌اندازی گروهی {count} رأس ({mating_type})")
+    flash(f'جفت‌اندازی گروهی برای {count} رأس ثبت شد.', 'success')
+    return redirect(url_for('livestock.breeding_calendar'))
+
+@livestock_bp.route('/ram_stats')
+@login_required
+@permission_required('can_view_livestock')
+def ram_stats_list():
+    import math
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '').strip()
+    min_rate = request.args.get('min_rate', type=float)
+    breed_filter = request.args.get('breed', '').strip()
+    sort_by = request.args.get('sort', 'total').strip()
+
+    q = Sheep.query.filter(Sheep.is_deleted == False, Sheep.gender == 'قوچ')
+    if search:
+        q = q.filter(Sheep.ear_tag.ilike(f'%{search}%'))
+    if breed_filter:
+        q = q.filter(Sheep.breed == breed_filter)
+    rams = q.order_by(Sheep.ear_tag).all()
+
+    ram_list = []
+    for ram in rams:
+        total_matings = MatingRecord.query.filter_by(male_id=ram.id).count()
+        successful = MatingRecord.query.filter_by(male_id=ram.id, result='آبستن').count()
+        failed = MatingRecord.query.filter_by(male_id=ram.id, result='خالی').count()
+        pending = total_matings - successful - failed
+        success_rate = (successful / (successful + failed) * 100) if (successful + failed) > 0 else None
+        ram_list.append({
+            'id': ram.id, 'name': ram.ear_tag, 'breed': ram.breed or 'نامشخص',
+            'total': total_matings, 'successful': successful, 'failed': failed,
+            'pending': pending, 'success_rate': success_rate, 'status': ram.status
+        })
+
+    if min_rate is not None:
+        ram_list = [r for r in ram_list if r['success_rate'] is not None and r['success_rate'] >= min_rate]
+
+    if sort_by == 'rate':
+        ram_list.sort(key=lambda x: (x['success_rate'] or 0), reverse=True)
+    elif sort_by == 'name':
+        ram_list.sort(key=lambda x: x['name'])
+    else:
+        ram_list.sort(key=lambda x: x['total'], reverse=True)
+
+    total = len(ram_list)
+    per_page = 50
+    total_pages = max(1, math.ceil(total / per_page))
+    offset = (page - 1) * per_page
+    page_rams = ram_list[offset:offset + per_page]
+
+    breeds = db.session.query(Sheep.breed).filter(
+        Sheep.is_deleted == False, Sheep.gender == 'قوچ',
+        Sheep.breed != None, Sheep.breed != ''
+    ).distinct().order_by(Sheep.breed).all()
+    breeds = [b[0] for b in breeds]
+
+    return render_template('livestock/ram_stats.html',
+        rams=page_rams, page=page, total_pages=total_pages, total=total,
+        per_page=per_page, search=search, min_rate=min_rate,
+        breed_filter=breed_filter, breeds=breeds, sort_by=sort_by)
 
 @livestock_bp.route('/semen_inventory')
 @login_required

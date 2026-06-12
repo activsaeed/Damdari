@@ -1,83 +1,454 @@
 {% extends 'base.html' %}
 {% block content %}
-<style> .event-item { padding:6px 8px; margin:2px 0; border-radius:4px; font-size:0.75rem; cursor:pointer; } .event-item:hover { opacity:0.85; } </style>
+<style>
+.cal-grid td { height:85px; vertical-align:top; padding:2px; font-size:0.7rem; position:relative; cursor:pointer; transition:background .15s }
+.cal-grid td:hover { background:#f0f4ff }
+.cal-grid td.today { border:2px solid #ffc107 !important; background:#fffde7 }
+.cal-day-num { font-weight:700; font-size:0.75rem; margin-bottom:1px }
+.cal-event { padding:1px 3px; margin:1px 0; border-radius:3px; font-size:0.65rem; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.cal-event:hover { opacity:0.8 }
+.sheep-search-result { cursor:pointer; transition:background .1s }
+.sheep-search-result:hover { background:#e9ecef }
+.fertility-cell { min-width:26px; height:26px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:600; color:#fff }
+.card-header .collapse-icon { transition:transform .2s; cursor:pointer }
+.card-header .collapse-icon.collapsed { transform:rotate(-90deg) }
+.card-header .help-icon { cursor:pointer; opacity:.6; transition:opacity .2s }
+.card-header .help-icon:hover { opacity:1 }
+@media print { .no-print { display:none!important } body { background:#fff } .card { border:1px solid #ddd!important } }
+</style>
 {% set pmonth = 12 if month == 1 else month - 1 %}{% set pyear = year - 1 if month == 1 else year %}
 {% set nmonth = 1 if month == 12 else month + 1 %}{% set nyear = year + 1 if month == 12 else year %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <h2 class="mb-0"><i class="fa-solid fa-calendar-check text-danger"></i> تقویم تولیدمثل</h2>
-    <div class="d-flex gap-2 align-items-center">
-        <a href="{{ url_for('livestock.breeding_calendar') }}" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-calendar-day"></i> امروز</a>
-        <a href="{{ url_for('livestock.breeding_calendar', year=pyear, month=pmonth) }}" class="btn btn-outline-secondary btn-sm">← ماه قبل</a>
-        <select class="form-select form-select-sm d-inline-block" style="width:auto" onchange="window.location='{{ url_for('livestock.breeding_calendar', year=9999, month=1) }}'.replace('9999', this.value.split('-')[0]).replace('month=1', 'month='+this.value.split('-')[1])">
-            {% for y in range(year-2, year+3) %}{% for m in range(1, 13) %}
-            <option value="{{ y }}-{{ m }}" {% if y == year and m == month %}selected{% endif %}>{{ month_names[m] }} {{ y }}</option>
-            {% endfor %}{% endfor %}
-        </select>
-        <a href="{{ url_for('livestock.breeding_calendar', year=nyear, month=nmonth) }}" class="btn btn-outline-secondary btn-sm">ماه بعد →</a>
-        <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#quickMatingModal"><i class="fa-solid fa-heart"></i> جفت‌اندازی</button>
-        <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#quickUltrasoundModal"><i class="fa-solid fa-microscope"></i> سونوگرافی</button>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- Stats Bar -->
+<div class="row g-2 mb-3 no-print">
+  <div class="col-md-3 col-6">
+    <div class="card border-0 shadow-sm bg-primary text-white text-center py-2">
+      <h4 class="mb-0">{{ total_events }}</h4>
+      <small>کل رویدادها</small>
     </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card border-0 shadow-sm bg-success text-white text-center py-2">
+      <h4 class="mb-0">{{ preg_count }}</h4>
+      <small>آبستن</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card border-0 shadow-sm bg-warning text-dark text-center py-2">
+      <h4 class="mb-0">{{ empty_count }}</h4>
+      <small>خالی</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card border-0 shadow-sm bg-info text-white text-center py-2">
+      <h4 class="mb-0">{{ birth_count }}</h4>
+      <small>زایش‌ها</small>
+    </div>
+  </div>
 </div>
+
+{% if preg_rate is not none %}
+<div class="alert alert-info py-2 mb-3 no-print d-flex justify-content-between align-items-center">
+  <span><i class="fa-solid fa-percent"></i> نرخ آبستنی: <strong>{{ preg_rate }}%</strong></span>
+  <span class="small text-muted">{{ preg_count }} آبستن از {{ preg_count + empty_count }} معاینه</span>
+</div>
+{% endif %}
+
+<!-- Smart Alerts -->
+<div class="card shadow-sm border-0 mb-3 no-print">
+  <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+    <span><i class="fa-solid fa-bell text-warning"></i> هشدارهای هوشمند</span>
+    <div>
+      <i class="fa-regular fa-circle-question help-icon" title="هشدارهای خودکار بر اساس تحلیل داده‌های تولیدمثلی"></i>
+    </div>
+  </div>
+  <div class="card-body p-2">
+    {% for alert in smart_alerts %}
+    <div class="alert alert-{{ alert.severity }} py-1 px-2 mb-1 small d-flex align-items-center gap-2">
+      <i class="fa-solid {{ 'fa-triangle-exclamation' if alert.severity == 'danger' else 'fa-circle-exclamation' }}"></i>
+      <span>{{ alert.message }}</span>
+    </div>
+    {% else %}<div class="text-muted text-center py-2 small">همه چیز عادی است.</div>{% endfor %}
+  </div>
+</div>
+
+<!-- Lambing Forecast -->
+<div class="card shadow-sm border-0 mb-3 no-print">
+  <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+    <span><i class="fa-solid fa-chart-bar text-success"></i> پیش‌بینی زایش‌ها</span>
+    <div>
+      <i class="fa-regular fa-circle-question help-icon" title="پیش‌بینی تعداد زایش‌ها و بره‌ها در ۶ ماه آینده"></i>
+      <i class="fa-solid fa-chevron-down collapse-icon collapsed" data-bs-toggle="collapse" data-bs-target="#collapseForecast"></i>
+    </div>
+  </div>
+  <div class="collapse" id="collapseForecast">
+    <div class="card-body p-2"><canvas id="forecastChart" height="80"></canvas></div>
+  </div>
+</div>
+
+<!-- Top Toolbar -->
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <a href="{{ url_for('livestock.breeding_calendar') }}" class="btn btn-outline-primary btn-sm py-0 px-1"><i class="fa-solid fa-calendar-day"></i> امروز</a>
+    <a href="{{ url_for('livestock.breeding_calendar', year=pyear, month=pmonth, view=view, pen_id=pen_filter, event_type=event_filter) }}" class="btn btn-outline-secondary btn-sm py-0 px-1">← قبل</a>
+    <select class="form-select form-select-sm d-inline-block" style="width:auto" onchange="navigateMonth(this.value)">
+      {% for y in range(year-2, year+3) %}{% for m in range(1, 13) %}
+      <option value="{{ y }}-{{ m }}" {% if y == year and m == month %}selected{% endif %}>{{ month_names[m] }} {{ y }}</option>
+      {% endfor %}{% endfor %}
+    </select>
+    <a href="{{ url_for('livestock.breeding_calendar', year=nyear, month=nmonth, view=view, pen_id=pen_filter, event_type=event_filter) }}" class="btn btn-outline-secondary btn-sm py-0 px-1">بعد →</a>
+    <div class="btn-group btn-group-sm" role="group">
+      <a href="{{ url_for('livestock.breeding_calendar', year=year, month=month, view='month', pen_id=pen_filter, event_type=event_filter) }}" class="btn btn-outline-primary{{ ' active' if view != 'week' and view != 'list' else '' }}">ماه</a>
+      <a href="{{ url_for('livestock.breeding_calendar', year=year, month=month, view='week', pen_id=pen_filter, event_type=event_filter) }}" class="btn btn-outline-primary{{ ' active' if view == 'week' else '' }}">هفته</a>
+      <a href="{{ url_for('livestock.breeding_calendar', year=year, month=month, view='list', pen_id=pen_filter, event_type=event_filter) }}" class="btn btn-outline-primary{{ ' active' if view == 'list' else '' }}">لیست</a>
+    </div>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle py-0 px-1" data-bs-toggle="dropdown"><i class="fa-solid fa-filter"></i> فیلتر</button>
+      <div class="dropdown-menu p-3" style="min-width:250px">
+        <div class="mb-2"><label class="small fw-bold">محل نگهداری</label>
+          <select class="form-select form-select-sm" onchange="filterChange('pen_id', this.value)">
+            <option value="">همه</option>{% for p in pens %}<option value="{{ p.id }}" {{ 'selected' if pen_filter|string == p.id|string }}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-2"><label class="small fw-bold">نوع رویداد</label>
+          <select class="form-select form-select-sm" onchange="filterChange('event_type', this.value)">
+            <option value="">همه</option>
+            <option value="mating" {{ 'selected' if event_filter == 'mating' }}>جفت‌اندازی</option>
+            <option value="ultrasound" {{ 'selected' if event_filter == 'ultrasound' }}>سونوگرافی</option>
+            <option value="birth" {{ 'selected' if event_filter == 'birth' }}>زایش</option>
+            <option value="predicted" {{ 'selected' if event_filter == 'predicted' }}>زایش پیش‌بینی</option>
+          </select>
+        </div>
+        {% if pen_filter or event_filter %}<div class="mt-2"><a href="{{ url_for('livestock.breeding_calendar', year=year, month=month, view=view) }}" class="btn btn-outline-danger btn-sm w-100"><i class="fa-solid fa-xmark"></i> پاک کردن فیلتر</a></div>{% endif %}
+      </div>
+    </div>
+    <a href="{{ url_for('livestock.breeding_calendar', year=year, month=month, view=view, pen_id=pen_filter, event_type=event_filter, print=1) }}" class="btn btn-outline-dark btn-sm py-0 px-1" target="_blank"><i class="fa-solid fa-print"></i></a>
+    <button class="btn btn-outline-success btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#quickMatingModal"><i class="fa-solid fa-heart"></i> جفت‌اندازی</button>
+    <button class="btn btn-outline-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#bulkMatingModal"><i class="fa-solid fa-users"></i> گروهی</button>
+    <button class="btn btn-outline-info btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#quickUSModal"><i class="fa-solid fa-microscope"></i> سونوگرافی</button>
+  </div>
+</div>
+
+<!-- Main Content -->
 <div class="row g-3">
-    <div class="col-md-8">
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-2">
-                <table class="table table-bordered table-sm text-center mb-0">
-                    <thead class="table-light"><tr>{% for d in range(1, days_in_month + 1) %}<th class="small">{{ d }}</th>{% endfor %}</tr></thead>
-                    <tbody><tr>{% for d in range(1, days_in_month + 1) %}
-                        <td style="height:80px;vertical-align:top;padding:2px;font-size:0.7rem;position:relative;cursor:pointer" title="کلیک برای ثبت رویداد در روز {{ d }}">
-                            <div class="fw-bold">{{ d }}</div>
-                            {% for m in matings %}{% if (m.mating_date - g_first).days == d - 1 %}
-                            <div class="event-item bg-danger text-white" title="جفت‌اندازی {{ m.sheep.ear_tag }}">{{ m.sheep.ear_tag }} 💕</div>
-                            {% endif %}{% endfor %}
-                            {% for u in ultrasounds %}{% if (u.exam_date - g_first).days == d - 1 %}
-                            <div class="event-item bg-info text-dark" title="سونوگرافی {{ u.sheep.ear_tag }}: {{ u.result }}">{{ u.sheep.ear_tag }} 🔬</div>
-                            {% endif %}{% endfor %}
-                            {% for b in births %}{% if (b.birth_date - g_first).days == d - 1 %}
-                            <div class="event-item bg-success text-white" title="زایش {{ b.mother.ear_tag }}">{{ b.mother.ear_tag }} 🐑</div>
-                            {% endif %}{% endfor %}
-                            {% for p in predicted_births %}{% if p.due_date and (p.due_date - g_first).days == d - 1 %}
-                            <div class="event-item bg-warning text-dark" title="زایش پیش‌بینی {{ p.sheep.ear_tag }}">{{ p.sheep.ear_tag }} ⏳</div>
-                            {% endif %}{% endfor %}
-                        </td>
-                    {% endfor %}</tr></tbody>
-                </table>
+  <!-- Calendar Column -->
+  <div class="col-md-8">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-2" style="overflow-x:auto">
+        {% if view == 'list' %}
+        <table class="table table-bordered table-sm text-center align-middle mb-0">
+          <thead class="table-light"><tr><th>تاریخ</th><th>نوع</th><th>دام</th><th>توضیحات</th></tr></thead>
+          <tbody>{% for ev in all_events %}<tr><td>{{ ev.date }}</td><td><span class="badge bg-{{ ev.color }}">{{ ev.type }}</span></td><td>{{ ev.sheep }}</td><td class="small">{{ ev.desc }}</td></tr>{% else %}<tr><td colspan="4" class="text-center py-4 text-muted">رویدادی یافت نشد.</td></tr>{% endfor %}</tbody>
+        </table>
+        {% elif view == 'week' %}
+        {% for w in weeks %}
+        <div class="mb-3">
+          <div class="fw-bold small mb-1 bg-light p-1 rounded">{{ w.start }} تا {{ w.end }}</div>
+          <div class="d-flex gap-1" style="min-width:700px">
+            {% for d in w.days %}
+            <div class="border rounded p-1 flex-fill" style="min-height:60px;background:{% if d.day == today_day and today_day > 0 %}#fffde7{% endif %}">
+              <div class="fw-bold small text-center">{{ d.day }}</div>
+              {% for ev in d.events %}<div class="cal-event" style="background:{{ ev.color }}15;border-left:3px solid {{ ev.color }}" onclick="showDayDetail({{ d.day }})">{{ ev.text }}</div>{% endfor %}
             </div>
+            {% endfor %}
+          </div>
         </div>
+        {% endfor %}
+        {% else %}
+        <table class="table table-bordered table-sm text-center align-middle mb-0 cal-grid" style="min-width:700px">
+          <thead class="table-light"><tr>{% for d in range(1, days_in_month + 1) %}<th class="small py-1">{{ d }}</th>{% endfor %}</tr></thead>
+          <tbody><tr>{% for d in range(1, days_in_month + 1) %}
+            <td data-day="{{ d }}" onclick="showDayDetail({{ d }})" class="{% if d == today_day %}today{% endif %}">
+              <div class="cal-day-num">{{ d }}</div>
+              {% for m in matings %}{% if (m.mating_date - g_first).days == d - 1 %}
+              <div class="cal-event bg-danger text-white" title="جفت‌اندازی {{ m.sheep.ear_tag }}">{{ m.sheep.ear_tag }}</div>
+              {% endif %}{% endfor %}
+              {% for u in ultrasounds %}{% if (u.exam_date - g_first).days == d - 1 %}
+              <div class="cal-event bg-info text-dark" title="سونوگرافی {{ u.sheep.ear_tag }}: {{ u.result }}">{{ u.sheep.ear_tag }}</div>
+              {% endif %}{% endfor %}
+              {% for b in births %}{% if (b.birth_date - g_first).days == d - 1 %}
+              <div class="cal-event bg-success text-white" title="زایش {{ b.mother.ear_tag }}">{{ b.mother.ear_tag }}</div>
+              {% endif %}{% endfor %}
+              {% for p in predicted_births %}{% if p.due_date and (p.due_date - g_first).days == d - 1 %}
+              <div class="cal-event bg-warning text-dark" title="پیش‌بینی {{ p.sheep.ear_tag }}">{{ p.sheep.ear_tag }}</div>
+              {% endif %}{% endfor %}
+            </td>
+          {% endfor %}</tr></tbody>
+        </table>
+        {% endif %}
+      </div>
     </div>
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 mb-3">
-            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-list text-primary"></i> راهنما</div>
-            <div class="card-body p-3 small">
-                <div class="mb-2"><span class="badge bg-danger">جفت‌اندازی</span></div>
-                <div class="mb-2"><span class="badge bg-info text-dark">سونوگرافی</span></div>
-                <div class="mb-2"><span class="badge bg-success">زایش</span></div>
-                <div class="mb-2"><span class="badge bg-warning text-dark">زایش پیش‌بینی</span></div>
-            </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="col-md-4">
+    <!-- Heat Predictions -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="fa-solid fa-heart text-danger"></i> پیش‌بینی فحلی</span>
+        <div>
+          <i class="fa-regular fa-circle-question help-icon" title="پیش‌بینی زمان فحلی بعدی بر اساس آخرین سیکل‌های ثبت شده"></i>
+          <i class="fa-solid fa-chevron-down collapse-icon" data-bs-toggle="collapse" data-bs-target="#collapseHeatPredict"></i>
         </div>
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold"><i class="fa-solid fa-clock text-warning"></i> پیش‌بینی فحلی</div>
-            <div class="card-body p-2 small">
-                {% for e in next_heats %}
-                <div class="d-flex justify-content-between border-bottom py-1">
-                    <span>{{ e.ear_tag }}</span>
-                    <span class="text-danger fw-bold">{{ e.next|jalali }}</span>
-                </div>
-                {% else %}<div class="text-muted text-center py-2">داده‌ای نیست</div>{% endfor %}
-            </div>
+      </div>
+      <div class="collapse show" id="collapseHeatPredict">
+        <div class="card-body p-2 small">
+          {% for e in next_heats %}
+          <div class="d-flex justify-content-between border-bottom py-1">
+            <span>{{ e.ear_tag }}</span>
+            <span class="text-danger fw-bold">{{ e.next|jalali }}</span>
+          </div>
+          {% else %}<div class="text-muted text-center py-2">داده‌ای نیست</div>{% endfor %}
         </div>
+      </div>
     </div>
+
+    <!-- Gantt Chart -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="fa-solid fa-list text-success"></i> گانت آبستنی</span>
+        <div>
+          <i class="fa-regular fa-circle-question help-icon" title="وضعیت آبستنی میش‌ها به ترتیب نزدیک‌ترین به زایش"></i>
+          <i class="fa-solid fa-chevron-down collapse-icon" data-bs-toggle="collapse" data-bs-target="#collapseGantt"></i>
+        </div>
+      </div>
+      <div class="collapse show" id="collapseGantt">
+        <div class="card-body p-2" style="max-height:400px;overflow-y:auto">
+          {% for g in gantt_data %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small">
+              <span class="fw-bold">{{ g.ear_tag }}</span>
+              <span>{{ g.days_left if g.days_left is not none else '?' }} روز مانده</span>
+            </div>
+            <div class="progress" style="height:20px">
+              <div class="progress-bar {% if g.days_left is not none %}{{ 'bg-danger' if g.days_left <= 7 else 'bg-warning' if g.days_left <= 30 else 'bg-success' }}{% else %}bg-secondary{% endif %}" style="width:{{ g.progress or 0 }}%">{{ g.days_left if g.days_left is not none else '?' }}d</div>
+            </div>
+            <div class="small text-muted">جنین: {{ g.fetus_count or '?' }} | زایش: {{ g.due_date|jalali if g.due_date else 'نامشخص' }}</div>
+          </div>
+          {% else %}<div class="text-muted text-center py-2">داده‌ای نیست</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Ram Stats -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="fa-solid fa-horse-head text-warning"></i> آمار قوچ‌ها</span>
+        <div>
+          <i class="fa-regular fa-circle-question help-icon" title="عملکرد قوچ‌ها بر اساس تعداد جفت‌اندازی و نرخ موفقیت"></i>
+          <i class="fa-solid fa-chevron-down collapse-icon" data-bs-toggle="collapse" data-bs-target="#collapseRamStats"></i>
+          <a href="{{ url_for('livestock.ram_stats_list') }}" class="btn btn-sm btn-outline-primary py-0 ms-1"><i class="fa-solid fa-eye"></i></a>
+        </div>
+      </div>
+      <div class="collapse show" id="collapseRamStats">
+        <div class="card-body p-0 small">
+          <table class="table table-sm mb-0">
+            <thead class="table-light"><tr><th>قوچ</th><th>تعداد</th><th>موفق</th><th>نرخ</th></tr></thead>
+            <tbody>{% for r in ram_stats %}<tr><td class="fw-bold"><a href="{{ url_for('livestock.profile', id=r.id) }}" class="text-decoration-none">{{ r.ear_tag }}</a></td><td>{{ r.matings }}</td><td>{{ r.successful }}</td><td><span class="badge {{ 'bg-success' if r.rate is not none and r.rate >= 70 else 'bg-warning' if r.rate is not none and r.rate >= 40 else 'bg-secondary' }}">{{ r.rate if r.rate is not none else '-' }}%</span></td></tr>{% else %}<tr><td colspan="4" class="text-center py-4 text-muted">داده‌ای نیست</td></tr>{% endfor %}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fertility Heatmap -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-2">
+        <span><i class="fa-solid fa-th text-info"></i> نقشه حرارتی باروری</span>
+        <div>
+          <i class="fa-regular fa-circle-question help-icon" title="نرخ آبستنی ماهانه - ۱۲ ماه گذشته"></i>
+          <i class="fa-solid fa-chevron-down collapse-icon" data-bs-toggle="collapse" data-bs-target="#collapseHeatmap"></i>
+        </div>
+      </div>
+      <div class="collapse show" id="collapseHeatmap">
+        <div class="card-body p-2 small">
+          <div class="d-flex gap-1 flex-wrap justify-content-center">
+            {% for i in range(fertility_months|length) %}
+            {% set rate = fertility_rates[i] %}
+            {% set cls = 'bg-success' if rate is not none and rate >= 70 else 'bg-warning' if rate is not none and rate >= 40 else 'bg-secondary' %}
+            <div class="fertility-cell {{ cls }}" title="{{ fertility_months[i] }}: {{ rate }}% ({{ fertility_counts[i] }} معاینه)">{{ rate }}%</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-<div class="modal fade" id="quickMatingModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت جفت‌اندازی سریع</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_mating', id=0) }}" method="POST" id="quickMatingForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-2"><label>دام (ماده)</label><select name="sheep_id" class="form-select" required><option value="">انتخاب کنید...</option>{% for e in ewes %}<option value="{{ e.id }}">{{ e.ear_tag }} ({{ e.breed or '-' }})</option>{% endfor %}</select></div><div class="mb-2"><label>تاریخ (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="mating_date" class="gregorian-hidden-field"></div><div class="mb-2"><label>نوع تلقیح</label><select name="mating_type" class="form-select"><option value="طبیعی">طبیعی</option><option value="تلقیح مصنوعی">تلقیح مصنوعی</option><option value="لاپاراسکوپی">لاپاراسکوپی</option></select></div><div class="mb-2"><label>قوچ</label><select name="male_id" class="form-select"><option value="">انتخاب کنید...</option>{% for r in rams %}<option value="{{ r.id }}">{{ r.ear_tag }}</option>{% endfor %}</select></div><div class="mb-2"><label>اسپرم (در صورت تلقیح مصنوعی)</label><select name="semen_id" class="form-select"><option value="">بدون اسپرم</option>{% for s in semen_doses %}<option value="{{ s.id }}">{{ s.ram_name }} ({{ s.quantity_doses }} دوز)</option>{% endfor %}</select></div><div class="mb-2"><label>توضیحات</label><input type="text" name="notes" class="form-control"></div></div><div class="modal-footer"><button type="submit" class="btn btn-danger w-100 fw-bold">ثبت</button></div></form></div></div></div>
-<div class="modal fade" id="quickUltrasoundModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">ثبت سونوگرافی سریع</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{{ url_for('livestock.add_ultrasound', id=0) }}" method="POST" id="quickUSForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-body"><div class="mb-2"><label>دام</label><select name="sheep_id" class="form-select" required><option value="">انتخاب کنید...</option>{% for e in ewes %}<option value="{{ e.id }}">{{ e.ear_tag }}</option>{% endfor %}</select></div><div class="mb-2"><label>تاریخ معاینه (شمسی)</label><input type="text" class="form-control jalali-datepicker"><input type="hidden" name="exam_date" class="gregorian-hidden-field"></div><div class="mb-2"><label>نوع معاینه</label><select name="exam_type" class="form-select"><option value="روتین">روتین</option><option value="تشخیصی">تشخیصی</option><option value="تأیید آبستنی">تأیید آبستنی</option><option value="فولیکولی">فولیکولی</option></select></div><div class="mb-2"><label>نتیجه</label><select name="result" class="form-select" required><option value="آبستن">آبستن</option><option value="خالی">خالی</option><option value="سقط">سقط</option><option value="نامشخص">نامشخص</option></select></div><div class="row g-2 mb-2"><div class="col-6"><label>تعداد جنین</label><input type="number" name="fetus_count" class="form-control"></div><div class="col-6"><label>روز آبستنی</label><input type="number" name="gestational_days" class="form-control"></div></div><div class="mb-2"><label>توضیحات</label><input type="text" name="notes" class="form-control"></div></div><div class="modal-footer"><button type="submit" class="btn btn-info w-100 fw-bold text-white">ثبت</button></div></form></div></div></div>
+
+<!-- Legend Guide -->
+<div class="d-flex gap-3 flex-wrap small mb-3 no-print">
+  <span><i class="fa-solid fa-heart text-danger"></i> جفت‌اندازی</span>
+  <span><i class="fa-solid fa-microscope text-info"></i> سونوگرافی</span>
+  <span><i class="fa-solid fa-baby text-success"></i> زایش</span>
+  <span><i class="fa-solid fa-clock text-warning"></i> پیش‌بینی زایش</span>
+</div>
+
+{% include 'livestock/_calendar_modals.html' %}
 <script>
+// Initialize tooltips
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+// Date helpers for day-click
+var gFirst = new Date('{{ g_first.isoformat() }}T12:00:00');
+function gdateForDay(day) { var d = new Date(gFirst); d.setDate(gFirst.getDate() + day - 1); return d.toISOString().split('T')[0]; }
+function jdateForDay(day) { var d = new Date(gFirst); d.setDate(gFirst.getDate() + day - 1); return new persianDate(d).format('YYYY-MM-DD'); }
+function fillDateInModal(gdate, jdate, modalId) {
+    var modal = document.getElementById(modalId);
+    var jp = modal.querySelector('.jalali-datepicker');
+    var gp = modal.querySelector('.gregorian-hidden-field');
+    if (jp && gp) { jp.value = jdate; gp.value = gdate; }
+}
+
+// Navigation
+function navigateMonth(v) {
+    const parts = v.split('-');
+    const base = '{{ url_for('livestock.breeding_calendar', year=9999, month=1, view=view, pen_id=pen_filter, event_type=event_filter) }}';
+    window.location = base.replace('9999', parts[0]).replace('month=1', 'month='+parts[1]);
+}
+function filterChange(param, val) {
+    const url = new URL(window.location);
+    if (val) url.searchParams.set(param, val);
+    else url.searchParams.delete(param);
+    url.searchParams.delete('print');
+    window.location = url.toString();
+}
+
+// Day click detail modal
+function showDayDetail(day) {
+    const td = document.querySelector('td[data-day="'+day+'"]');
+    const events = td ? td.querySelectorAll('.cal-event') : [];
+    document.getElementById('dayNumber').textContent = day + ' {{ month_name }} {{ year }}';
+    const body = document.getElementById('dayDetailBody');
+    const gdate = gdateForDay(day), jdate = jdateForDay(day);
+    let html = '<div class="d-flex gap-2 mb-2 flex-wrap">';
+    html += '<button class="btn btn-sm btn-outline-danger" onclick="fillDateInModal(''+gdate+'',''+jdate+'','quickMatingModal');bootstrap.Modal.getInstance(document.getElementById('dayDetailModal')).hide();new bootstrap.Modal(document.getElementById('quickMatingModal')).show();"><i class="fa-solid fa-heart"></i> جفت‌اندازی</button>';
+    html += '<button class="btn btn-sm btn-outline-info" onclick="fillDateInModal(''+gdate+'',''+jdate+'','quickUSModal');bootstrap.Modal.getInstance(document.getElementById('dayDetailModal')).hide();new bootstrap.Modal(document.getElementById('quickUSModal')).show();"><i class="fa-solid fa-microscope"></i> سونوگرافی</button>';
+    html += '<button class="btn btn-sm btn-outline-success" onclick="fillDateInModal(''+gdate+'',''+jdate+'','quickBirthModal');bootstrap.Modal.getInstance(document.getElementById('dayDetailModal')).hide();new bootstrap.Modal(document.getElementById('quickBirthModal')).show();"><i class="fa-solid fa-baby"></i> ثبت زایش</button>';
+    html += '</div>';
+    if (!events.length) {
+        html += '<div class="text-muted text-center py-4">رویدادی در این روز ثبت نشده است.</div>';
+    } else {
+        html += '<div class="list-group">';
+        events.forEach(function(ev) {
+            var color = ev.classList.contains('bg-danger') ? '#dc3545' : ev.classList.contains('bg-info') ? '#0dcaf0' : ev.classList.contains('bg-success') ? '#198754' : '#ffc107';
+            html += '<div class="list-group-item list-group-item-action py-2" style="border-right:4px solid '+color+'">'+ev.innerHTML.trim()+'</div>';
+        });
+        html += '</div>';
+    }
+    body.innerHTML = html;
+    new bootstrap.Modal(document.getElementById('dayDetailModal')).show();
+}
+
+// Sheep picker
+document.querySelectorAll('.sheep-picker').forEach(function(picker) {
+    var input = picker.querySelector('.sheep-search-input');
+    var resultsDiv = picker.querySelector('.sheep-results');
+    var selectedId = picker.querySelector('.selected-id');
+    var selectedDisplay = picker.querySelector('.selected-display');
+    var clearBtn = picker.querySelector('.clear-btn');
+    var searchBtn = picker.querySelector('.search-btn');
+    var gender = picker.dataset.gender;
+    var timer;
+    function doSearch() {
+        var q = input.value.trim();
+        if (!q || q.length < 1) { resultsDiv.style.display = 'none'; return; }
+        var url = '/livestock/api/sheep_search?q=' + encodeURIComponent(q);
+        if (gender) url += '&gender=' + encodeURIComponent(gender);
+        fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+            resultsDiv.innerHTML = '';
+            if (!data.length) { resultsDiv.innerHTML = '<div class="text-muted small p-2">نتیجه‌ای یافت نشد</div>'; resultsDiv.style.display = 'block'; return; }
+            data.forEach(function(s) {
+                if (selectedId.value == s.id) return;
+                var div = document.createElement('div');
+                div.className = 'sheep-search-result p-2 d-flex justify-content-between align-items-center border-bottom';
+                div.innerHTML = '<span class="fw-bold">' + s.ear_tag + '</span><span class="small text-muted">' + (s.breed || '') + ' | ' + (s.pen || '') + '</span>';
+                div.onclick = function() { selectSheep(picker, s); };
+                resultsDiv.appendChild(div);
+            });
+            resultsDiv.style.display = 'block';
+        });
+    }
+    if (input) input.addEventListener('input', function() { clearTimeout(timer); timer = setTimeout(doSearch, 300); });
+    if (searchBtn) searchBtn.addEventListener('click', doSearch);
+    if (clearBtn) clearBtn.addEventListener('click', function() { clearSheep(picker); });
+    document.addEventListener('click', function(e) { if (!picker.contains(e.target)) resultsDiv.style.display = 'none'; });
+});
+
+function selectSheep(picker, s) {
+    picker.querySelector('.selected-id').value = s.id;
+    var display = picker.querySelector('.selected-display');
+    display.innerHTML = '<i class="fa-solid fa-check"></i> ' + s.ear_tag + ' (' + (s.breed || '') + ')';
+    display.style.display = 'block';
+    picker.querySelector('.sheep-results').style.display = 'none';
+    picker.querySelector('.sheep-search-input').value = '';
+    picker.querySelector('.clear-btn').style.display = 'block';
+    picker.querySelector('.search-btn').style.display = 'none';
+    // Suggestion box
+    var container = picker.closest('.sheep-picker');
+    if (container && container.dataset.target === 'mating_sheep_id') {
+        var suggestionBox = document.getElementById('matingSuggestionBox');
+        if (suggestionBox) {
+            suggestionBox.style.display = 'none';
+            fetch('/livestock/api/mating_suggestions/' + s.id).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.length > 0) {
+                    var html = '<small><i class="fa-solid fa-lightbulb text-warning"></i> پیشنهاد قوچ: ';
+                    html += data.map(function(r) { return '<strong>' + r.ear_tag + '</strong> (' + r.rate + '%)'; }).join(' | ');
+                    html += '</small>';
+                    suggestionBox.innerHTML = html;
+                    suggestionBox.style.display = 'block';
+                }
+            });
+        }
+    }
+}
+
+function clearSheep(picker) {
+    picker.querySelector('.selected-id').value = '';
+    picker.querySelector('.selected-display').style.display = 'none';
+    picker.querySelector('.sheep-results').style.display = 'none';
+    picker.querySelector('.sheep-search-input').value = '';
+    picker.querySelector('.clear-btn').style.display = 'none';
+    picker.querySelector('.search-btn').style.display = '';
+    var container = picker.closest('.sheep-picker');
+    if (container) {
+        var suggestionBox = document.getElementById('matingSuggestionBox');
+        if (suggestionBox) { suggestionBox.style.display = 'none'; }
+    }
+}
+
+// Forecast Chart
+{% if forecast_months %}
+new Chart(document.getElementById('forecastChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ forecast_months|safe }},
+        datasets: [
+            { label: 'پیش‌بینی زایش', data: {{ forecast_counts|safe }}, backgroundColor: '#ffc107', borderRadius: 4 },
+            { label: 'تخمین بره', data: {{ forecast_lambs|safe }}, backgroundColor: '#198754', borderRadius: 4 }
+        ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+});
+{% endif %}
+
+// Form submit handlers
 document.getElementById('quickMatingForm')?.addEventListener('submit', function(e) {
-    const sid = document.querySelector('[name=sheep_id]', this).value;
-    this.action = this.action.replace('/0', '/' + sid);
+    var sid = this.querySelector('[name=sheep_id]')?.value;
+    if (sid) this.action = this.action.replace('/0', '/' + sid);
 });
 document.getElementById('quickUSForm')?.addEventListener('submit', function(e) {
-    const sid = document.querySelector('[name=sheep_id]', this).value;
-    this.action = this.action.replace('/0', '/' + sid);
+    var sid = this.querySelector('[name=sheep_id]')?.value;
+    if (sid) this.action = this.action.replace('/0', '/' + sid);
+});
+document.querySelectorAll('[data-bs-toggle="modal"][data-birth-sheep]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var sid = this.dataset.birthSheep;
+        var earTag = this.dataset.birthTag || '';
+        document.getElementById('quickBirthForm').action = '/livestock/add_birth/' + sid;
+        document.getElementById('quickBirthTitle').textContent = earTag;
+    });
 });
 </script>
 {% endblock %}
