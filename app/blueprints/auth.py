@@ -2,12 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required
 from werkzeug.security import check_password_hash
 from app.models import User
-from app import csrf
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
-@csrf.exempt
 def login():
     if request.method == 'POST':
         username = request.form.get('username')

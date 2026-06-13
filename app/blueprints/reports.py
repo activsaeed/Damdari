@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, UTC
 from sqlalchemy import or_, and_, func, cast, case
 from sqlalchemy.orm import joinedload
 from app.blueprints.dashboard import get_setting
-from app.blueprints.finance import permission_required
+from app.utils import permission_required
 import jdatetime
 
 reports_bp = Blueprint('reports', __name__)

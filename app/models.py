@@ -69,7 +69,7 @@ class TreatmentTemplate(db.Model):
 
 class Sheep(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    ear_tag = db.Column(db.String(50), unique=True, nullable=False)
+    ear_tag = db.Column(db.String(50), unique=True, nullable=False, index=True)
     breed = db.Column(db.String(50), nullable=True)
     gender = db.Column(db.String(20), nullable=False)
     birth_date = db.Column(db.Date, nullable=True)
@@ -82,17 +82,16 @@ class Sheep(db.Model):
     sale_date = db.Column(db.Date, nullable=True)
     buyer_category_id = db.Column(db.Integer, db.ForeignKey('buyer_category.id'), nullable=True)
     buyer_category = db.relationship('BuyerCategory', backref='sold_sheeps')
-    status = db.Column(db.String(50), default='زنده و سالم')
+    status = db.Column(db.String(50), default='زنده و سالم', index=True)
     purpose = db.Column(db.String(50), nullable=True)
     qr_code_path = db.Column(db.String(200), nullable=True)
     death_reason = db.Column(db.String(200), nullable=True)
-     # ---> این فیلد را اضافه کنید <---
     is_starred = db.Column(db.Boolean, default=False) 
     mother_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
     father_id = db.Column(db.Integer, db.ForeignKey('sheep.id', ondelete='SET NULL'), nullable=True, index=True)
     feed_ration_id = db.Column(db.Integer, db.ForeignKey('feed_ration.id', ondelete='SET NULL'), nullable=True, index=True)
     pen_id = db.Column(db.Integer, db.ForeignKey('pen.id', ondelete='SET NULL'), nullable=True, index=True)
-    is_deleted = db.Column(db.Boolean, default=False)
+    is_deleted = db.Column(db.Boolean, default=False, index=True)
     
     ration = db.relationship('FeedRation', backref='sheep_list')
     weight_records = db.relationship('WeightRecord', backref='sheep', lazy=True, cascade="all, delete-orphan")
@@ -118,7 +117,7 @@ class BirthRecord(db.Model):
 
 class WeightRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False, index=True)
     weight = db.Column(Numeric(18, 2), nullable=False)
     record_date = db.Column(db.Date, default=datetime.utcnow)
     bcs = db.Column(Numeric(4, 2), nullable=True)
@@ -126,7 +125,7 @@ class WeightRecord(db.Model):
 
 class MedicalRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False)
+    sheep_id = db.Column(db.Integer, db.ForeignKey('sheep.id'), nullable=False, index=True)
     action_type = db.Column(db.String(50), nullable=False)
     medicine_name = db.Column(db.String(100), nullable=False)
     drug_id = db.Column(db.Integer, db.ForeignKey('drug_inventory.id', ondelete='SET NULL'), nullable=True)
@@ -168,7 +167,7 @@ class JournalEntry(db.Model):
     """سند حسابداری (Sanad)"""
     id = db.Column(db.Integer, primary_key=True)
     entry_number = db.Column(db.String(50), unique=True, nullable=False) # شماره سند
-    date = db.Column(db.Date, default=datetime.utcnow)
+    date = db.Column(db.Date, default=datetime.utcnow, index=True)
     description = db.Column(db.String(255), nullable=False) # شرح سند
     is_auto_generated = db.Column(db.Boolean, default=True) # آیا سیستم خودش ساخته؟
     status = db.Column(db.String(20), default='تایید شده') # موقت، تایید شده، برگشتی
@@ -184,7 +183,7 @@ class JournalEntryLine(db.Model):
     """آرتیکل‌های سند (بدهکار/بستانکار)"""
     id = db.Column(db.Integer, primary_key=True)
     journal_entry_id = db.Column(db.Integer, db.ForeignKey('journal_entry.id'), nullable=False)
-    account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False, index=True)
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True) # حساب تفصیلی اشخاص
     
     debit = db.Column(Numeric(18, 2), default=Decimal('0'))  # بدهکار
@@ -202,23 +201,23 @@ class TransactionCategory(db.Model):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    t_type = db.Column(db.String(20), nullable=False) 
+    t_type = db.Column(db.String(20), nullable=False, index=True) 
     category = db.Column(db.String(50), nullable=False) 
     amount = db.Column(Numeric(18, 2), nullable=False) 
     discount_amount = db.Column(Numeric(18, 2), default=0.0) # مبلغ تخفیف
     vat_amount = db.Column(Numeric(18, 2), default=0.0) # مبلغ مالیات دقیق
-    t_date = db.Column(db.Date, default=datetime.utcnow) 
+    t_date = db.Column(db.Date, default=datetime.utcnow, index=True) 
     due_date = db.Column(db.Date, nullable=True) # تاریخ سررسید برای نسیه
     description = db.Column(db.String(255), nullable=True)
     invoice_number = db.Column(db.String(100), nullable=True)
     
     # ---> فیلدهای جدید فاکتور <---
-    party_name = db.Column(db.String(150), nullable=True) # نام شرکت/شخص/فروشگاه
-    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
+    party_name = db.Column(db.String(150), nullable=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True, index=True)
     payment_method = db.Column(db.String(50), default='نقدی') # نقدی یا نسیه
     cost_center = db.Column(db.String(100), nullable=True) # مرکز هزینه (پرواری، داشتی و...)
     is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن فاکتور
-    is_deleted = db.Column(db.Boolean, default=False) # ابطال منطقی فاکتور (Soft Delete)
+    is_deleted = db.Column(db.Boolean, default=False, index=True) # ابطال منطقی فاکتور (Soft Delete)
     is_archived = db.Column(db.Boolean, default=False) # وضعیت بایگانی
     moadian_status = db.Column(db.String(20), default='منتظر ارسال') # وضعیت سامانه مودیان
     moadian_sent_at = db.Column(db.DateTime, nullable=True) # تاریخ ارسال به مودیان
@@ -259,25 +258,25 @@ class InventoryItem(db.Model):
 
 class InventoryLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False, index=True)
     action_type = db.Column(db.String(20), nullable=False)
     amount = db.Column(Numeric(18, 2), nullable=False)
     
     # فیلد جدید برای لاگ: قیمت در زمان ورود/خروج
     transaction_price = db.Column(Numeric(18, 2), default=0.0)
     
-    date = db.Column(db.DateTime, default=datetime.utcnow)
+    date = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     notes = db.Column(db.String(200), nullable=True)
 
 # ---> جدول جدید: مدیریت چک و اسناد دریافتنی/پرداختنی <---
 
 class Cheque(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    cheque_type = db.Column(db.String(50), nullable=False) 
+    cheque_type = db.Column(db.String(50), nullable=False, index=True) 
     cheque_number = db.Column(db.String(50), nullable=False) 
     amount = db.Column(Numeric(18, 2), nullable=False) 
     issue_date = db.Column(db.Date, nullable=True)
-    due_date = db.Column(db.Date, nullable=False) 
+    due_date = db.Column(db.Date, nullable=False, index=True) 
     bank_name = db.Column(db.String(100), nullable=True) 
     bank_branch = db.Column(db.String(100), nullable=True) 
     issuer_name = db.Column(db.String(100), nullable=True) 
@@ -287,13 +286,13 @@ class Cheque(db.Model):
     reason = db.Column(db.String(200), nullable=True) 
     notes = db.Column(db.String(255), nullable=True) 
     image_path = db.Column(db.String(255), nullable=True) 
-    status = db.Column(db.String(50), default='در جریان')
+    status = db.Column(db.String(50), default='در جریان', index=True)
     
     # ---> فیلد جدید چک <---
     is_starred = db.Column(db.Boolean, default=False) # ستاره دار بودن چک
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_deleted = db.Column(db.Boolean, default=False)
+    is_deleted = db.Column(db.Boolean, default=False, index=True)
     cheque_book_id = db.Column(db.Integer, db.ForeignKey('cheque_book.id'), nullable=True)
 
 

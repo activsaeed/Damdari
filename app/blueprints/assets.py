@@ -4,7 +4,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Equipment, Transaction
 from app.accounting_engine import AccountingEngine
-from app.blueprints.finance import permission_required, normalize_amount_to_toman
+from app.utils import permission_required, normalize_amount_to_toman
 from datetime import datetime
 
 assets_bp = Blueprint('assets', __name__)

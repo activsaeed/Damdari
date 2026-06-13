@@ -6,6 +6,7 @@ from sqlalchemy import func, case
 from app.models import Sheep, WeightRecord, MedicalRecord, MedicalPhoto, BirthRecord, FeedRation, Pen, TreatmentTemplate, Medicine, BreedCategory, PurposeCategory, StatusCategory, Transaction, TransactionCategory, AuditLog, MatingRecord, UltrasoundRecord, UltrasoundImage, SemenInventory, QuarantineRecord, DrugInventory
 from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
+from app.utils import normalize_amount_to_toman, parse_smart_date
 import qrcode
 import jdatetime
 import os
@@ -16,27 +17,10 @@ import time
 import random
 import tempfile
 from flask_login import current_user, login_required
-from app.blueprints.finance import permission_required, normalize_amount_to_toman
+from app.utils import permission_required
 from app.blueprints.dashboard import get_setting
 
 livestock_bp = Blueprint('livestock', __name__)
-
-def parse_smart_date(date_str, default=None):
-    """پشتیبانی از تاریخ شمسی و میلادی در بک‌اند (مستقل از JS فرانت)"""
-    if not date_str or str(date_str).strip() in ['', 'None']:
-        return default
-    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
-    arabic_digits = '٠١٢٣٤٥٦٧٨٩'
-    english_digits = '0123456789'
-    translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
-    date_str = str(date_str).translate(translation_table).replace('/', '-').strip()
-    try:
-        if date_str.startswith(('13', '14')):
-            p = date_str.split('-')
-            return jdatetime.date(int(p[0]), int(p[1]), int(p[2])).togregorian()
-        return datetime.strptime(date_str[:10], '%Y-%m-%d').date()
-    except Exception:
-        return default
 
 def log_audit(action):
     try:
@@ -1220,12 +1204,14 @@ def breeding_calendar():
     elif event_filter == 'predicted':
         matings = []; ultrasounds = []; births = []
 
+
     # داده‌های ویو هفتگی
     weeks = []
     if view == 'week':
         current_week_start = request.args.get('week_start', type=int) or 1
         week_end = min(current_week_start + 6, days_in_month)
         weeks = [(d, current_week_start + d) for d in range(7) if current_week_start + d <= days_in_month]
+
 
     # داده‌های ویو لیستی
     all_events = []
@@ -1239,6 +1225,7 @@ def breeding_calendar():
         for p in predicted_births:
             all_events.append({'date': p.due_date, 'type': 'زایش پیش‌بینی', 'sheep_tag': p.sheep.ear_tag if p.sheep else '?', 'detail': 'در انتظار', 'color': 'warning', 'sheep_id': p.sheep_id})
         all_events.sort(key=lambda x: x['date'])
+
 
     # آمار قوچ‌ها
     ram_stats = []
@@ -1300,23 +1287,32 @@ def breeding_calendar():
     # ۲-۱. فحلی در ۳ روز آینده
     coming_heats = [e for e in ready_ewes if e.last_heat_date and 0 <= (e.last_heat_date + timedelta(days=17) - g_today).days <= 3]
     if coming_heats:
-        tags = '، '.join([e.ear_tag for e in coming_heats[:5]])
-        if len(coming_heats) > 5: tags += f' و {len(coming_heats)-5} رأس دیگر'
-        smart_alerts.append({'type': 'heat', 'text': f'🔥 {len(coming_heats)} رأس در ۳ روز آینده فحلی دارند — {tags}', 'severity': 'warning'})
+        tags_preview = '، '.join([e.ear_tag for e in coming_heats[:5]])
+        if len(coming_heats) > 5: tags_preview += f' و {len(coming_heats)-5} رأس دیگر'
+        sheep_details = [{'id': s.id, 'ear_tag': s.ear_tag} for s in coming_heats]
+        smart_alerts.append({'type': 'heat', 'text': f'🔥 {len(coming_heats)} رأس در ۳ روز آینده فحلی دارند — {tags_preview}', 'severity': 'warning', 'sheep_details': sheep_details, 'title': 'پیش‌بینی فحلی'})
     # ۲-۲. قوچ‌های کم‌کار
-    for ram in rams_list:
+    low_activity_rams = []
+    for ram in rams_list: # rams_list از قبل تعریف شده
         two_month_ago = g_today - timedelta(days=60)
-        recent = MatingRecord.query.filter_by(male_id=ram.id).filter(MatingRecord.mating_date >= two_month_ago).count()
-        if recent is not None and recent <= 2:
-            smart_alerts.append({'type': 'ram', 'text': f'🐏 قوچ {ram.ear_tag} فقط {recent} جفت‌اندازی در ۲ ماه داشته — بررسی سلامت', 'severity': 'danger'})
-            break
+        recent_matings_count = MatingRecord.query.filter_by(male_id=ram.id).filter(MatingRecord.mating_date >= two_month_ago).count()
+        if recent_matings_count is not None and recent_matings_count <= 2:
+            low_activity_rams.append({'id': ram.id, 'ear_tag': ram.ear_tag, 'recent_matings': recent_matings_count})
+    if low_activity_rams:
+        tags_preview = '، '.join([r['ear_tag'] for r in low_activity_rams[:5]])
+        sheep_details = [{'id': r['id'], 'ear_tag': r['ear_tag']} for r in low_activity_rams]
+        smart_alerts.append({'type': 'ram', 'text': f'🐏 {len(low_activity_rams)} قوچ کم‌کار ({tags_preview}) — بررسی سلامت', 'severity': 'danger', 'sheep_details': sheep_details, 'title': 'قوچ‌های کم‌کار'})
     # ۲-۳. میش‌های با شکست مکرر
-    for ewe in ready_ewes:
+    failed_ewes = []
+    for ewe in ready_ewes: # ready_ewes از قبل تعریف شده
         recent_matings = MatingRecord.query.filter_by(sheep_id=ewe.id).order_by(MatingRecord.id.desc()).limit(3).all()
         failures = [m for m in recent_matings if m.result == 'خالی']
         if len(failures) >= 2:
-            smart_alerts.append({'type': 'ewe', 'text': f'🐑 میش {ewe.ear_tag} از {len(recent_matings)} جفت‌اندازی پشت سر هم خالی بوده — بررسی یا حذف از گله', 'severity': 'danger'})
-            break
+            failed_ewes.append({'id': ewe.id, 'ear_tag': ewe.ear_tag, 'total_matings': len(recent_matings)})
+    if failed_ewes:
+        tags_preview = '، '.join([e['ear_tag'] for e in failed_ewes[:5]])
+        sheep_details = [{'id': e['id'], 'ear_tag': e['ear_tag']} for e in failed_ewes]
+        smart_alerts.append({'type': 'ewe', 'text': f'🐑 {len(failed_ewes)} میش با شکست مکرر ({tags_preview}) — بررسی یا حذف از گله', 'severity': 'danger', 'sheep_details': sheep_details, 'title': 'میش‌های با شکست مکرر'})
     # ۲-۴. افت نرخ آبستنی
     if preg_rate is not None:
         prev_m = month - 1 if month > 1 else 12
@@ -1333,16 +1329,17 @@ def breeding_calendar():
         ).count()
         prev_rate = (prev_preg / (prev_preg + prev_empty) * 100) if (prev_preg + prev_empty) > 0 else None
         if prev_rate and preg_rate < prev_rate - 10:
-            smart_alerts.append({'type': 'rate', 'text': f'📉 نرخ آبستنی {preg_rate:.0f}٪ — نسبت به ماه قبل {prev_rate:.0f}٪ افت داشته', 'severity': 'danger'})
+            smart_alerts.append({'type': 'rate', 'text': f'📉 نرخ آبستنی {preg_rate:.0f}٪ — نسبت به ماه قبل {prev_rate:.0f}٪ افت داشته', 'severity': 'danger', 'sheep_details': [], 'title': 'افت نرخ آبستنی'})
     # ۲-۵. دام‌های عقب افتاده از سونوگرافی
-    overdue_tags = []
+    overdue_us_sheep = []
     for mating in MatingRecord.query.filter(MatingRecord.result == 'منتظر نتیجه').options(db.joinedload(MatingRecord.sheep)).all():
         if mating.sheep and (g_today - mating.mating_date).days >= 35:
-            overdue_tags.append(mating.sheep.ear_tag)
-    if overdue_tags:
-        tags = '، '.join(overdue_tags[:5])
-        if len(overdue_tags) > 5: tags += f' و {len(overdue_tags)-5} رأس دیگر'
-        smart_alerts.append({'type': 'us', 'text': f'🔬 {len(overdue_tags)} رأس بیش از ۳۵ روز از جفت‌اندازی گذشته — نیاز به سونوگرافی: {tags}', 'severity': 'warning'})
+            overdue_us_sheep.append({'id': mating.sheep.id, 'ear_tag': mating.sheep.ear_tag})
+    if overdue_us_sheep:
+        tags_preview = '، '.join([s['ear_tag'] for s in overdue_us_sheep[:5]])
+        if len(overdue_us_sheep) > 5: tags_preview += f' و {len(overdue_us_sheep)-5} رأس دیگر'
+        sheep_details = [{'id': s['id'], 'ear_tag': s['ear_tag']} for s in overdue_us_sheep]
+        smart_alerts.append({'type': 'us', 'text': f'🔬 {len(overdue_us_sheep)} رأس بیش از ۳۵ روز از جفت‌اندازی گذشته — نیاز به سونوگرافی: {tags_preview}', 'severity': 'warning', 'sheep_details': sheep_details, 'title': 'دام‌های عقب‌افتاده از سونوگرافی'})
 
     # ===== ۳. نقشه حرارتی باروری (۱۲ ماه) =====
     fertility_months = []
@@ -1377,11 +1374,13 @@ def breeding_calendar():
         last_us = UltrasoundRecord.query.filter_by(sheep_id=ewe.id, result='آبستن').order_by(UltrasoundRecord.id.desc()).first()
         due_date = last_us.due_date if last_us and last_us.due_date else None
         days_left = (due_date - g_today).days if due_date else None
+        progress = max(0, min(100, (1 - days_left / 147) * 100)) if days_left is not None else 0
         gantt_data.append({
             'ear_tag': ewe.ear_tag, 'id': ewe.id,
             'confirm_date': last_us.exam_date if last_us else None,
             'due_date': due_date, 'days_left': days_left,
-            'fetus_count': last_us.fetus_count if last_us else None
+            'fetus_count': last_us.fetus_count if last_us else None,
+            'progress': progress
         })
     gantt_data.sort(key=lambda x: x['days_left'] if x['days_left'] is not None else 999)
 
@@ -1437,6 +1436,26 @@ def bulk_mating():
     log_audit(f"جفت‌اندازی گروهی {count} رأس ({mating_type})")
     flash(f'جفت‌اندازی گروهی برای {count} رأس ثبت شد.', 'success')
     return redirect(url_for('livestock.breeding_calendar'))
+
+@livestock_bp.route('/api/sheep_details_by_ids', methods=['POST'])
+@login_required
+@permission_required('can_view_livestock')
+def sheep_details_by_ids():
+    sheep_ids = request.json.get('sheep_ids', [])
+    if not sheep_ids:
+        return jsonify([])
+    sheep_list = Sheep.query.filter(Sheep.id.in_(sheep_ids)).all()
+    details = []
+    for s in sheep_list:
+        details.append({
+            'id': s.id,
+            'ear_tag': s.ear_tag,
+            'breed': s.breed or '-',
+            'gender': s.gender,
+            'status': s.status,
+            'profile_url': url_for('livestock.profile', id=s.id)
+        })
+    return jsonify(details)
 
 @livestock_bp.route('/ram_stats')
 @login_required

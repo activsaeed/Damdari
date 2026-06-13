@@ -4,7 +4,7 @@ from flask_login import login_required
 from app import db
 from app.models import InventoryItem, InventoryLog, Transaction, Unit, InventoryCategory, AuditLog
 from datetime import datetime, timedelta, UTC
-from app.blueprints.finance import permission_required, parse_smart_date
+from app.utils import permission_required, parse_smart_date
 
 inventory_bp = Blueprint('inventory', __name__)
 

@@ -1,4 +1,5 @@
 ﻿import os, sys, random
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from werkzeug.security import generate_password_hash

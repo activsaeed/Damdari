@@ -213,18 +213,23 @@ def index():
         if (datetime.now(UTC).date() - last_stock_date).days >= 1:
             low_stock = InventoryItem.query.filter(InventoryItem.quantity <= InventoryItem.min_threshold).all()
             if low_stock:
-                token = os.getenv('TELEGRAM_API_KEY') or get_setting('sms_api_key', '')
-                chat_id = os.getenv('TELEGRAM_CHAT_ID') or "6690587060"
-
-                if token:
+                from app.models import TelegramBot
+                bots = TelegramBot.query.filter_by(is_active=True).all()
+                if bots:
                     msg = "⚠️ #گزارش_بحرانی_انبار\n\nمدیریت محترم، موجودی اقلام زیر به حداقل مجاز رسیده است:\n\n"
                     for item in low_stock:
                         msg += f"📦 {item.name}: {item.quantity:,.1f} {item.unit.name if item.unit else ''}\n"
                     msg += "\n🔔 لطفا نسبت به تامین نهاده اقدام فرمایید."
 
-                    try:
-                        requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={'chat_id': chat_id, 'text': msg}, timeout=5)
-                    except: pass
+                    for bot in bots:
+                        try:
+                            requests.post(
+                                f"https://api.telegram.org/bot{bot.bot_token}/sendMessage",
+                                data={'chat_id': bot.chat_id, 'text': msg},
+                                timeout=5
+                            )
+                        except Exception:
+                            pass
 
             setting = SystemSetting.query.filter_by(key='last_daily_stock_rep').first()
             if not setting:

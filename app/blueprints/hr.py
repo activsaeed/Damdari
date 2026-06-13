@@ -4,7 +4,8 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
 from app.accounting_engine import AccountingEngine
-from app.blueprints.finance import permission_required, normalize_amount_to_toman
+from app.utils import permission_required
+from app.utils import normalize_amount_to_toman, parse_smart_date, validate_national_id
 from datetime import datetime, timedelta, UTC
 import requests
 import os
@@ -14,20 +15,6 @@ import jdatetime
 
 hr_bp = Blueprint('hr', __name__)
 
-def validate_national_id(nid):
-    """اعتبارسنجی کد ملی ۱۰ رقمی ایران با الگوریتم چک‌سام"""
-    if not nid:
-        return True
-    nid = str(nid).replace(' ', '').strip()
-    if not nid.isdigit() or len(nid) != 10:
-        return False
-    if nid in [str(i)*10 for i in range(10)]:
-        return False
-    s = sum(int(nid[i]) * (10 - i) for i in range(9))
-    r = s % 11
-    c = int(nid[9])
-    return (r < 2 and c == r) or (r >= 2 and c == 11 - r)
-
 def send_to_telegram(message):
     from app.models import TelegramBot
     bot = TelegramBot.query.filter_by(is_active=True).first()
@@ -35,14 +22,6 @@ def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{bot.bot_token}/sendMessage"
     try: requests.post(url, data={'chat_id': bot.chat_id, 'text': message})
     except: pass
-
-def parse_smart_date(date_str):
-    if not date_str: return datetime.now(UTC).date()
-    date_str = date_str.replace('/', '-')
-    if date_str.startswith('13') or date_str.startswith('14'):
-        parts = date_str.split('-')
-        return jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2])).togregorian()
-    return datetime.strptime(date_str, '%Y-%m-%d').date()
 
 @hr_bp.route('/')
 @login_required
@@ -103,7 +82,7 @@ def add_worker():
         insurance_status=request.form.get('insurance_status'),
         status=request.form.get('status'),
         assigned_pen_id=request.form.get('assigned_pen_id') or None,
-        start_date=parse_smart_date(request.form.get('start_date'))
+        start_date=parse_smart_date(request.form.get('start_date'), datetime.now(UTC).date())
     )
     db.session.add(new_worker)
     db.session.commit() # ثبت برای دریافت آی دی
@@ -195,7 +174,7 @@ def add_loan(id):
     if current_user.role != 'مدیر': return redirect(url_for('hr.profile', id=id))
     amount = normalize_amount_to_toman(request.form.get('amount'))
     loan_type = request.form.get('loan_type')
-    i_date = parse_smart_date(request.form.get('issue_date'))
+    i_date = parse_smart_date(request.form.get('issue_date'), datetime.now(UTC).date())
     
     doc_img = None
     photo = request.files.get('document_image')
@@ -224,7 +203,7 @@ def add_loan(id):
 @permission_required('can_view_hr')
 def add_event(id):
     from app.models import WorkerEvent
-    e_date = parse_smart_date(request.form.get('event_date'))
+    e_date = parse_smart_date(request.form.get('event_date'), datetime.now(UTC).date())
     db.session.add(WorkerEvent(worker_id=id, event_type=request.form.get('event_type'), event_date=e_date, description=request.form.get('description')))
     db.session.commit()
     return redirect(url_for('hr.profile', id=id))
@@ -274,7 +253,7 @@ def add_contract(id):
     from app.models import Worker, WorkerContract, WorkerEvent
     import jdatetime
     worker = Worker.query.get_or_404(id)
-    start = parse_smart_date(request.form.get('start_date'))
+    start = parse_smart_date(request.form.get('start_date'), datetime.now(UTC).date())
     end = parse_smart_date(request.form.get('end_date')) if request.form.get('end_date') else None
     contract = WorkerContract(
         worker_id=id,

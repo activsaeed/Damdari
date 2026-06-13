@@ -8,6 +8,7 @@ from app.models import Transaction, TransactionCategory, TransactionDocument, Ch
 from sqlalchemy import func, case
 from datetime import datetime, timedelta, UTC
 from app.accounting_engine import AccountingEngine
+from app.utils import normalize_amount_to_toman, parse_smart_date, validate_national_id, validate_sheba, validate_card_luhn, permission_required
 import os
 import time
 import csv
@@ -44,57 +45,6 @@ def sync_contact_balance(contact):
         return True
     return False
 
-def validate_national_id_checksum(nid):
-    """اعتبارسنجی کد ملی ۱۰ رقمی ایران با الگوریتم چک‌سام"""
-    if not nid:
-        return True
-    nid = str(nid).replace(' ', '').strip()
-    if not nid.isdigit() or len(nid) != 10:
-        return False
-    if nid in [str(i)*10 for i in range(10)]:
-        return False
-    s = sum(int(nid[i]) * (10 - i) for i in range(9))
-    r = s % 11
-    c = int(nid[9])
-    return (r < 2 and c == r) or (r >= 2 and c == 11 - r)
-
-def validate_sheba(sheba):
-    """اعتبارسنجی ساده شماره شبا (IR + 24 رقم)"""
-    if not sheba:
-        return True
-    sheba = str(sheba).replace(' ', '').strip().upper()
-    if not sheba.startswith('IR') or len(sheba) != 26:
-        return False
-    return sheba[2:].isdigit()
-
-def validate_card_luhn(card):
-    """اعتبارسنجی شماره کارت بانکی با الگوریتم لان (Luhn)"""
-    if not card:
-        return True
-    card = str(card).replace(' ', '').strip()
-    if not card.isdigit() or len(card) != 16:
-        return False
-    digits = [int(d) for d in card]
-    for i in range(0, 16, 2):
-        digits[i] *= 2
-        if digits[i] > 9:
-            digits[i] -= 9
-    return sum(digits) % 10 == 0
-
-def permission_required(permission_name):
-    """دکوراتور چک کردن دسترسی‌های داینامیک بر اساس فیلدهای مدل User"""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return redirect(url_for('auth.login'))
-            if not getattr(current_user, permission_name, False) and current_user.role != 'مدیر':
-                flash('شما دسترسی لازم برای مشاهده این بخش را ندارید.', 'danger')
-                return redirect(url_for('dashboard.index'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
 def require_api_token(f):
     """دکوراتور امنیتی برای کنترل دسترسی API سنسورها و باسکول"""
     @wraps(f)
@@ -102,7 +52,8 @@ def require_api_token(f):
         if current_user.is_authenticated:
             return f(*args, **kwargs)
         token = request.headers.get('X-API-TOKEN')
-        expected_token = get_setting('api_token', 'SECRET_KEY_123')
+        from config import Config
+        expected_token = get_setting('iot_api_token', Config.IOT_API_TOKEN)
         if not token or token != expected_token:
             return jsonify({"status": "error", "message": "Unauthorized access"}), 401
         return f(*args, **kwargs)
@@ -112,48 +63,6 @@ def require_api_token(f):
 # توضیح: ما یک تابع کمکی می‌نویسیم که تمام ورودی‌ها را به "تومان" تبدیل می‌کند و نرخ مالیات را از دیتابیس می‌خواند.
 # فایل: app/blueprints/finance.py
 # در بالای فایل، زیر ایمپورت‌ها، این توابع را اضافه کنید:
-def normalize_amount_to_toman(amount_str):
-    """تبدیل تمام ورودی ها به تومان بر اساس تنظیمات فعلی کاربر"""
-    if not amount_str: 
-        return Decimal('0')
-    try:
-        # پاکسازی کاراکترهای غیرعددی و تبدیل اعداد فارسی/عربی
-        persian_digits = '۰۱۲۳۴۵۶۷۸۹'
-        arabic_digits = '٠١٢٣٤٥٦٧٨٩'
-        english_digits = '0123456789'
-        translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
-        clean_str = str(amount_str).translate(translation_table).replace(',', '').strip()
-
-        amount = Decimal(clean_str)
-        if get_setting('currency_unit', 'تومان') == 'ریال':
-            return amount / Decimal('10')
-        return amount
-    except Exception:
-        return Decimal('0')
-
-def parse_smart_date(date_str, default_val=None):
-    """تبدیل هوشمند تاریخ شمسی/میلادی با پشتیبانی از اعداد فارسی و مقادیر خالی"""
-    if not date_str or str(date_str).strip() in ['', 'None']:
-        return default_val
-    
-    # تبدیل اعداد فارسی/عربی به انگلیسی برای پردازش صحیح در پایتون
-    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
-    arabic_digits = '٠١٢٣٤٥٦٧٨٩'
-    english_digits = '0123456789'
-    translation_table = str.maketrans(persian_digits + arabic_digits, english_digits + english_digits)
-    date_str = str(date_str).translate(translation_table)
-
-    date_str = date_str.replace('/', '-').strip()
-    try:
-        # اگر تاریخ شمسی بود
-        if date_str.startswith(('13', '14')):
-            p = date_str.split('-')
-            return jdatetime.date(int(p[0]), int(p[1]), int(p[2])).togregorian()
-        # اگر تاریخ میلادی بود
-        return datetime.strptime(date_str[:10], '%Y-%m-%d').date()
-    except Exception:
-        return default_val
-
 # ==========================================
 # دفتر کل (فاکتورها)
 # ==========================================
@@ -759,10 +668,10 @@ def add_cheque():
     
     issuer_nid = request.form.get('issuer_national_id')
     registrar_nid = request.form.get('registrar_national_id')
-    if issuer_nid and not validate_national_id_checksum(issuer_nid):
+    if issuer_nid and not validate_national_id(issuer_nid):
         flash('خطا: کد ملی صادرکننده چک نامعتبر است.', 'danger')
         return redirect(url_for('finance.cheques', open_add='1'))
-    if registrar_nid and not validate_national_id_checksum(registrar_nid):
+    if registrar_nid and not validate_national_id(registrar_nid):
         flash('خطا: کد ملی دریافت‌کننده چک نامعتبر است.', 'danger')
         return redirect(url_for('finance.cheques', open_add='1'))
 
